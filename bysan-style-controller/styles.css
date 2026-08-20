@@ -89,13 +89,22 @@ body {
   padding: 0;
 }
 
-.markdown-source-view.mod-cm6 .HyperMD-codeblock,
-.markdown-source-view.mod-cm6 .HyperMD-codeblock-bg {
+body.bysan-style-controller-active .markdown-source-view.mod-cm6 .HyperMD-codeblock,
+body.bysan-style-controller-active .markdown-source-view.mod-cm6 .HyperMD-codeblock-bg {
   color: var(--bysan-code-text);
   background-color: var(--bysan-code-bg) !important;
   border-inline: 1px solid var(--bysan-code-border);
   font-family: var(--bysan-code-font);
   line-height: 1.55;
+}
+
+/* Blue Topaz gives the active code line a higher-specificity accent surface.
+ * Keep the selected Bysan background as its base even without Style Settings. */
+body.bysan-style-controller-active
+  .markdown-source-view.cm-s-obsidian.mod-cm6
+  .cm-line.cm-active.HyperMD-codeblock-bg {
+  background-color: var(--bysan-code-active-bg) !important;
+  background-image: none !important;
 }
 
 .markdown-source-view.mod-cm6 .HyperMD-codeblock-begin {
@@ -227,10 +236,14 @@ body .markdown-source-view.mod-cm6 :is(.cm-table-widget, .cm-embed-block) table 
   padding: 0.55em 2em !important;
 }
 
-.markdown-source-view.mod-cm6 .HyperMD-quote {
-  background: var(--bysan-quote-bg);
+body.bysan-style-controller-active
+  .markdown-source-view.mod-cm6.is-live-preview
+  .HyperMD-quote {
+  background: var(--bysan-quote-bg) !important;
+  border-left: 4px solid var(--bysan-quote-border) !important;
   font-family: var(--bysan-quote-font);
   font-style: normal;
+  padding-inline-start: calc(11px + 0.55em) !important;
 }
 
 .markdown-source-view.mod-cm6 .cm-blockquote-border {

@@ -1,6 +1,6 @@
 /**
  * Bysan Style Controller
- * Version: 0.1.0
+ * Version: 0.1.1
  *
  * Owns visual presentation only. Heading/equation numbering and media sizing
  * remain exclusively owned by their dedicated plugins.
@@ -56,6 +56,7 @@ const CONTROLLED_CLASSES = [
 
 const CONTROLLED_PROPERTIES = [
   "--bysan-code-bg",
+  "--bysan-code-active-bg",
   "--bysan-code-border",
   "--bysan-code-text",
   "--bysan-inline-code-bg",
@@ -71,6 +72,7 @@ const CONTROLLED_PROPERTIES = [
   "--bysan-table-inline-margin",
   "--bysan-quote-font",
   "--background-code",
+  "--background-code-2",
   "--code-background",
   "--code-normal",
   "--blur-codebox-frosted-glass",
@@ -189,7 +191,7 @@ module.exports = class BysanStyleController extends Plugin {
       attributeFilter: ["class"]
     });
 
-    console.log("[Bysan Style Controller] v0.1.0 loaded");
+    console.log("[Bysan Style Controller] v0.1.1 loaded");
   }
 
 
@@ -297,8 +299,12 @@ module.exports = class BysanStyleController extends Plugin {
     const get = (name) => this.settings[`${name}${suffix}`];
     const body = document.body;
     const codeBackground = hexToRgba(get("codeBg"), get("codeBgOpacity"));
+    const activeCodeBackground = this.settings.muteCodeActiveLine
+      ? codeBackground
+      : `color-mix(in srgb, ${codeBackground} 92%, var(--interactive-accent) 8%)`;
 
     body.style.setProperty("--bysan-code-bg", codeBackground);
+    body.style.setProperty("--bysan-code-active-bg", activeCodeBackground);
     body.style.setProperty("--bysan-code-border", hexToRgba(get("codeBorder"), dark ? 0.28 : 0.34));
     body.style.setProperty("--bysan-code-text", get("codeText"));
     body.style.setProperty("--bysan-inline-code-bg", get("inlineBg"));
@@ -317,6 +323,7 @@ module.exports = class BysanStyleController extends Plugin {
 
     /* Keep the currently used Blue Topaz code surfaces in sync. */
     body.style.setProperty("--background-code", codeBackground);
+    body.style.setProperty("--background-code-2", get("inlineBg"));
     body.style.setProperty("--code-background", codeBackground);
     body.style.setProperty("--code-normal", get("codeText"));
   }

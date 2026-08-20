@@ -9,6 +9,7 @@
 - 控制表格斑马纹和默认居中样式。
 - 控制 Blue Topaz 的浅色、深色工作区背景。
 - 在主题明暗切换时自动应用对应调色板。
+- 独立接管编辑视图的活动代码行背景，不依赖 Style Settings 的 body class。
 
 ## 兼容边界
 
@@ -19,7 +20,7 @@
 - Mermaid、图片、表格宽度：继续由 `Mermaid Inline Resizer` 负责。
 - 文字选择工具栏：继续由 `Selection Review Toolbar` 负责。
 
-`Style Settings` 可以继续启用。Bysan Style Controller 只会校正已经迁移到自身设置页的 Blue Topaz class，不会清除其他 Style Settings 选项。
+`Style Settings` 不是必需依赖，可以安全卸载；如果继续启用，Bysan Style Controller 只会校正已经迁移到自身设置页的 Blue Topaz class，不会清除其他 Style Settings 选项。
 
 ## 安装
 

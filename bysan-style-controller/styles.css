@@ -434,6 +434,81 @@ body.bysan-style-controller-active
   border-color: var(--bysan-settings-cta-hover) !important;
 }
 
+/* Preset switching uses a modal instead of a transient Notice. Keep this
+ * surface readable even when the active style makes global theme colors or
+ * the interactive accent transparent. */
+.bysan-style-switch-modal {
+  --bysan-settings-cta: #168fc4;
+  --bysan-settings-cta-hover: #117aa9;
+  background: #ffffff !important;
+  color: #1d2329 !important;
+  border: 1px solid rgba(25, 35, 45, 0.18) !important;
+  box-shadow: 0 18px 54px rgba(20, 28, 36, 0.28) !important;
+}
+
+.theme-dark .bysan-style-switch-modal {
+  --bysan-settings-cta: #3da7d7;
+  --bysan-settings-cta-hover: #63b9df;
+  background: #20252b !important;
+  color: #edf1f5 !important;
+  border-color: rgba(235, 241, 247, 0.2) !important;
+}
+
+.bysan-style-switch-modal h2,
+.bysan-style-switch-modal p,
+.bysan-style-switch-modal .setting-item-name,
+.bysan-style-switch-modal input {
+  color: inherit !important;
+}
+
+.bysan-style-switch-details {
+  display: grid;
+  gap: 0.45rem;
+  margin: 1rem 0;
+  padding: 0.85rem 1rem;
+  border-radius: 8px;
+  background: rgba(100, 140, 175, 0.12) !important;
+}
+
+.bysan-style-switch-save-hint {
+  color: currentColor !important;
+  opacity: 0.78;
+}
+
+.bysan-style-switch-error {
+  min-height: 1.4em;
+  margin-top: 0.4rem;
+  color: #c43c45 !important;
+}
+
+.bysan-style-switch-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.6rem;
+  margin-top: 0.75rem;
+}
+
+.bysan-style-switch-modal button.mod-cta {
+  background-color: var(--bysan-settings-cta) !important;
+  border-color: var(--bysan-settings-cta) !important;
+  color: #ffffff !important;
+  opacity: 1 !important;
+  filter: none !important;
+}
+
+.bysan-style-switch-modal button.mod-cta:hover {
+  background-color: var(--bysan-settings-cta-hover) !important;
+  border-color: var(--bysan-settings-cta-hover) !important;
+}
+
+.bysan-style-switch-modal button.mod-warning {
+  background-color: #d95763 !important;
+  border-color: #d95763 !important;
+  color: #ffffff !important;
+  opacity: 1 !important;
+}
+
 /* Live Preview keeps source-line accuracy while replacing multi-line source
  * blocks (Mermaid, display math, embeds) with one rendered widget. Show the
  * covered range so a source jump such as 6 -> 52 is not mistaken for missing

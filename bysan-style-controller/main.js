@@ -1,12 +1,13 @@
 /**
  * Bysan Style Controller
- * Version: 0.4.2
+ * Version: 0.5.0
  *
  * Owns visual presentation only. Heading/equation numbering and media sizing
  * remain exclusively owned by their dedicated plugins.
  */
 
 const {
+  Modal,
   Notice,
   Plugin,
   PluginSettingTab,
@@ -273,7 +274,7 @@ module.exports = class BysanStyleController extends Plugin {
       this.register(() => window.clearTimeout(timer));
     }
 
-    console.log(`[Bysan Style Controller] v0.4.2 loaded with ${this.themeControls.count} theme controls`);
+    console.log(`[Bysan Style Controller] v0.5.0 loaded with ${this.themeControls.count} theme controls`);
   }
 
 
@@ -383,6 +384,35 @@ module.exports = class BysanStyleController extends Plugin {
     this.applySettings();
     new Notice(`已载入风格：${label}`);
     return true;
+  }
+
+
+  stylePresetLabel(presetId) {
+    if (presetId === "__default__") return "Bysan 默认（浅色/深色自适应）";
+    if (presetId === "__current__") return "当前设置（尚未保存为风格）";
+    return this.settings.stylePresets?.[presetId]?.name || "未知风格";
+  }
+
+
+  async requestStylePresetSwitch(presetId) {
+    if (!this.settings.stylePresetDirty) {
+      return this.loadStylePreset(presetId, { allowDiscard: true });
+    }
+
+    const decision = await new Promise((resolve) => {
+      new StyleSwitchConfirmModal(this.app, this, presetId, resolve).open();
+    });
+    if (!decision || decision.action === "cancel") return false;
+
+    if (decision.action === "save") {
+      const activePreset = this.settings.stylePresets?.[this.settings.activeStylePreset];
+      const saved = activePreset
+        ? await this.overwriteActiveStylePreset()
+        : Boolean(await this.saveStylePreset(decision.name));
+      if (!saved) return false;
+    }
+
+    return this.loadStylePreset(presetId, { allowDiscard: true });
   }
 
 
@@ -670,6 +700,101 @@ module.exports = class BysanStyleController extends Plugin {
 };
 
 
+class StyleSwitchConfirmModal extends Modal {
+
+  constructor(app, plugin, targetPresetId, resolve) {
+    super(app);
+    this.plugin = plugin;
+    this.targetPresetId = targetPresetId;
+    this.resolveDecision = resolve;
+    this.resolved = false;
+    this.saveName = "";
+  }
+
+
+  onOpen() {
+    const { contentEl, modalEl } = this;
+    modalEl.addClass("bysan-style-switch-modal");
+    contentEl.empty();
+
+    const activeId = this.plugin.settings.activeStylePreset || "__current__";
+    const activePreset = this.plugin.settings.stylePresets?.[activeId];
+    const currentLabel = this.plugin.stylePresetLabel(activeId);
+    const targetLabel = this.plugin.stylePresetLabel(this.targetPresetId);
+
+    contentEl.createEl("h2", { text: "当前风格有未保存修改" });
+    contentEl.createEl("p", {
+      text: "切换风格会替换当前全部样式设置。请选择如何处理尚未保存的修改。"
+    });
+
+    const details = contentEl.createDiv({ cls: "bysan-style-switch-details" });
+    details.createEl("div", { text: `当前：${currentLabel}` });
+    details.createEl("div", { text: `切换到：${targetLabel}` });
+
+    if (activePreset) {
+      contentEl.createEl("p", {
+        cls: "bysan-style-switch-save-hint",
+        text: `“保存后切换”会覆盖已保存风格“${activePreset.name}”，然后载入目标风格。`
+      });
+    } else {
+      contentEl.createEl("p", {
+        cls: "bysan-style-switch-save-hint",
+        text: "当前设置尚未保存为自定义风格。若要保存后切换，请先为它输入名称。"
+      });
+      new Setting(contentEl)
+        .setName("新风格名称")
+        .addText((text) => text
+          .setPlaceholder("例如：论文浅绿 / 夜间阅读")
+          .onChange((value) => {
+            this.saveName = value;
+            this.errorEl?.setText("");
+          }));
+    }
+
+    this.errorEl = contentEl.createDiv({ cls: "bysan-style-switch-error" });
+    const actions = contentEl.createDiv({ cls: "bysan-style-switch-actions" });
+
+    const cancelButton = actions.createEl("button", { text: "取消" });
+    cancelButton.addEventListener("click", () => this.finish({ action: "cancel" }));
+
+    const discardButton = actions.createEl("button", {
+      cls: "mod-warning",
+      text: "舍弃修改并切换"
+    });
+    discardButton.addEventListener("click", () => this.finish({ action: "discard" }));
+
+    const saveButton = actions.createEl("button", {
+      cls: "mod-cta",
+      text: "保存后切换"
+    });
+    saveButton.addEventListener("click", () => {
+      if (!activePreset && !this.saveName.trim()) {
+        this.errorEl.setText("请输入新风格名称后再保存。 ");
+        return;
+      }
+      this.finish({ action: "save", name: this.saveName.trim() });
+    });
+  }
+
+
+  finish(decision) {
+    if (this.resolved) return;
+    this.resolved = true;
+    this.resolveDecision(decision);
+    this.close();
+  }
+
+
+  onClose() {
+    this.contentEl.empty();
+    if (!this.resolved) {
+      this.resolved = true;
+      this.resolveDecision({ action: "cancel" });
+    }
+  }
+}
+
+
 class BysanStyleSettingTab extends PluginSettingTab {
 
   constructor(app, plugin) {
@@ -703,7 +828,7 @@ class BysanStyleSettingTab extends PluginSettingTab {
         .setButtonText("Reset")
         .setWarning()
         .onClick(async () => {
-          await this.plugin.resetSettings();
+          await this.plugin.requestStylePresetSwitch("__default__");
           this.display();
         }));
   }
@@ -737,7 +862,7 @@ class BysanStyleSettingTab extends PluginSettingTab {
         dropdown.setValue(activeId);
         dropdown.onChange(async (value) => {
           if (value === "__current__") return;
-          await this.plugin.loadStylePreset(value);
+          await this.plugin.requestStylePresetSwitch(value);
           this.display();
         });
       });

@@ -1,6 +1,6 @@
 /**
  * Bysan Style Controller
- * Version: 0.2.0
+ * Version: 0.3.0
  *
  * Owns visual presentation only. Heading/equation numbering and media sizing
  * remain exclusively owned by their dedicated plugins.
@@ -12,6 +12,13 @@ const {
   PluginSettingTab,
   Setting
 } = require("obsidian");
+/* Obsidian evaluates main.js without a plugin-local CommonJS base path. Resolve
+ * the helper through the active vault so the plugin remains portable. */
+globalThis.__bysanObsidianSetting = Setting;
+const { ThemeControls } = require(app.vault.adapter.getFullPath(
+  ".obsidian/plugins/bysan-style-controller/theme-controls.js"
+));
+delete globalThis.__bysanObsidianSetting;
 
 
 const CODE_THEME_CLASSES = [
@@ -81,8 +88,8 @@ const CONTROLLED_PROPERTIES = [
 ];
 
 const DEFAULT_SETTINGS = {
-  settingsVersion: 3,
-  bundledBaseTheme: true,
+  settingsVersion: 4,
+  themeSettings: {},
   workspaceBackground: true,
   lightBackground: "background-settings-workplace-waves2-light",
   darkBackground: "background-settings-workplace-theme-dark-in-the-sky",
@@ -177,22 +184,34 @@ module.exports = class BysanStyleController extends Plugin {
       await this.saveData(this.settings);
     }
 
-    if ((savedSettings.settingsVersion || 0) < 3) {
-      this.settings.bundledBaseTheme = true;
-      this.settings.settingsVersion = 3;
+    if ((savedSettings.settingsVersion || 0) < 4) {
+      delete this.settings.bundledBaseTheme;
+      this.settings.themeSettings = savedSettings.themeSettings || {};
+      this.settings.settingsVersion = 4;
       await this.saveData(this.settings);
     }
 
+    await this.loadThemeCatalog();
+    this.themeControls = new ThemeControls(this, this.themeCatalog);
+    this.themeControls.registerCommands();
     await this.syncBundledBaseTheme();
     this.originalClassState = new Map();
     this.originalPropertyState = new Map();
     this.lastDarkMode = document.body.classList.contains("theme-dark");
 
-    for (const className of CONTROLLED_CLASSES) {
+    const controlledClasses = [...new Set([
+      ...CONTROLLED_CLASSES,
+      ...this.themeControls.classNames()
+    ])];
+    for (const className of controlledClasses) {
       this.originalClassState.set(className, document.body.classList.contains(className));
     }
 
-    for (const property of CONTROLLED_PROPERTIES) {
+    const controlledProperties = [...new Set([
+      ...CONTROLLED_PROPERTIES,
+      ...this.themeControls.propertyNames()
+    ])];
+    for (const property of controlledProperties) {
       this.originalPropertyState.set(property, {
         value: document.body.style.getPropertyValue(property),
         priority: document.body.style.getPropertyPriority(property)
@@ -207,12 +226,7 @@ module.exports = class BysanStyleController extends Plugin {
       if (darkMode !== this.lastDarkMode) {
         this.lastDarkMode = darkMode;
         this.applyPalette();
-      }
-
-      /* Style Settings also writes body classes. Keep only the migrated
-       * subset authoritative here, without touching any unrelated classes. */
-      if (!this.classSettingsAreApplied()) {
-        this.applyClassSettings();
+        this.themeControls.applyVariables();
       }
     });
     this.themeObserver.observe(document.body, {
@@ -225,7 +239,7 @@ module.exports = class BysanStyleController extends Plugin {
       this.register(() => window.clearTimeout(timer));
     }
 
-    console.log("[Bysan Style Controller] v0.2.0 loaded");
+    console.log(`[Bysan Style Controller] v0.3.0 loaded with ${this.themeControls.count} theme controls`);
   }
 
 
@@ -250,20 +264,33 @@ module.exports = class BysanStyleController extends Plugin {
   async updateSetting(key, value) {
     this.settings[key] = value;
     await this.saveData(this.settings);
-    if (key === "bundledBaseTheme") {
-      await this.syncBundledBaseTheme();
-    }
     this.applySettings();
   }
 
 
-  async syncBundledBaseTheme() {
-    if (!this.settings.bundledBaseTheme) {
-      this.baseThemeStyleEl?.remove();
-      this.baseThemeStyleEl = null;
-      return;
-    }
+  async updateThemeSetting(id, value) {
+    this.settings.themeSettings = {
+      ...(this.settings.themeSettings || {}),
+      [id]: value
+    };
+    await this.saveData(this.settings);
+    this.applySettings();
+  }
 
+
+  async loadThemeCatalog() {
+    try {
+      const text = await this.app.vault.adapter.read(`${this.manifest.dir}/blue-topaz-settings.json`);
+      this.themeCatalog = JSON.parse(text);
+    } catch (error) {
+      console.error("[Bysan Style Controller] Failed to load complete theme settings", error);
+      this.themeCatalog = { settings: [] };
+      new Notice("Bysan 完整主题设置加载失败，请检查插件文件");
+    }
+  }
+
+
+  async syncBundledBaseTheme() {
     if (!this.baseThemeCssText) {
       const baseThemePath = `${this.manifest.dir}/blue-topaz-base.css`;
       try {
@@ -332,6 +359,7 @@ module.exports = class BysanStyleController extends Plugin {
 
     this.lastDarkMode = body.classList.contains("theme-dark");
     this.applyPalette();
+    this.themeControls.applyVariables();
   }
 
 
@@ -342,7 +370,6 @@ module.exports = class BysanStyleController extends Plugin {
     this.setExclusiveClass(LIGHT_BACKGROUND_CLASSES, this.settings.lightBackground);
     this.setExclusiveClass(DARK_BACKGROUND_CLASSES, this.settings.darkBackground);
 
-    body.classList.toggle("background-image-settings-switch", this.settings.workspaceBackground);
     body.classList.toggle("background-settings-workplace-background-image", this.settings.workspaceBackground);
     body.classList.toggle("code-line-number", this.settings.codeLineNumbers);
     body.classList.toggle("whole-code-wrap", this.settings.codeWrapReading);
@@ -351,6 +378,7 @@ module.exports = class BysanStyleController extends Plugin {
     body.classList.toggle("bysan-table-zebra-disabled", !this.settings.tableZebra);
     body.classList.toggle("bysan-table-left-aligned", !this.settings.tableCentered);
     body.classList.toggle("bysan-quote-system-font", !this.settings.quoteSerif);
+    this.themeControls.applyClasses();
   }
 
 
@@ -362,7 +390,6 @@ module.exports = class BysanStyleController extends Plugin {
     return exactlySelected(CODE_THEME_CLASSES, this.settings.codeTheme)
       && exactlySelected(LIGHT_BACKGROUND_CLASSES, this.settings.lightBackground)
       && exactlySelected(DARK_BACKGROUND_CLASSES, this.settings.darkBackground)
-      && body.classList.contains("background-image-settings-switch") === this.settings.workspaceBackground
       && body.classList.contains("background-settings-workplace-background-image") === this.settings.workspaceBackground
       && body.classList.contains("code-line-number") === this.settings.codeLineNumbers
       && body.classList.contains("whole-code-wrap") === this.settings.codeWrapReading
@@ -370,7 +397,8 @@ module.exports = class BysanStyleController extends Plugin {
       && body.classList.contains("muted-code-activeline-bg") === this.settings.muteCodeActiveLine
       && body.classList.contains("bysan-table-zebra-disabled") === !this.settings.tableZebra
       && body.classList.contains("bysan-table-left-aligned") === !this.settings.tableCentered
-      && body.classList.contains("bysan-quote-system-font") === !this.settings.quoteSerif;
+      && body.classList.contains("bysan-quote-system-font") === !this.settings.quoteSerif
+      && this.themeControls.classesAreApplied();
   }
 
 
@@ -420,7 +448,6 @@ module.exports = class BysanStyleController extends Plugin {
   async resetSettings() {
     this.settings = Object.assign({}, DEFAULT_SETTINGS);
     await this.saveData(this.settings);
-    await this.syncBundledBaseTheme();
     this.applySettings();
     new Notice("Bysan 样式已恢复默认值");
   }
@@ -441,7 +468,7 @@ class BysanStyleSettingTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName("Bysan Style Controller")
-      .setDesc("独立提供 Bysan 内容样式与内置基础主题；不依赖外部主题，也不接管标题、公式或媒体缩放。")
+      .setDesc("独立提供 Bysan 内容样式与完整主题控件；不依赖外部主题，也不接管标题、公式或媒体缩放。")
       .setHeading();
 
     this.renderWorkspaceSettings(containerEl);
@@ -449,6 +476,7 @@ class BysanStyleSettingTab extends PluginSettingTab {
     this.renderPaletteSettings(containerEl, "Light", "浅色模式");
     this.renderPaletteSettings(containerEl, "Dark", "深色模式");
     this.renderComponentSettings(containerEl);
+    this.plugin.themeControls.render(containerEl);
 
     new Setting(containerEl)
       .setName("恢复默认样式")
@@ -466,7 +494,6 @@ class BysanStyleSettingTab extends PluginSettingTab {
   renderWorkspaceSettings(containerEl) {
     new Setting(containerEl).setName("工作区").setHeading();
 
-    this.addToggle(containerEl, "内置基础主题", "由本插件加载已打包的基础界面样式；关闭后只保留 Bysan 内容样式。", "bundledBaseTheme");
     this.addToggle(containerEl, "动态工作区背景", "控制插件内置的工作区背景。", "workspaceBackground");
 
     new Setting(containerEl)
@@ -476,6 +503,7 @@ class BysanStyleSettingTab extends PluginSettingTab {
         .addOption("background-settings-workplace-waves-light", "Waves")
         .addOption("background-settings-workplace-waves2-light", "Animating waves")
         .addOption("background-settings-workplace-theme-light-blue-mountain", "Blue Mountain")
+        .addOption("background-settings-workplace-theme-light-custom-option", "Custom URL")
         .setValue(this.plugin.settings.lightBackground)
         .onChange((value) => this.plugin.updateSetting("lightBackground", value)));
 
@@ -487,6 +515,7 @@ class BysanStyleSettingTab extends PluginSettingTab {
         .addOption("background-settings-workplace-theme-dark-dark-sky", "Dark sky")
         .addOption("background-settings-workplace-waves", "Waves")
         .addOption("background-settings-workplace-waves2", "Animating waves")
+        .addOption("background-settings-workplace-theme-dark-custom-option", "Custom URL")
         .setValue(this.plugin.settings.darkBackground)
         .onChange((value) => this.plugin.updateSetting("darkBackground", value)));
   }

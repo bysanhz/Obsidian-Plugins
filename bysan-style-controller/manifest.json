@@ -1,9 +1,9 @@
 {
   "id": "bysan-style-controller",
   "name": "Bysan Style Controller",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "minAppVersion": "1.13.0",
-  "description": "Standalone Bysan theme and content style controller for Obsidian.",
+  "description": "Standalone Bysan theme with complete native controls for workspace and content styling.",
   "author": "Bysan",
   "isDesktopOnly": true
 }

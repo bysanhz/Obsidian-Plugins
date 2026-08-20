@@ -371,3 +371,40 @@ body.bysan-style-controller-active
     border-color: #dfe2e5 !important;
   }
 }
+
+/* ----------------------- plugin settings UI ------------------- */
+
+.bysan-setting-filtered {
+  display: none !important;
+}
+
+.bysan-theme-catalog-title {
+  margin-top: 2.5rem;
+}
+
+.bysan-theme-search {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: var(--background-primary);
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.bysan-theme-setting-item.setting-item-heading {
+  margin-top: 1.2rem;
+}
+
+.bysan-theme-heading-1 .setting-item-name {
+  color: var(--interactive-accent);
+  font-size: 1.25em;
+}
+
+.bysan-theme-heading-3 .setting-item-name,
+.bysan-theme-heading-4 .setting-item-name,
+.bysan-theme-heading-5 .setting-item-name {
+  font-size: 1em;
+}
+
+.bysan-theme-setting-item .setting-item-control input[type="range"] {
+  max-width: 7rem;
+}

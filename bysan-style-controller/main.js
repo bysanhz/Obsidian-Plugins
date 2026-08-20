@@ -1,6 +1,6 @@
 /**
  * Bysan Style Controller
- * Version: 0.6.0
+ * Version: 0.7.0
  *
  * Owns visual presentation only. Heading/equation numbering and media sizing
  * remain exclusively owned by their dedicated plugins.
@@ -18,6 +18,9 @@ const {
 globalThis.__bysanObsidianSetting = Setting;
 const { ThemeControls } = require(app.vault.adapter.getFullPath(
   ".obsidian/plugins/bysan-style-controller/theme-controls.js"
+));
+const { resolveLanguage, translate } = require(app.vault.adapter.getFullPath(
+  ".obsidian/plugins/bysan-style-controller/i18n.js"
 ));
 delete globalThis.__bysanObsidianSetting;
 
@@ -89,7 +92,8 @@ const CONTROLLED_PROPERTIES = [
 ];
 
 const DEFAULT_SETTINGS = {
-  settingsVersion: 5,
+  settingsVersion: 6,
+  uiLanguage: "auto",
   stylePresets: {},
   activeStylePreset: "__default__",
   stylePresetDirty: false,
@@ -146,7 +150,8 @@ const PRESET_META_KEYS = new Set([
   "settingsVersion",
   "stylePresets",
   "activeStylePreset",
-  "stylePresetDirty"
+  "stylePresetDirty",
+  "uiLanguage"
 ]);
 
 
@@ -216,6 +221,12 @@ module.exports = class BysanStyleController extends Plugin {
       await this.saveData(this.settings);
     }
 
+    if ((savedSettings.settingsVersion || 0) < 6) {
+      this.settings.uiLanguage = savedSettings.uiLanguage || "auto";
+      this.settings.settingsVersion = 6;
+      await this.saveData(this.settings);
+    }
+
     await this.loadThemeCatalog();
     this.themeControls = new ThemeControls(this, this.themeCatalog);
     this.themeControls.registerCommands();
@@ -274,7 +285,23 @@ module.exports = class BysanStyleController extends Plugin {
       this.register(() => window.clearTimeout(timer));
     }
 
-    console.log(`[Bysan Style Controller] v0.6.0 loaded with ${this.themeControls.count} theme controls`);
+    console.log(`[Bysan Style Controller] v0.7.0 loaded with ${this.themeControls.count} theme controls`);
+  }
+
+
+  get language() {
+    return resolveLanguage(this.settings.uiLanguage, this.app);
+  }
+
+
+  t(key, values) {
+    return translate(this.language, key, values);
+  }
+
+
+  async setUiLanguage(value) {
+    this.settings.uiLanguage = ["auto", "zh", "en"].includes(value) ? value : "auto";
+    await this.saveData(this.settings);
   }
 
 
@@ -328,7 +355,7 @@ module.exports = class BysanStyleController extends Plugin {
   async saveStylePreset(name, presetId = null) {
     const normalizedName = String(name || "").trim().slice(0, 60);
     if (!normalizedName) {
-      new Notice("请先输入风格名称");
+      new Notice(this.t("notice.nameRequired"));
       return null;
     }
 
@@ -346,14 +373,14 @@ module.exports = class BysanStyleController extends Plugin {
     this.settings.activeStylePreset = id;
     this.settings.stylePresetDirty = false;
     await this.saveData(this.settings);
-    new Notice(existing ? `已覆盖风格：${normalizedName}` : `已保存风格：${normalizedName}`);
+    new Notice(this.t(existing ? "notice.overwritten" : "notice.saved", { name: normalizedName }));
     return id;
   }
 
 
   async loadStylePreset(presetId, options = {}) {
     if (this.settings.stylePresetDirty && !options.allowDiscard) {
-      new Notice("当前风格有未保存修改，请先另存为新风格或覆盖当前风格");
+      new Notice(this.t("notice.unsaved"));
       return false;
     }
 
@@ -367,7 +394,7 @@ module.exports = class BysanStyleController extends Plugin {
     } else {
       const preset = preservedPresets[presetId];
       if (!preset) {
-        new Notice("未找到该风格预设");
+        new Notice(this.t("notice.notFound"));
         return false;
       }
       snapshot = deepClone(preset.settings || {});
@@ -382,15 +409,16 @@ module.exports = class BysanStyleController extends Plugin {
     });
     await this.saveData(this.settings);
     this.applySettings();
-    new Notice(`已载入风格：${label}`);
+    new Notice(this.t("notice.loaded", { name: label }));
     return true;
   }
 
 
   stylePresetLabel(presetId) {
-    if (presetId === "__default__") return "Bysan 默认（浅色/深色自适应）";
-    if (presetId === "__current__") return "当前设置（尚未保存为风格）";
-    return this.settings.stylePresets?.[presetId]?.name || "未知风格";
+    if (presetId === "__default__") return this.t("preset.default");
+    if (presetId === "__current__") return this.t("preset.currentUnsavedLong");
+    return this.settings.stylePresets?.[presetId]?.name
+      || (this.language === "zh" ? "未知风格" : "Unknown style");
   }
 
 
@@ -420,7 +448,7 @@ module.exports = class BysanStyleController extends Plugin {
     const id = this.settings.activeStylePreset;
     const preset = this.settings.stylePresets?.[id];
     if (!preset) {
-      new Notice("内置默认风格不可覆盖，请另存为新风格");
+      new Notice(this.t("notice.defaultNoOverwrite"));
       return false;
     }
     await this.saveStylePreset(preset.name, id);
@@ -431,13 +459,13 @@ module.exports = class BysanStyleController extends Plugin {
   async renameStylePreset(presetId, name) {
     const preset = this.settings.stylePresets?.[presetId];
     if (!preset) {
-      new Notice("内置默认风格不可重命名");
+      new Notice(this.t("notice.defaultNoRename"));
       return false;
     }
 
     const normalizedName = String(name || "").trim().slice(0, 60);
     if (!normalizedName) {
-      new Notice("风格名称不能为空");
+      new Notice(this.t("notice.emptyName"));
       return false;
     }
 
@@ -445,7 +473,7 @@ module.exports = class BysanStyleController extends Plugin {
       .some(([id, item]) => id !== presetId
         && String(item.name || "").trim().toLocaleLowerCase() === normalizedName.toLocaleLowerCase());
     if (duplicate) {
-      new Notice("已有同名风格，请使用其他名称");
+      new Notice(this.t("notice.duplicateName"));
       return false;
     }
 
@@ -458,7 +486,7 @@ module.exports = class BysanStyleController extends Plugin {
       }
     };
     await this.saveData(this.settings);
-    new Notice(`风格已重命名为：${normalizedName}`);
+    new Notice(this.t("notice.renamed", { name: normalizedName }));
     return true;
   }
 
@@ -472,7 +500,7 @@ module.exports = class BysanStyleController extends Plugin {
     this.settings.activeStylePreset = "__current__";
     this.settings.stylePresetDirty = true;
     await this.saveData(this.settings);
-    new Notice(`已删除风格：${preset.name}；当前画面设置仍保留`);
+    new Notice(this.t("notice.deleted", { name: preset.name }));
     return true;
   }
 
@@ -484,7 +512,7 @@ module.exports = class BysanStyleController extends Plugin {
     } catch (error) {
       console.error("[Bysan Style Controller] Failed to load complete theme settings", error);
       this.themeCatalog = { settings: [] };
-      new Notice("Bysan 完整主题设置加载失败，请检查插件文件");
+      new Notice(this.t("notice.catalogError"));
     }
   }
 
@@ -496,7 +524,7 @@ module.exports = class BysanStyleController extends Plugin {
         this.baseThemeCssText = await this.app.vault.adapter.read(baseThemePath);
       } catch (error) {
         console.error("[Bysan Style Controller] Failed to load bundled base theme", error);
-        new Notice("Bysan 内置基础主题加载失败，请检查插件文件");
+        new Notice(this.t("notice.baseError"));
         return;
       }
     }
@@ -695,7 +723,7 @@ module.exports = class BysanStyleController extends Plugin {
     });
     await this.saveData(this.settings);
     this.applySettings();
-    new Notice("Bysan 样式已恢复默认值");
+    new Notice(this.t("notice.reset"));
   }
 };
 
@@ -722,29 +750,29 @@ class StyleSwitchConfirmModal extends Modal {
     const currentLabel = this.plugin.stylePresetLabel(activeId);
     const targetLabel = this.plugin.stylePresetLabel(this.targetPresetId);
 
-    contentEl.createEl("h2", { text: "当前风格有未保存修改" });
+    contentEl.createEl("h2", { text: this.plugin.t("modal.title") });
     contentEl.createEl("p", {
-      text: "切换风格会替换当前全部样式设置。请选择如何处理尚未保存的修改。"
+      text: this.plugin.t("modal.body")
     });
 
     const details = contentEl.createDiv({ cls: "bysan-style-switch-details" });
-    details.createEl("div", { text: `当前：${currentLabel}` });
-    details.createEl("div", { text: `切换到：${targetLabel}` });
+    details.createEl("div", { text: this.plugin.t("modal.current", { name: currentLabel }) });
+    details.createEl("div", { text: this.plugin.t("modal.target", { name: targetLabel }) });
 
     if (activePreset) {
       contentEl.createEl("p", {
         cls: "bysan-style-switch-save-hint",
-        text: `“保存后切换”会覆盖已保存风格“${activePreset.name}”，然后载入目标风格。`
+        text: this.plugin.t("modal.overwriteHint", { name: activePreset.name })
       });
     } else {
       contentEl.createEl("p", {
         cls: "bysan-style-switch-save-hint",
-        text: "当前设置尚未保存为自定义风格。若要保存后切换，请先为它输入名称。"
+        text: this.plugin.t("modal.newHint")
       });
       new Setting(contentEl)
-        .setName("新风格名称")
+        .setName(this.plugin.t("modal.newName"))
         .addText((text) => text
-          .setPlaceholder("例如：论文浅绿 / 夜间阅读")
+          .setPlaceholder(this.plugin.t("preset.example"))
           .onChange((value) => {
             this.saveName = value;
             this.errorEl?.setText("");
@@ -754,22 +782,22 @@ class StyleSwitchConfirmModal extends Modal {
     this.errorEl = contentEl.createDiv({ cls: "bysan-style-switch-error" });
     const actions = contentEl.createDiv({ cls: "bysan-style-switch-actions" });
 
-    const cancelButton = actions.createEl("button", { text: "取消" });
+    const cancelButton = actions.createEl("button", { text: this.plugin.t("modal.cancel") });
     cancelButton.addEventListener("click", () => this.finish({ action: "cancel" }));
 
     const discardButton = actions.createEl("button", {
       cls: "mod-warning",
-      text: "舍弃修改并切换"
+      text: this.plugin.t("modal.discard")
     });
     discardButton.addEventListener("click", () => this.finish({ action: "discard" }));
 
     const saveButton = actions.createEl("button", {
       cls: "mod-cta",
-      text: "保存后切换"
+      text: this.plugin.t("modal.save")
     });
     saveButton.addEventListener("click", () => {
       if (!activePreset && !this.saveName.trim()) {
-        this.errorEl.setText("请输入新风格名称后再保存。 ");
+        this.errorEl.setText(this.plugin.t("modal.nameRequired"));
         return;
       }
       this.finish({ action: "save", name: this.saveName.trim() });
@@ -810,23 +838,23 @@ class BysanStyleSettingTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName("Bysan Style Controller")
-      .setDesc("独立提供 Bysan 内容样式与完整主题控件；不依赖外部主题，也不接管标题、公式或媒体缩放。")
+      .setDesc(this.plugin.t("app.description"))
       .setHeading();
 
+    this.renderLanguageSetting(containerEl);
     this.renderSectionNavigation(containerEl);
     this.renderStylePresetSettings(containerEl);
     this.renderWorkspaceSettings(containerEl);
     this.renderCodeSettings(containerEl);
-    this.renderPaletteSettings(containerEl, "Light", "浅色模式");
-    this.renderPaletteSettings(containerEl, "Dark", "深色模式");
+    this.renderPaletteSettings(containerEl);
     this.renderComponentSettings(containerEl);
     this.plugin.themeControls.render(containerEl);
 
     const resetSetting = new Setting(containerEl)
-      .setName("恢复默认样式")
-      .setDesc("恢复 Bysan 内置基础主题与内容样式默认值。")
+      .setName(this.plugin.t("section.reset"))
+      .setDesc(this.plugin.t("reset.desc"))
       .addButton((button) => button
-        .setButtonText("Reset")
+        .setButtonText(this.plugin.t("reset.button"))
         .setWarning()
         .onClick(async () => {
           await this.plugin.requestStylePresetSwitch("__default__");
@@ -836,49 +864,91 @@ class BysanStyleSettingTab extends PluginSettingTab {
   }
 
 
+  renderLanguageSetting(containerEl) {
+    const setting = new Setting(containerEl)
+      .setName(this.plugin.t("language.name"))
+      .setDesc(this.plugin.t("language.desc"))
+      .addDropdown((dropdown) => dropdown
+        .addOption("auto", this.plugin.t("language.auto"))
+        .addOption("zh", this.plugin.t("language.zh"))
+        .addOption("en", this.plugin.t("language.en"))
+        .setValue(this.plugin.settings.uiLanguage || "auto")
+        .onChange(async (value) => {
+          await this.plugin.setUiLanguage(value);
+          this.display();
+        }));
+    setting.settingEl.addClass("bysan-language-setting");
+  }
+
+
   renderSectionNavigation(containerEl) {
-    const sections = [
-      ["preset", "风格预设"],
-      ["workspace", "工作区"],
-      ["code", "代码块"],
-      ["palette-light", "浅色配色"],
-      ["palette-dark", "深色配色"],
-      ["components", "表格与引用"],
-      ["theme", "完整主题"],
-      ["theme-general", "主题整体"],
-      ["theme-details", "主题细节"],
-      ["theme-plugins", "插件适配"],
-      ["theme-builtins", "内置样式"],
-      ["reset", "恢复默认"]
+    const groups = [
+      [this.plugin.t("nav.core"), [
+        ["preset", this.plugin.t("section.preset")],
+        ["workspace", this.plugin.t("section.workspace")],
+        ["code", this.plugin.t("section.code")],
+        ["palette", this.plugin.t("section.palette")],
+        ["components", this.plugin.t("section.components")]
+      ]],
+      [this.plugin.t("nav.theme"), [
+        ["theme", this.plugin.t("section.theme")],
+        ["theme-general", this.plugin.t("section.themeGeneral")],
+        ["theme-details", this.plugin.t("section.themeDetails")],
+        ["theme-plugins", this.plugin.t("section.themePlugins")],
+        ["theme-builtins", this.plugin.t("section.themeBuiltins")],
+        ["reset", this.plugin.t("section.reset")]
+      ]]
     ];
     const navigation = containerEl.createEl("nav", {
       cls: "bysan-settings-nav",
-      attr: { "aria-label": "Bysan 样式设置功能导航" }
+      attr: { "aria-label": this.plugin.t("nav.title") }
     });
-    navigation.createDiv({ cls: "bysan-settings-nav-title", text: "功能导航" });
-    const links = navigation.createDiv({ cls: "bysan-settings-nav-links" });
+    navigation.createDiv({ cls: "bysan-settings-nav-title", text: this.plugin.t("nav.title") });
+    const groupGrid = navigation.createDiv({ cls: "bysan-settings-nav-groups" });
 
-    for (const [id, label] of sections) {
-      const button = links.createEl("button", {
-        cls: "bysan-settings-nav-link",
-        text: label,
-        attr: { type: "button", "data-target": id }
-      });
-      button.addEventListener("click", () => {
-        const target = containerEl.querySelector(`#bysan-section-${id}`);
-        if (!target) return;
-        target.scrollIntoView({ behavior: "auto", block: "start" });
-        target.addClass("bysan-section-target-flash");
-        window.setTimeout(() => target.removeClass("bysan-section-target-flash"), 900);
-      });
+    for (const [groupLabel, sections] of groups) {
+      const group = groupGrid.createDiv({ cls: "bysan-settings-nav-group" });
+      group.createDiv({ cls: "bysan-settings-nav-group-title", text: groupLabel });
+      const links = group.createDiv({ cls: "bysan-settings-nav-links" });
+      for (const [id, label] of sections) {
+        const button = links.createEl("button", {
+          cls: "bysan-settings-nav-link",
+          text: label,
+          attr: { type: "button", "data-target": id }
+        });
+        button.addEventListener("click", () => this.jumpToSection(containerEl, `bysan-section-${id}`));
+      }
     }
+
+    const detailRow = navigation.createDiv({ cls: "bysan-settings-nav-detail" });
+    detailRow.createEl("label", { text: this.plugin.t("nav.detail") });
+    const select = detailRow.createEl("select", { cls: "dropdown" });
+    select.createEl("option", { text: this.plugin.t("nav.detail.placeholder"), value: "" });
+    for (const group of this.plugin.themeControls.navigationGroups()) {
+      const optionGroup = select.createEl("optgroup", { attr: { label: group.label } });
+      for (const entry of group.entries) {
+        optionGroup.createEl("option", { text: entry.label, value: entry.anchor });
+      }
+    }
+    select.addEventListener("change", () => {
+      if (select.value) this.jumpToSection(containerEl, select.value);
+    });
+  }
+
+
+  jumpToSection(containerEl, targetId) {
+    const target = containerEl.querySelector(`#${targetId}`);
+    if (!target) return;
+    target.scrollIntoView({ behavior: "auto", block: "start" });
+    target.addClass("bysan-section-target-flash");
+    window.setTimeout(() => target.removeClass("bysan-section-target-flash"), 900);
   }
 
 
   renderStylePresetSettings(containerEl) {
     const heading = new Setting(containerEl)
-      .setName("风格预设")
-      .setDesc("一个预设同时保存浅色、深色及全部完整主题设置。")
+      .setName(this.plugin.t("section.preset"))
+      .setDesc(this.plugin.t("preset.desc"))
       .setHeading();
     heading.settingEl.id = "bysan-section-preset";
 
@@ -886,18 +956,20 @@ class BysanStyleSettingTab extends PluginSettingTab {
     const activeId = this.plugin.settings.activeStylePreset || "__current__";
     const activePreset = presets[activeId];
     const activeLabel = activeId === "__default__"
-      ? "Bysan 默认（浅色/深色自适应）"
-      : activePreset?.name || "当前设置（尚未保存为风格）";
-    const stateLabel = this.plugin.settings.stylePresetDirty ? "已修改" : "已保存";
+      ? this.plugin.t("preset.default")
+      : activePreset?.name || this.plugin.t("preset.currentUnsavedLong");
+    const stateLabel = this.plugin.settings.stylePresetDirty
+      ? this.plugin.t("preset.modified")
+      : this.plugin.t("preset.saved");
 
     new Setting(containerEl)
-      .setName("当前风格")
-      .setDesc(`${activeLabel} · ${stateLabel}；切换明暗模式会自动使用同一风格中的对应配色。`)
+      .setName(this.plugin.t("preset.current"))
+      .setDesc(this.plugin.t("preset.currentDesc", { name: activeLabel, state: stateLabel }))
       .addDropdown((dropdown) => {
         if (activeId === "__current__") {
-          dropdown.addOption("__current__", "当前设置（尚未保存）");
+          dropdown.addOption("__current__", this.plugin.t("preset.currentUnsaved"));
         }
-        dropdown.addOption("__default__", "Bysan 默认（浅色/深色自适应）");
+        dropdown.addOption("__default__", this.plugin.t("preset.default"));
         for (const [id, preset] of Object.entries(presets)) {
           dropdown.addOption(id, preset.name);
         }
@@ -910,14 +982,14 @@ class BysanStyleSettingTab extends PluginSettingTab {
       });
 
     new Setting(containerEl)
-      .setName("另存为新风格")
-      .setDesc("输入名称后保存当前全部设置，原有风格不会被覆盖。")
+      .setName(this.plugin.t("preset.saveAs"))
+      .setDesc(this.plugin.t("preset.saveAsDesc"))
       .addText((text) => text
-        .setPlaceholder("例如：论文浅绿 / 夜间阅读")
+        .setPlaceholder(this.plugin.t("preset.example"))
         .setValue(this.pendingPresetName || "")
         .onChange((value) => { this.pendingPresetName = value; }))
       .addButton((button) => button
-        .setButtonText("保存")
+        .setButtonText(this.plugin.t("preset.save"))
         .setCta()
         .onClick(async () => {
           const id = await this.plugin.saveStylePreset(this.pendingPresetName);
@@ -933,17 +1005,17 @@ class BysanStyleSettingTab extends PluginSettingTab {
         : activePreset.name;
 
       new Setting(containerEl)
-        .setName("重命名当前风格")
-        .setDesc("只修改显示名称，不改变风格内容、预设 ID 或浅色/深色配置。")
+        .setName(this.plugin.t("preset.rename"))
+        .setDesc(this.plugin.t("preset.renameDesc"))
         .addText((text) => text
-          .setPlaceholder("新风格名称")
+          .setPlaceholder(this.plugin.t("preset.newName"))
           .setValue(renameValue || "")
           .onChange((value) => {
             this.pendingRenamePresetId = activeId;
             this.pendingRenameName = value;
           }))
         .addButton((button) => button
-          .setButtonText("重命名")
+          .setButtonText(this.plugin.t("preset.renameButton"))
           .onClick(async () => {
             const value = this.pendingRenamePresetId === activeId
               ? this.pendingRenameName
@@ -956,15 +1028,15 @@ class BysanStyleSettingTab extends PluginSettingTab {
           }));
 
       new Setting(containerEl)
-        .setName("管理当前自定义风格")
-        .setDesc("覆盖会用当前全部设置更新该风格；删除不会改变当前画面。")
+        .setName(this.plugin.t("preset.manage"))
+        .setDesc(this.plugin.t("preset.manageDesc"))
         .addButton((button) => button
-          .setButtonText("覆盖保存")
+          .setButtonText(this.plugin.t("preset.overwrite"))
           .onClick(async () => {
             if (await this.plugin.overwriteActiveStylePreset()) this.display();
           }))
         .addButton((button) => button
-          .setButtonText("删除")
+          .setButtonText(this.plugin.t("preset.delete"))
           .setWarning()
           .onClick(async () => {
             if (await this.plugin.deleteStylePreset(activeId)) this.display();
@@ -974,43 +1046,41 @@ class BysanStyleSettingTab extends PluginSettingTab {
 
 
   renderWorkspaceSettings(containerEl) {
-    const heading = new Setting(containerEl).setName("工作区").setHeading();
+    const heading = new Setting(containerEl).setName(this.plugin.t("section.workspace")).setHeading();
     heading.settingEl.id = "bysan-section-workspace";
 
-    this.addToggle(containerEl, "动态工作区背景", "控制插件内置的工作区背景。", "workspaceBackground");
-    this.addToggle(containerEl, "折叠块显示源行范围", "Live Preview 中 Mermaid、公式等多行源码渲染为一个块时显示 6–51，而不是看起来从 6 跳到 52。", "collapsedLineRanges");
+    this.addToggle(containerEl, this.plugin.t("workspace.dynamic"), this.plugin.t("workspace.dynamicDesc"), "workspaceBackground");
+    this.addToggle(containerEl, this.plugin.t("workspace.lineRanges"), this.plugin.t("workspace.lineRangesDesc"), "collapsedLineRanges");
 
-    new Setting(containerEl)
-      .setName("浅色背景")
-      .addDropdown((dropdown) => dropdown
-        .addOption("background-settings-workplace-theme-light-in-the-note", "Note")
-        .addOption("background-settings-workplace-waves-light", "Waves")
-        .addOption("background-settings-workplace-waves2-light", "Animating waves")
-        .addOption("background-settings-workplace-theme-light-blue-mountain", "Blue Mountain")
-        .addOption("background-settings-workplace-theme-light-custom-option", "Custom URL")
+    const backgrounds = new Setting(containerEl)
+      .setName(this.plugin.t("workspace.backgrounds"));
+    this.addModeControl(backgrounds, "light", "select", () => backgrounds.addDropdown((dropdown) => dropdown
+        .addOption("background-settings-workplace-theme-light-in-the-note", this.plugin.t("background.note"))
+        .addOption("background-settings-workplace-waves-light", this.plugin.t("background.waves"))
+        .addOption("background-settings-workplace-waves2-light", this.plugin.t("background.animatedWaves"))
+        .addOption("background-settings-workplace-theme-light-blue-mountain", this.plugin.t("background.blueMountain"))
+        .addOption("background-settings-workplace-theme-light-custom-option", this.plugin.t("background.customUrl"))
         .setValue(this.plugin.settings.lightBackground)
-        .onChange((value) => this.plugin.updateSetting("lightBackground", value)));
-
-    new Setting(containerEl)
-      .setName("深色背景")
-      .addDropdown((dropdown) => dropdown
-        .addOption("background-settings-workplace-theme-dark-in-the-sky", "In the sky")
-        .addOption("background-settings-workplace-theme-dark-night-sky", "Night sky")
-        .addOption("background-settings-workplace-theme-dark-dark-sky", "Dark sky")
-        .addOption("background-settings-workplace-waves", "Waves")
-        .addOption("background-settings-workplace-waves2", "Animating waves")
-        .addOption("background-settings-workplace-theme-dark-custom-option", "Custom URL")
+        .onChange((value) => this.plugin.updateSetting("lightBackground", value))));
+    this.addModeControl(backgrounds, "dark", "select", () => backgrounds.addDropdown((dropdown) => dropdown
+        .addOption("background-settings-workplace-theme-dark-in-the-sky", this.plugin.t("background.sky"))
+        .addOption("background-settings-workplace-theme-dark-night-sky", this.plugin.t("background.nightSky"))
+        .addOption("background-settings-workplace-theme-dark-dark-sky", this.plugin.t("background.darkSky"))
+        .addOption("background-settings-workplace-waves", this.plugin.t("background.waves"))
+        .addOption("background-settings-workplace-waves2", this.plugin.t("background.animatedWaves"))
+        .addOption("background-settings-workplace-theme-dark-custom-option", this.plugin.t("background.customUrl"))
         .setValue(this.plugin.settings.darkBackground)
-        .onChange((value) => this.plugin.updateSetting("darkBackground", value)));
+        .onChange((value) => this.plugin.updateSetting("darkBackground", value))));
+    backgrounds.settingEl.addClass("bysan-dual-mode-setting");
   }
 
 
   renderCodeSettings(containerEl) {
-    const heading = new Setting(containerEl).setName("代码块").setHeading();
+    const heading = new Setting(containerEl).setName(this.plugin.t("section.code")).setHeading();
     heading.settingEl.id = "bysan-section-code";
 
     new Setting(containerEl)
-      .setName("Bysan 代码高亮主题")
+      .setName(this.plugin.t("code.theme"))
       .addDropdown((dropdown) => dropdown
         .addOption("code-theme-bt-default", "Bysan Default")
         .addOption("code-theme-solarized-light", "Solarized Light")
@@ -1022,43 +1092,87 @@ class BysanStyleSettingTab extends PluginSettingTab {
         .setValue(this.plugin.settings.codeTheme)
         .onChange((value) => this.plugin.updateSetting("codeTheme", value)));
 
-    this.addToggle(containerEl, "编辑视图代码行号", "由插件内置样式显示代码行号。", "codeLineNumbers");
-    this.addToggle(containerEl, "阅读视图自动换行", "长代码在阅读视图中换行。", "codeWrapReading");
-    this.addToggle(containerEl, "Live Preview 禁止换行", "需要横向滚动查看长代码。", "codeNoWrapLive");
-    this.addToggle(containerEl, "关闭当前行高亮", "不显示代码块当前行背景。", "muteCodeActiveLine");
+    this.addToggle(containerEl, this.plugin.t("code.lineNumbers"), this.plugin.t("code.lineNumbersDesc"), "codeLineNumbers");
+    this.addToggle(containerEl, this.plugin.t("code.wrapReading"), this.plugin.t("code.wrapReadingDesc"), "codeWrapReading");
+    this.addToggle(containerEl, this.plugin.t("code.noWrapLive"), this.plugin.t("code.noWrapLiveDesc"), "codeNoWrapLive");
+    this.addToggle(containerEl, this.plugin.t("code.muteActive"), this.plugin.t("code.muteActiveDesc"), "muteCodeActiveLine");
 
-    this.addSlider(containerEl, "代码框模糊半径", "仅在毛玻璃代码框样式下生效。", "codeBlur", 0, 8, 1);
-    this.addSlider(containerEl, "代码字间距", "单位 px。", "codeLetterSpacing", 0, 2, 0.1);
+    this.addSlider(containerEl, this.plugin.t("code.blur"), this.plugin.t("code.blurDesc"), "codeBlur", 0, 8, 1);
+    this.addSlider(containerEl, this.plugin.t("code.spacing"), this.plugin.t("code.spacingDesc"), "codeLetterSpacing", 0, 2, 0.1);
   }
 
 
-  renderPaletteSettings(containerEl, suffix, title) {
-    const heading = new Setting(containerEl).setName(title).setHeading();
-    heading.settingEl.id = `bysan-section-palette-${suffix.toLowerCase()}`;
+  renderPaletteSettings(containerEl) {
+    const heading = new Setting(containerEl).setName(this.plugin.t("section.palette")).setHeading();
+    heading.settingEl.id = "bysan-section-palette";
 
-    this.addColor(containerEl, "代码块背景", `codeBg${suffix}`);
-    this.addSlider(containerEl, "代码块背景透明度", "0 为完全透明，1 为完全不透明。", `codeBgOpacity${suffix}`, 0, 1, 0.01);
-    this.addColor(containerEl, "代码块文字", `codeText${suffix}`);
-    this.addColor(containerEl, "代码块边框", `codeBorder${suffix}`);
-    this.addColor(containerEl, "行内代码背景", `inlineBg${suffix}`);
-    this.addColor(containerEl, "行内代码文字", `inlineText${suffix}`);
-    this.addColor(containerEl, "表头背景", `tableHead${suffix}`);
-    this.addColor(containerEl, "表格斑马纹", `tableStripe${suffix}`);
-    this.addColor(containerEl, "表格悬停背景", `tableHover${suffix}`);
-    this.addColor(containerEl, "表格边框", `tableBorder${suffix}`);
-    this.addColor(containerEl, "引用块背景", `quoteBg${suffix}`);
-    this.addSlider(containerEl, "引用块背景透明度", "0 为完全透明，1 为完全不透明。", `quoteBgOpacity${suffix}`, 0, 1, 0.01);
-    this.addColor(containerEl, "引用块边框", `quoteBorder${suffix}`);
-    this.addColor(containerEl, "列表标记", `marker${suffix}`);
+    this.addDualColor(containerEl, this.plugin.t("palette.codeBg"), "codeBgLight", "codeBgDark");
+    this.addDualSlider(containerEl, this.plugin.t("palette.opacity"), this.plugin.t("palette.opacityDesc"), "codeBgOpacityLight", "codeBgOpacityDark", 0, 1, 0.01);
+    this.addDualColor(containerEl, this.plugin.t("palette.codeText"), "codeTextLight", "codeTextDark");
+    this.addDualColor(containerEl, this.plugin.t("palette.codeBorder"), "codeBorderLight", "codeBorderDark");
+    this.addDualColor(containerEl, this.plugin.t("palette.inlineBg"), "inlineBgLight", "inlineBgDark");
+    this.addDualColor(containerEl, this.plugin.t("palette.inlineText"), "inlineTextLight", "inlineTextDark");
+    this.addDualColor(containerEl, this.plugin.t("palette.tableHead"), "tableHeadLight", "tableHeadDark");
+    this.addDualColor(containerEl, this.plugin.t("palette.tableStripe"), "tableStripeLight", "tableStripeDark");
+    this.addDualColor(containerEl, this.plugin.t("palette.tableHover"), "tableHoverLight", "tableHoverDark");
+    this.addDualColor(containerEl, this.plugin.t("palette.tableBorder"), "tableBorderLight", "tableBorderDark");
+    this.addDualColor(containerEl, this.plugin.t("palette.quoteBg"), "quoteBgLight", "quoteBgDark");
+    this.addDualSlider(containerEl, this.plugin.t("palette.quoteOpacity"), this.plugin.t("palette.opacityDesc"), "quoteBgOpacityLight", "quoteBgOpacityDark", 0, 1, 0.01);
+    this.addDualColor(containerEl, this.plugin.t("palette.quoteBorder"), "quoteBorderLight", "quoteBorderDark");
+    this.addDualColor(containerEl, this.plugin.t("palette.marker"), "markerLight", "markerDark");
+  }
+
+
+  addModeControl(setting, mode, kind, addControl) {
+    const group = setting.controlEl.createDiv({
+      cls: `bysan-mode-control bysan-mode-control-${kind}`
+    });
+    group.createSpan({
+      cls: `bysan-mode-label bysan-mode-label-${mode}`,
+      text: this.plugin.t(mode === "light" ? "theme.light" : "theme.dark")
+    });
+    const existing = new Set(setting.controlEl.children);
+    addControl();
+    for (const child of [...setting.controlEl.children]) {
+      if (!existing.has(child)) group.appendChild(child);
+    }
+  }
+
+
+  addDualColor(containerEl, name, lightKey, darkKey) {
+    const setting = new Setting(containerEl).setName(name);
+    this.addModeControl(setting, "light", "color", () => setting.addColorPicker((picker) => picker
+      .setValue(this.plugin.settings[lightKey])
+      .onChange((value) => this.plugin.updateSetting(lightKey, value))));
+    this.addModeControl(setting, "dark", "color", () => setting.addColorPicker((picker) => picker
+      .setValue(this.plugin.settings[darkKey])
+      .onChange((value) => this.plugin.updateSetting(darkKey, value))));
+    setting.settingEl.addClass("bysan-dual-mode-setting");
+  }
+
+
+  addDualSlider(containerEl, name, description, lightKey, darkKey, minimum, maximum, step) {
+    const setting = new Setting(containerEl).setName(name).setDesc(description);
+    this.addModeControl(setting, "light", "slider", () => setting.addSlider((slider) => slider
+      .setLimits(minimum, maximum, step)
+      .setDynamicTooltip()
+      .setValue(this.plugin.settings[lightKey])
+      .onChange((value) => this.plugin.updateSetting(lightKey, value))));
+    this.addModeControl(setting, "dark", "slider", () => setting.addSlider((slider) => slider
+      .setLimits(minimum, maximum, step)
+      .setDynamicTooltip()
+      .setValue(this.plugin.settings[darkKey])
+      .onChange((value) => this.plugin.updateSetting(darkKey, value))));
+    setting.settingEl.addClass("bysan-dual-mode-setting");
   }
 
 
   renderComponentSettings(containerEl) {
-    const heading = new Setting(containerEl).setName("表格与引用").setHeading();
+    const heading = new Setting(containerEl).setName(this.plugin.t("section.components")).setHeading();
     heading.settingEl.id = "bysan-section-components";
-    this.addToggle(containerEl, "表格斑马纹", "交替显示数据行背景。", "tableZebra");
-    this.addToggle(containerEl, "表格居中", "保持 Live Preview 与阅读视图表格居中。", "tableCentered");
-    this.addToggle(containerEl, "引用块使用衬线字体", "关闭后跟随正文界面字体。", "quoteSerif");
+    this.addToggle(containerEl, this.plugin.t("components.zebra"), this.plugin.t("components.zebraDesc"), "tableZebra");
+    this.addToggle(containerEl, this.plugin.t("components.center"), this.plugin.t("components.centerDesc"), "tableCentered");
+    this.addToggle(containerEl, this.plugin.t("components.quoteSerif"), this.plugin.t("components.quoteSerifDesc"), "quoteSerif");
   }
 
 
@@ -1068,15 +1182,6 @@ class BysanStyleSettingTab extends PluginSettingTab {
       .setDesc(description)
       .addToggle((toggle) => toggle
         .setValue(Boolean(this.plugin.settings[key]))
-        .onChange((value) => this.plugin.updateSetting(key, value)));
-  }
-
-
-  addColor(containerEl, name, key) {
-    new Setting(containerEl)
-      .setName(name)
-      .addColorPicker((picker) => picker
-        .setValue(this.plugin.settings[key])
         .onChange((value) => this.plugin.updateSetting(key, value)));
   }
 

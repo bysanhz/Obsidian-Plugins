@@ -462,6 +462,47 @@ body.bysan-style-controller-active
   gap: 0.38rem;
 }
 
+.bysan-settings-nav-groups {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.65rem;
+}
+
+.bysan-settings-nav-group {
+  padding: 0.55rem;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--background-secondary) 72%, transparent);
+}
+
+.bysan-settings-nav-group-title {
+  margin: 0 0 0.42rem 0.15rem;
+  color: var(--text-accent);
+  font-size: var(--font-ui-small);
+  font-weight: 700;
+}
+
+.bysan-settings-nav-detail {
+  display: grid;
+  grid-template-columns: max-content minmax(12rem, 1fr);
+  align-items: center;
+  gap: 0.7rem;
+  margin-top: 0.65rem;
+  padding-top: 0.65rem;
+  border-top: 1px solid var(--background-modifier-border);
+}
+
+.bysan-settings-nav-detail label {
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+  font-weight: 650;
+}
+
+.bysan-settings-nav-detail select {
+  width: 100%;
+  max-width: none;
+}
+
 .bysan-settings-nav-link {
   min-height: 2rem;
   padding: 0.25rem 0.65rem;
@@ -481,12 +522,138 @@ body.bysan-style-controller-active
 }
 
 .bysan-settings-section-anchor,
-.bysan-style-settings [id^="bysan-section-"] {
-  scroll-margin-top: 10rem;
+.bysan-style-settings [id^="bysan-section-"],
+.bysan-style-settings [id^="bysan-theme-heading-"] {
+  scroll-margin-top: 16rem;
 }
 
 .bysan-section-target-flash {
   animation: bysan-section-target-flash 0.9s ease-out;
+}
+
+/* Make the hierarchy visible in the content itself, not only in navigation. */
+.bysan-style-settings > .setting-item.setting-item-heading[id^="bysan-section-"] {
+  margin-top: 1.6rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid color-mix(in srgb, var(--interactive-accent) 28%, var(--background-modifier-border));
+  border-left: 5px solid var(--interactive-accent);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--interactive-accent) 8%, var(--background-primary));
+}
+
+.bysan-theme-heading-1.setting-item-heading {
+  margin-top: 1.9rem;
+  padding: 0.9rem 1rem;
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--interactive-accent) 14%, var(--background-primary));
+}
+
+.bysan-theme-heading-2.setting-item-heading {
+  margin-top: 1.35rem;
+  padding: 0.62rem 0.8rem;
+  border-left: 4px solid color-mix(in srgb, var(--interactive-accent) 72%, transparent);
+  background: color-mix(in srgb, var(--interactive-accent) 7%, transparent);
+}
+
+.bysan-theme-heading-3.setting-item-heading {
+  margin-top: 1rem;
+  padding-bottom: 0.35rem;
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.bysan-theme-heading-4.setting-item-heading,
+.bysan-theme-heading-5.setting-item-heading {
+  margin-top: 0.7rem;
+  padding-left: 0.75rem;
+  border-left: 2px solid var(--background-modifier-border);
+}
+
+.bysan-language-setting {
+  margin-top: 0.75rem;
+  padding: 0.65rem 0.8rem;
+  border-radius: 8px;
+  background: var(--background-secondary);
+}
+
+.bysan-dual-mode-setting .setting-item-control {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: center;
+  gap: 0.75rem;
+  width: min(46rem, 72%);
+}
+
+.bysan-mode-control {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 0;
+  padding: 0.35rem 0.45rem;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--background-secondary) 72%, transparent);
+}
+
+.bysan-mode-control-slider {
+  grid-template-columns: max-content 3.2rem minmax(6.5rem, 1fr);
+}
+
+.bysan-mode-label {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.55rem;
+  padding: 0 0.42rem;
+  border-radius: 999px;
+  font-size: var(--font-ui-smaller);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.bysan-mode-label-light {
+  background: #fff2ba;
+  color: #6b5410;
+}
+
+.bysan-mode-label-dark {
+  background: #344252;
+  color: #eff5fb;
+}
+
+.bysan-mode-control .slider {
+  width: 100%;
+}
+
+.bysan-mode-control select {
+  width: 100%;
+  max-width: none;
+}
+
+@media (max-width: 760px) {
+  .bysan-settings-nav-groups {
+    grid-template-columns: 1fr;
+  }
+
+  .bysan-settings-nav-detail {
+    grid-template-columns: 1fr;
+    gap: 0.35rem;
+  }
+
+  .bysan-dual-mode-setting {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .bysan-dual-mode-setting .setting-item-control {
+    width: 100%;
+    grid-template-columns: 1fr;
+  }
+
+  .bysan-mode-control .slider,
+  .bysan-mode-control select {
+    width: 100%;
+    max-width: none;
+  }
 }
 
 @keyframes bysan-section-target-flash {

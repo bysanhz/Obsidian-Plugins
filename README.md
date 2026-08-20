@@ -9,6 +9,7 @@
 | [Academic Heading Numbering](./academic-heading-numbering/) | 0.4.1 | 为 Live Preview、阅读视图、Outline 和 PDF 提供统一的学术标题编号 |
 | [Mermaid Inline Resizer](./mermaid-inline-resizer/) | 0.11.0 | 在编辑视图和阅读视图中持久化调整 Mermaid、图片和表格宽度 |
 | [Selection Review Toolbar](./selection-review-toolbar/) | 0.1.1 | 选中文字后显示浮动审阅工具栏，支持格式、颜色、评论与源码模式切换 |
+| [Bysan Style Controller](./bysan-style-controller/) | 0.1.0 | 统一控制 Bysan 内容样式与选定的 Blue Topaz / Style Settings 外观选项 |
 
 ## 安装
 
@@ -33,6 +34,7 @@ YourVault/
 
 - 主要面向 Obsidian Desktop 1.13.x。
 - 插件之间已经在同一 Vault 中进行组合测试。
+- `Bysan Style Controller` 不接管标题、公式或媒体宽度，避免与专用插件重复处理同一 DOM。
 - `Selection Review Toolbar` 会避开 fenced code、Mermaid、块公式和行内代码/公式选区。
 - 所有持久化格式均写入 Markdown 或 HTML class，不依赖插件内存状态。
 

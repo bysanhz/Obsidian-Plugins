@@ -1,0 +1,9 @@
+{
+  "id": "bysan-style-controller",
+  "name": "Bysan Style Controller",
+  "version": "0.1.0",
+  "minAppVersion": "1.13.0",
+  "description": "Unified Bysan content styles and selected Blue Topaz appearance controls.",
+  "author": "Bysan",
+  "isDesktopOnly": true
+}

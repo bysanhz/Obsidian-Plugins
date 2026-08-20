@@ -1,0 +1,360 @@
+/*
+ * Bysan Style Controller content styles for Obsidian
+ * Adapted from /home/pcbysan/Koofr/typora_theme/bysan.css.
+ *
+ * Deliberately excluded:
+ * - h1-h6 counters, heading ::before rules, and outline/TOC counters
+ * - MathJax/equation-number positioning
+ * - Mermaid and media sizing
+ *
+ * This keeps Academic Heading Numbering, Equation Citator, and
+ * Mermaid Inline Resizer as the only owners of those features.
+ */
+
+body.theme-light {
+  --bysan-code-bg: rgba(198, 239, 210, 0.22);
+  --bysan-code-border: rgba(92, 166, 113, 0.34);
+  --bysan-code-text: #263238;
+  --bysan-inline-code-bg: #fefefe;
+  --bysan-inline-code-text: #3c70c6;
+  --bysan-inline-code-shadow: #c8d3df;
+  --bysan-table-head-bg: #def4fe;
+  --bysan-table-stripe-bg: #f1faff;
+  --bysan-table-hover-bg: #e7f7ff;
+  --bysan-table-border: #dfe2e5;
+  --bysan-quote-bg: rgba(222, 244, 254, 0.42);
+  --bysan-quote-border: #79b8d8;
+  --bysan-muted-marker: #5f82a8;
+}
+
+body.theme-dark {
+  --bysan-code-bg: rgba(91, 173, 112, 0.1);
+  --bysan-code-border: rgba(123, 205, 145, 0.28);
+  --bysan-code-text: #e9eded;
+  --bysan-inline-code-bg: #161616;
+  --bysan-inline-code-text: #8bb1f9;
+  --bysan-inline-code-shadow: #141414;
+  --bysan-table-head-bg: #263238;
+  --bysan-table-stripe-bg: #20272d;
+  --bysan-table-hover-bg: #2a363e;
+  --bysan-table-border: #46535e;
+  --bysan-quote-bg: rgba(38, 50, 56, 0.68);
+  --bysan-quote-border: #607d8b;
+  --bysan-muted-marker: #8bb1f9;
+}
+
+body {
+  --bysan-code-font: "Latin Modern Mono", "SFMono-Regular", Consolas,
+    "Liberation Mono", "Courier New", monospace;
+  --bysan-quote-font: "Latin Modern Roman", "Times New Roman", "Noto Serif CJK SC",
+    serif;
+}
+
+/* ------------------------- inline code ------------------------- */
+
+:is(.markdown-preview-view, .markdown-rendered) :not(pre) > code,
+.markdown-source-view.mod-cm6 .cm-inline-code:not(.cm-hmd-codeblock) {
+  color: var(--bysan-inline-code-text) !important;
+  background-color: var(--bysan-inline-code-bg) !important;
+  border: 1px solid var(--bysan-code-border);
+  border-radius: 2px;
+  box-shadow: 0 0 1px 1px var(--bysan-inline-code-shadow);
+  box-sizing: border-box;
+  font-family: var(--bysan-code-font) !important;
+  font-size: 0.9em;
+  margin-inline: 2px;
+  padding: 1px 3px;
+}
+
+/* -------------------------- code blocks ------------------------ */
+
+:is(.markdown-preview-view, .markdown-rendered) pre:not(.frontmatter) {
+  color: var(--bysan-code-text) !important;
+  background: var(--bysan-code-bg) !important;
+  border: 1px solid var(--bysan-code-border) !important;
+  border-radius: 3px !important;
+  box-shadow: none !important;
+  font-family: var(--bysan-code-font);
+  font-size: 0.95em;
+  line-height: 1.55;
+  padding: 0.8em 1em !important;
+}
+
+:is(.markdown-preview-view, .markdown-rendered) pre:not(.frontmatter) > code {
+  color: inherit;
+  background: transparent !important;
+  border: 0;
+  box-shadow: none;
+  font-family: inherit;
+  padding: 0;
+}
+
+.markdown-source-view.mod-cm6 .HyperMD-codeblock,
+.markdown-source-view.mod-cm6 .HyperMD-codeblock-bg {
+  color: var(--bysan-code-text);
+  background-color: var(--bysan-code-bg) !important;
+  border-inline: 1px solid var(--bysan-code-border);
+  font-family: var(--bysan-code-font);
+  line-height: 1.55;
+}
+
+.markdown-source-view.mod-cm6 .HyperMD-codeblock-begin {
+  border-top: 1px solid var(--bysan-code-border);
+  border-radius: 3px 3px 0 0;
+  padding-top: 0.45em;
+}
+
+.markdown-source-view.mod-cm6 .HyperMD-codeblock-end {
+  border-bottom: 1px solid var(--bysan-code-border);
+  border-radius: 0 0 3px 3px;
+  padding-bottom: 0.45em;
+}
+
+/* Bysan dark syntax palette; Blue Topaz token structure is retained. */
+body.theme-dark .markdown-source-view.mod-cm6 .HyperMD-codeblock .cm-keyword,
+body.theme-dark :is(.markdown-preview-view, .markdown-rendered) pre .token.keyword {
+  color: #c792ea !important;
+}
+
+body.theme-dark .markdown-source-view.mod-cm6 .HyperMD-codeblock .cm-string,
+body.theme-dark :is(.markdown-preview-view, .markdown-rendered) pre .token.string {
+  color: #c3e88d !important;
+}
+
+body.theme-dark .markdown-source-view.mod-cm6 .HyperMD-codeblock .cm-number,
+body.theme-dark .markdown-source-view.mod-cm6 .HyperMD-codeblock .cm-atom,
+body.theme-dark :is(.markdown-preview-view, .markdown-rendered) pre :is(.token.number, .token.boolean) {
+  color: #f77669 !important;
+}
+
+body.theme-dark .markdown-source-view.mod-cm6 .HyperMD-codeblock .cm-comment,
+body.theme-dark :is(.markdown-preview-view, .markdown-rendered) pre .token.comment {
+  color: #718792 !important;
+}
+
+body.theme-dark .markdown-source-view.mod-cm6 .HyperMD-codeblock :is(.cm-property, .cm-variable-2),
+body.theme-dark :is(.markdown-preview-view, .markdown-rendered) pre :is(.token.property, .token.function) {
+  color: #80cbae !important;
+}
+
+/* ---------------------------- tables --------------------------- */
+
+/*
+ * Obsidian Live Preview 的原生表格宿主默认按内容收缩并贴左。
+ * 先让宿主占满编辑正文，表格自身的百分比宽度和 auto margin
+ * 才能相对整页正确缩放、居中。
+ */
+body .markdown-source-view.mod-cm6 .cm-table-widget {
+  box-sizing: border-box !important;
+  display: block !important;
+  width: 100% !important;
+  max-width: 100% !important;
+}
+
+/*
+ * Obsidian 1.13.x 在 cm-table-widget 内还有一层按内容收缩的
+ * table-wrapper。百分比宽度实际以它为基准，所以仅拉伸外层宿主时
+ * 表格仍会贴左。让该层占满宿主后，表格的 auto margin 才能真正居中。
+ */
+body .markdown-source-view.mod-cm6 .cm-table-widget > .table-wrapper {
+  box-sizing: border-box !important;
+  display: block !important;
+  width: 100% !important;
+  max-width: 100% !important;
+}
+
+body :is(.markdown-preview-view, .markdown-rendered) .el-table > table:not(.dataview),
+body :is(.markdown-preview-view, .markdown-rendered) table:not(.dataview),
+body .markdown-source-view.mod-cm6 :is(.cm-table-widget, .cm-embed-block) table {
+  background: transparent;
+  border: 1.2pt solid var(--bysan-table-border) !important;
+  border-collapse: collapse !important;
+  border-spacing: 0;
+  display: table !important;
+  margin: 1em var(--bysan-table-inline-margin, auto) !important;
+  text-align: left;
+  width: max-content !important;
+  max-width: 100%;
+}
+
+:is(.markdown-preview-view, .markdown-rendered) table:not(.dataview) :is(th, td),
+.markdown-source-view.mod-cm6 :is(.cm-table-widget, .cm-embed-block) table :is(th, td) {
+  border: 1px solid var(--bysan-table-border) !important;
+  padding: 6px 13px !important;
+}
+
+:is(.markdown-preview-view, .markdown-rendered) table:not(.dataview) thead,
+.markdown-source-view.mod-cm6 :is(.cm-table-widget, .cm-embed-block) table thead {
+  background-color: var(--bysan-table-head-bg) !important;
+  border-bottom: 1.2pt solid var(--bysan-table-border);
+  font-weight: 800;
+}
+
+:is(.markdown-preview-view, .markdown-rendered) table:not(.dataview) thead > tr > th,
+.markdown-source-view.mod-cm6 :is(.cm-table-widget, .cm-embed-block) table thead > tr > th {
+  background-color: var(--bysan-table-head-bg) !important;
+}
+
+body :is(.markdown-preview-view, .markdown-rendered) table:not(.dataview) tbody > tr:nth-child(even),
+body .markdown-source-view.mod-cm6 :is(.cm-table-widget, .cm-embed-block) table tbody > tr:nth-child(even),
+body :is(.markdown-preview-view, .markdown-rendered) table:not(.dataview) tbody > tr:nth-child(even) > td,
+body .markdown-source-view.mod-cm6 :is(.cm-table-widget, .cm-embed-block) table tbody > tr:nth-child(even) > td {
+  background-color: var(--bysan-table-stripe-bg) !important;
+}
+
+body :is(.markdown-preview-view, .markdown-rendered) table:not(.dataview) tbody > tr:nth-child(odd) > td,
+body .markdown-source-view.mod-cm6 :is(.cm-table-widget, .cm-embed-block) table tbody > tr:nth-child(odd) > td {
+  background-color: transparent !important;
+}
+
+body :is(.markdown-preview-view, .markdown-rendered) table:not(.dataview) tbody > tr:hover,
+body .markdown-source-view.mod-cm6 :is(.cm-table-widget, .cm-embed-block) table tbody > tr:hover,
+body :is(.markdown-preview-view, .markdown-rendered) table:not(.dataview) tbody > tr:hover > td,
+body .markdown-source-view.mod-cm6 :is(.cm-table-widget, .cm-embed-block) table tbody > tr:hover > td {
+  background-color: var(--bysan-table-hover-bg) !important;
+}
+
+/* -------------------------- blockquotes ------------------------ */
+
+:is(.markdown-preview-view, .markdown-rendered) blockquote {
+  background: var(--bysan-quote-bg) !important;
+  border-left: 4px solid var(--bysan-quote-border) !important;
+  border-radius: 0 3px 3px 0;
+  font-family: var(--bysan-quote-font);
+  font-size: 1.05em;
+  font-style: normal;
+  margin-left: 0;
+  padding: 0.55em 2em !important;
+}
+
+.markdown-source-view.mod-cm6 .HyperMD-quote {
+  background: var(--bysan-quote-bg);
+  font-family: var(--bysan-quote-font);
+  font-style: normal;
+}
+
+.markdown-source-view.mod-cm6 .cm-blockquote-border {
+  border-left-color: var(--bysan-quote-border) !important;
+  border-left-width: 4px !important;
+}
+
+/* ----------------------------- lists --------------------------- */
+
+:is(.markdown-preview-view, .markdown-rendered) :is(ol, ul) {
+  padding-inline-start: 2em;
+}
+
+:is(.markdown-preview-view, .markdown-rendered) ol {
+  list-style-type: decimal;
+}
+
+:is(.markdown-preview-view, .markdown-rendered) ol ol {
+  list-style-type: lower-alpha;
+}
+
+:is(.markdown-preview-view, .markdown-rendered) ol ol ol {
+  list-style-type: lower-roman;
+}
+
+:is(.markdown-preview-view, .markdown-rendered) ul {
+  list-style-type: disc;
+}
+
+:is(.markdown-preview-view, .markdown-rendered) ul ul {
+  list-style-type: "–  ";
+}
+
+:is(.markdown-preview-view, .markdown-rendered) ul ul ul {
+  list-style-type: "◦  ";
+}
+
+:is(.markdown-preview-view, .markdown-rendered) li::marker,
+.markdown-source-view.mod-cm6 :is(.cm-formatting-list, .list-number) {
+  color: var(--bysan-muted-marker) !important;
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+}
+
+:is(.markdown-preview-view, .markdown-rendered) .task-list-item-checkbox,
+.markdown-source-view.mod-cm6 .task-list-item-checkbox {
+  height: 1em;
+  margin-top: 0.42em;
+  width: 1em;
+}
+
+/* ------------------------ small components --------------------- */
+
+:is(.markdown-preview-view, .markdown-rendered) hr,
+.markdown-source-view.mod-cm6 .hr {
+  border: 0;
+  border-top: 1px solid var(--bysan-table-border);
+  margin-block: 1.8em;
+}
+
+:is(.markdown-preview-view, .markdown-rendered) strong,
+.markdown-source-view.mod-cm6 .cm-strong {
+  font-weight: 800;
+}
+
+/* Bysan utility colors used by HTML spans in notes. */
+.markdown-rendered :is(.orange, .coral, .red, .purple, .teal, .blue, .green,
+  .slate, .dark, .amber, .indigo, .pink, .cyan, .lime, .brown,
+  .viva-magenta, .peach-orange, .navy-blue, .lavender) {
+  display: inline;
+}
+
+.markdown-rendered .orange { color: #ffa500 !important; }
+.markdown-rendered .coral { color: #ff6b6b !important; }
+.markdown-rendered .red { color: #ff0000 !important; }
+.markdown-rendered .purple { color: #9b59b6 !important; }
+.markdown-rendered .teal { color: #1abc9c !important; }
+.markdown-rendered .blue { color: #3498db !important; }
+.markdown-rendered .green { color: #2ecc71 !important; }
+.markdown-rendered .slate { color: #6c7a89 !important; }
+.markdown-rendered .dark { color: #2c3e50 !important; }
+.markdown-rendered .amber { color: #ffc107 !important; }
+.markdown-rendered .indigo { color: #3f51b5 !important; }
+.markdown-rendered .pink { color: #e91e63 !important; }
+.markdown-rendered .cyan { color: #00bcd4 !important; }
+.markdown-rendered .lime { color: #cddc39 !important; }
+.markdown-rendered .brown { color: #795548 !important; }
+.markdown-rendered .viva-magenta { color: #bb2649 !important; }
+.markdown-rendered .peach-orange { color: #ffbe98 !important; }
+.markdown-rendered .navy-blue { color: #1d428a !important; }
+.markdown-rendered .lavender { color: #b2a4d4 !important; }
+
+.markdown-rendered .red_bg,
+.markdown-rendered .green_bg,
+.markdown-rendered .brown_bg {
+  border: 1px solid;
+  padding: 2px 6px;
+}
+
+.markdown-rendered .red_bg {
+  background: #fef3f2;
+  border-color: #fda29b;
+  color: #b42318;
+}
+
+.markdown-rendered .green_bg {
+  background: #ecfdf3;
+  border-color: #6ce9a6;
+  color: #027a48;
+}
+
+.markdown-rendered .brown_bg {
+  background: #fffaeb;
+  border-color: #fec84b;
+  color: #b54708;
+}
+
+/* PDF export uses rendered Markdown; do not touch headings or MathJax. */
+@media print {
+  .print :is(pre, blockquote, table) {
+    break-inside: avoid;
+  }
+
+  .print table {
+    border-color: #dfe2e5 !important;
+  }
+}

@@ -1,7 +1,7 @@
 /**
  * Mermaid Inline Resizer
  *
- * Version: 0.11.0
+ * Version: 0.11.1
  *
  * 稳定四按钮 + PDF 同步版。
  *
@@ -125,6 +125,7 @@ class SourceTableControlsWidget extends WidgetType {
     const makeButton = (className, text, title) => {
       const button = document.createElement("button");
       button.type = "button";
+      button.tabIndex = -1;
       button.className = `mir-button ${className}`;
       button.textContent = text;
       button.title = title;
@@ -167,11 +168,14 @@ class SourceTableControlsWidget extends WidgetType {
         return;
       }
 
-      const scrollTop = markdownView.editor.cm.scrollDOM.scrollTop;
+      const scrollPosition = this.plugin.getEditorScrollSnapshot(
+        markdownView,
+        control
+      );
       const value = this.plugin.clampWidth(change(entry.width));
       current.textContent = `${Math.round(value)}%`;
       this.plugin.persistMediaWidth(markdownView, entry, "table", value);
-      this.plugin.preserveEditorScroll(markdownView, scrollTop);
+      this.plugin.preserveEditorScroll(markdownView, scrollPosition);
     };
 
     minus.addEventListener("click", () => {
@@ -184,7 +188,14 @@ class SourceTableControlsWidget extends WidgetType {
       update(() => DEFAULT_WIDTH);
     });
     step.addEventListener("click", async () => {
+      const markdownView = this.plugin.findMarkdownViewForCM(cmView);
+      const scrollPosition = markdownView
+        ? this.plugin.getEditorScrollSnapshot(markdownView, control)
+        : null;
       await this.plugin.cycleStep();
+      if (markdownView) {
+        this.plugin.preserveEditorScroll(markdownView, scrollPosition);
+      }
     });
 
     return row;
@@ -277,7 +288,7 @@ module.exports = class MermaidInlineResizer extends Plugin {
 
   async onload() {
     console.log(
-      "[Mermaid Inline Resizer] v0.11.0 loaded"
+      "[Mermaid Inline Resizer] v0.11.1 loaded"
     );
 
 
@@ -324,6 +335,21 @@ module.exports = class MermaidInlineResizer extends Plugin {
     this.activeRenderedEntries = [];
 
     this.activeMediaEntries = [];
+
+    /* macOS may let CodeMirror process pointer-down before the eventual click
+     * handler runs. Capture the pre-interaction scroll position at the outer
+     * document phase so a later widget rebuild never records the already
+     * jumped-to-top value as the value to restore. */
+    this.controlScrollSnapshots = new WeakMap();
+    const captureControlPointer = (event) => {
+      this.captureControlScrollSnapshot(event);
+    };
+    this.registerDomEvent(document, "pointerdown", captureControlPointer, {
+      capture: true
+    });
+    this.registerDomEvent(document, "mousedown", captureControlPointer, {
+      capture: true
+    });
 
 
     /*
@@ -2283,6 +2309,78 @@ module.exports = class MermaidInlineResizer extends Plugin {
   }
 
 
+  findMarkdownViewForElement(element) {
+    if (!element) {
+      return null;
+    }
+    for (const leaf of this.app.workspace.getLeavesOfType("markdown")) {
+      const view = leaf.view;
+      if (view?.containerEl?.contains(element)) {
+        return view;
+      }
+    }
+    return null;
+  }
+
+
+  captureControlScrollSnapshot(event) {
+    const button = event.target?.closest?.(".mir-button-group .mir-button");
+    if (!button) {
+      return;
+    }
+
+    /* Prevent native button focus before CodeMirror can move its selection.
+     * Do not stop propagation here: the existing control-level handlers still
+     * own the click action and stop it before it bubbles into the editor. */
+    event.preventDefault();
+
+    const control = button.closest(".mir-button-group");
+    const view = this.findMarkdownViewForElement(button);
+    const scrollDOM = view?.editor?.cm?.scrollDOM;
+    if (!control || !view || !scrollDOM) {
+      return;
+    }
+
+    /* A physical click emits pointerdown followed by mousedown. Preserve the
+     * earlier pointer snapshot even if an editor listener moves the viewport
+     * between those two events; a later pointerdown always starts a new click. */
+    const previous = this.controlScrollSnapshots.get(control);
+    const now = performance.now();
+    if (
+      event.type === "mousedown" &&
+      previous &&
+      now - previous.capturedAt < 250
+    ) {
+      return;
+    }
+
+    this.controlScrollSnapshots.set(control, {
+      view,
+      scrollTop: scrollDOM.scrollTop,
+      scrollLeft: scrollDOM.scrollLeft,
+      capturedAt: now
+    });
+  }
+
+
+  getEditorScrollSnapshot(view, controlOrButton) {
+    const control = controlOrButton?.matches?.(".mir-button-group")
+      ? controlOrButton
+      : controlOrButton?.closest?.(".mir-button-group");
+    const captured = control && this.controlScrollSnapshots?.get(control);
+    if (captured?.view === view) {
+      return captured;
+    }
+
+    const scrollDOM = view?.editor?.cm?.scrollDOM;
+    return {
+      view,
+      scrollTop: scrollDOM?.scrollTop,
+      scrollLeft: scrollDOM?.scrollLeft
+    };
+  }
+
+
   findSourceTableEntry(editor, sourceLine) {
     const entries = this.extractMediaEntriesFromMarkdown(editor.getValue())
       .filter((entry) => entry.kind === "table");
@@ -2437,8 +2535,14 @@ module.exports = class MermaidInlineResizer extends Plugin {
   }
 
 
-  preserveEditorScroll(view, scrollTop) {
+  preserveEditorScroll(view, scrollPosition) {
     const scrollDOM = view.editor?.cm?.scrollDOM;
+    const scrollTop = typeof scrollPosition === "number"
+      ? scrollPosition
+      : scrollPosition?.scrollTop;
+    const scrollLeft = typeof scrollPosition === "object"
+      ? scrollPosition?.scrollLeft
+      : scrollDOM?.scrollLeft;
     if (!scrollDOM || !Number.isFinite(scrollTop)) {
       return;
     }
@@ -2455,6 +2559,9 @@ module.exports = class MermaidInlineResizer extends Plugin {
         return;
       }
       scrollDOM.scrollTop = scrollTop;
+      if (Number.isFinite(scrollLeft)) {
+        scrollDOM.scrollLeft = scrollLeft;
+      }
     };
 
     /*
@@ -2489,6 +2596,7 @@ module.exports = class MermaidInlineResizer extends Plugin {
     const makeButton = (className, text, title) => {
       const button = document.createElement("button");
       button.type = "button";
+      button.tabIndex = -1;
       button.className = `mir-button ${className}`;
       button.textContent = text;
       button.title = title;
@@ -2518,7 +2626,7 @@ module.exports = class MermaidInlineResizer extends Plugin {
     });
 
     const update = (change) => {
-      const scrollTop = view.editor?.cm?.scrollDOM?.scrollTop;
+      const scrollPosition = this.getEditorScrollSnapshot(view, control);
       const freshEntry = this.findMediaEntryForElement(
         view.editor,
         target,
@@ -2531,7 +2639,7 @@ module.exports = class MermaidInlineResizer extends Plugin {
       this.applyMediaWidth(target, value, kind);
       current.textContent = `${Math.round(value)}%`;
       this.persistMediaWidth(view, freshEntry, kind, value);
-      this.preserveEditorScroll(view, scrollTop);
+      this.preserveEditorScroll(view, scrollPosition);
     };
 
     minus.addEventListener("click", (event) => {
@@ -2548,7 +2656,9 @@ module.exports = class MermaidInlineResizer extends Plugin {
     });
     step.addEventListener("click", async (event) => {
       event.preventDefault();
+      const scrollPosition = this.getEditorScrollSnapshot(view, control);
       await this.cycleStep();
+      this.preserveEditorScroll(view, scrollPosition);
     });
   }
 
@@ -2836,6 +2946,13 @@ module.exports = class MermaidInlineResizer extends Plugin {
       `按当前步长放大 ${this.currentStep}%`;
 
 
+    /* Mouse clicks must not transfer focus away from CodeMirror. On macOS a
+     * focused button can make the editor restore its selection at the top. */
+    [minus, stepButton, widthButton, plus].forEach((button) => {
+      button.tabIndex = -1;
+    });
+
+
     /* ------------------------------------------------------
      * Mount
      * ------------------------------------------------------ */
@@ -2901,7 +3018,6 @@ module.exports = class MermaidInlineResizer extends Plugin {
         event.preventDefault();
         event.stopPropagation();
 
-
         const currentBlock =
           this.findBlockForElement(
             view,
@@ -2916,8 +3032,11 @@ module.exports = class MermaidInlineResizer extends Plugin {
         }
 
 
-        const scrollTop =
-          view.editor?.cm?.scrollDOM?.scrollTop;
+        const scrollPosition =
+          this.getEditorScrollSnapshot(
+            view,
+            control
+          );
 
 
         const current =
@@ -2953,7 +3072,7 @@ module.exports = class MermaidInlineResizer extends Plugin {
 
         this.preserveEditorScroll(
           view,
-          scrollTop
+          scrollPosition
         );
       }
     );
@@ -2971,11 +3090,24 @@ module.exports = class MermaidInlineResizer extends Plugin {
         event.stopPropagation();
 
 
+        const scrollPosition =
+          this.getEditorScrollSnapshot(
+            view,
+            control
+          );
+
+
         /*
          * 不修改 Mermaid。
          * 不修改 Markdown。
          */
         await this.cycleStep();
+
+
+        this.preserveEditorScroll(
+          view,
+          scrollPosition
+        );
 
 
         minus.title =
@@ -3014,8 +3146,11 @@ module.exports = class MermaidInlineResizer extends Plugin {
         }
 
 
-        const scrollTop =
-          view.editor?.cm?.scrollDOM?.scrollTop;
+        const scrollPosition =
+          this.getEditorScrollSnapshot(
+            view,
+            control
+          );
 
 
         this.persistWidthForBlock(
@@ -3037,7 +3172,7 @@ module.exports = class MermaidInlineResizer extends Plugin {
 
         this.preserveEditorScroll(
           view,
-          scrollTop
+          scrollPosition
         );
       }
     );
@@ -3069,8 +3204,11 @@ module.exports = class MermaidInlineResizer extends Plugin {
         }
 
 
-        const scrollTop =
-          view.editor?.cm?.scrollDOM?.scrollTop;
+        const scrollPosition =
+          this.getEditorScrollSnapshot(
+            view,
+            control
+          );
 
 
         const current =
@@ -3106,7 +3244,7 @@ module.exports = class MermaidInlineResizer extends Plugin {
 
         this.preserveEditorScroll(
           view,
-          scrollTop
+          scrollPosition
         );
       }
     );

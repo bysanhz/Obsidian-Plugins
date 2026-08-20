@@ -11,7 +11,7 @@
 - 表格宽度保存为 `%% table-width: 90% %%`。
 - 支持 Live Preview、阅读视图和 PDF 导出。
 - 表格缩放保持 Obsidian 原生表格 Widget，不会切回源码。
-- 点击控件时保留编辑器滚动位置。
+- 点击控件时保留编辑器滚动位置；在 macOS 上会从 `pointerdown` 捕获阶段提前保存滚动快照，避免 CodeMirror 先处理焦点后跳到页首。
 
 ## 安装
 
@@ -33,7 +33,7 @@ YourVault/.obsidian/plugins/mermaid-inline-resizer/
 
 ## 当前版本
 
-0.11.0
+0.11.1
 
 ## 作者
 

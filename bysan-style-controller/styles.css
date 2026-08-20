@@ -409,6 +409,31 @@ body.bysan-style-controller-active
   max-width: 7rem;
 }
 
+/* Critical plugin actions must remain visible even when a saved theme preset
+ * intentionally makes Obsidian's global --interactive-accent transparent. */
+.bysan-style-settings {
+  --bysan-settings-cta: #168fc4;
+  --bysan-settings-cta-hover: #117aa9;
+}
+
+.theme-dark .bysan-style-settings {
+  --bysan-settings-cta: #3da7d7;
+  --bysan-settings-cta-hover: #63b9df;
+}
+
+.bysan-style-settings button.mod-cta {
+  background-color: var(--bysan-settings-cta) !important;
+  border-color: var(--bysan-settings-cta) !important;
+  color: #ffffff !important;
+  opacity: 1 !important;
+  filter: none !important;
+}
+
+.bysan-style-settings button.mod-cta:hover {
+  background-color: var(--bysan-settings-cta-hover) !important;
+  border-color: var(--bysan-settings-cta-hover) !important;
+}
+
 /* Live Preview keeps source-line accuracy while replacing multi-line source
  * blocks (Mermaid, display math, embeds) with one rendered widget. Show the
  * covered range so a source jump such as 6 -> 52 is not mistaken for missing

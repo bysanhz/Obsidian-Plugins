@@ -1,6 +1,6 @@
 /**
  * Bysan Style Controller
- * Version: 0.4.1
+ * Version: 0.4.2
  *
  * Owns visual presentation only. Heading/equation numbering and media sizing
  * remain exclusively owned by their dedicated plugins.
@@ -273,7 +273,7 @@ module.exports = class BysanStyleController extends Plugin {
       this.register(() => window.clearTimeout(timer));
     }
 
-    console.log(`[Bysan Style Controller] v0.4.1 loaded with ${this.themeControls.count} theme controls`);
+    console.log(`[Bysan Style Controller] v0.4.2 loaded with ${this.themeControls.count} theme controls`);
   }
 
 
@@ -681,6 +681,7 @@ class BysanStyleSettingTab extends PluginSettingTab {
   display() {
     const { containerEl } = this;
     containerEl.empty();
+    containerEl.addClass("bysan-style-settings");
 
     new Setting(containerEl)
       .setName("Bysan Style Controller")

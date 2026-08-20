@@ -1,6 +1,6 @@
 /**
  * Bysan Style Controller
- * Version: 0.7.0
+ * Version: 0.8.0
  *
  * Owns visual presentation only. Heading/equation numbering and media sizing
  * remain exclusively owned by their dedicated plugins.
@@ -39,7 +39,8 @@ const LIGHT_BACKGROUND_CLASSES = [
   "background-settings-workplace-theme-light-blue-mountain",
   "background-settings-workplace-theme-light-in-the-note",
   "background-settings-workplace-waves-light",
-  "background-settings-workplace-waves2-light"
+  "background-settings-workplace-waves2-light",
+  "background-settings-workplace-theme-light-custom-option"
 ];
 
 const DARK_BACKGROUND_CLASSES = [
@@ -47,7 +48,8 @@ const DARK_BACKGROUND_CLASSES = [
   "background-settings-workplace-theme-dark-dark-sky",
   "background-settings-workplace-theme-dark-in-the-sky",
   "background-settings-workplace-waves",
-  "background-settings-workplace-waves2"
+  "background-settings-workplace-waves2",
+  "background-settings-workplace-theme-dark-custom-option"
 ];
 
 const CONTROLLED_CLASSES = [
@@ -152,6 +154,17 @@ const PRESET_META_KEYS = new Set([
   "activeStylePreset",
   "stylePresetDirty",
   "uiLanguage"
+]);
+
+const PALETTE_SETTING_KEYS = new Set([
+  "codeBgLight", "codeBgDark", "codeBgOpacityLight", "codeBgOpacityDark",
+  "codeBorderLight", "codeBorderDark", "codeTextLight", "codeTextDark",
+  "inlineBgLight", "inlineBgDark", "inlineTextLight", "inlineTextDark",
+  "inlineShadowLight", "inlineShadowDark", "tableHeadLight", "tableHeadDark",
+  "tableStripeLight", "tableStripeDark", "tableHoverLight", "tableHoverDark",
+  "tableBorderLight", "tableBorderDark", "quoteBgLight", "quoteBgDark",
+  "quoteBgOpacityLight", "quoteBgOpacityDark", "quoteBorderLight", "quoteBorderDark",
+  "markerLight", "markerDark"
 ]);
 
 
@@ -285,7 +298,7 @@ module.exports = class BysanStyleController extends Plugin {
       this.register(() => window.clearTimeout(timer));
     }
 
-    console.log(`[Bysan Style Controller] v0.7.0 loaded with ${this.themeControls.count} theme controls`);
+    console.log(`[Bysan Style Controller] v0.8.0 loaded with ${this.themeControls.count} theme controls`);
   }
 
 
@@ -330,7 +343,11 @@ module.exports = class BysanStyleController extends Plugin {
     this.settings[key] = value;
     if (!PRESET_META_KEYS.has(key)) this.settings.stylePresetDirty = true;
     await this.saveData(this.settings);
-    this.applySettings();
+    if (PALETTE_SETTING_KEYS.has(key)) {
+      this.applyPalette();
+    } else {
+      this.applySettings();
+    }
   }
 
 
@@ -341,7 +358,33 @@ module.exports = class BysanStyleController extends Plugin {
     };
     this.settings.stylePresetDirty = true;
     await this.saveData(this.settings);
-    this.applySettings();
+    this.themeControls.applySetting(id);
+  }
+
+
+  async resetSetting(key) {
+    if (!Object.prototype.hasOwnProperty.call(DEFAULT_SETTINGS, key)) return false;
+    this.settings[key] = deepClone(DEFAULT_SETTINGS[key]);
+    this.settings.stylePresetDirty = true;
+    await this.saveData(this.settings);
+    if (PALETTE_SETTING_KEYS.has(key)) this.applyPalette();
+    else this.applySettings();
+    return true;
+  }
+
+
+  async clearThemeColorMode(id, mode) {
+    const stored = this.settings.themeSettings?.[id];
+    if (!stored || typeof stored !== "object") return false;
+    const next = { ...stored };
+    delete next[mode];
+    this.settings.themeSettings = { ...(this.settings.themeSettings || {}) };
+    if (Object.keys(next).length) this.settings.themeSettings[id] = next;
+    else delete this.settings.themeSettings[id];
+    this.settings.stylePresetDirty = true;
+    await this.saveData(this.settings);
+    this.themeControls.applySetting(id);
+    return true;
   }
 
 
@@ -610,8 +653,12 @@ module.exports = class BysanStyleController extends Plugin {
 
 
   refreshLineNumberRanges() {
-    this.clearLineRangeLabels();
-    if (!this.settings.collapsedLineRanges) return;
+    if (!this.settings.collapsedLineRanges) {
+      this.clearLineRangeLabels();
+      return;
+    }
+
+    const desiredLabels = new Map();
 
     for (const gutter of document.querySelectorAll(".markdown-source-view .cm-lineNumbers")) {
       const elements = [...gutter.querySelectorAll(":scope > .cm-gutterElement")]
@@ -624,10 +671,25 @@ module.exports = class BysanStyleController extends Plugin {
         if (next <= current + 1) continue;
 
         const label = `${current}–${next - 1}`;
-        elements[index].dataset.bysanSourceLineRange = label;
-        elements[index].classList.add("bysan-source-line-range");
-        elements[index].setAttribute("title", `Live Preview 已将源文件第 ${label} 行折叠为一个渲染块`);
+        desiredLabels.set(elements[index], label);
       }
+    }
+
+    /* CodeMirror virtualises gutter nodes while scrolling. Update only nodes
+     * whose range actually changed; clearing and rebuilding every visible
+     * gutter on each wheel event caused an avoidable full-pane repaint. */
+    for (const element of document.querySelectorAll("[data-bysan-source-line-range]")) {
+      if (desiredLabels.has(element)) continue;
+      delete element.dataset.bysanSourceLineRange;
+      element.classList.remove("bysan-source-line-range");
+      element.removeAttribute("title");
+    }
+
+    for (const [element, label] of desiredLabels) {
+      if (element.dataset.bysanSourceLineRange === label) continue;
+      element.dataset.bysanSourceLineRange = label;
+      element.classList.add("bysan-source-line-range");
+      element.setAttribute("title", `Live Preview 已将源文件第 ${label} 行折叠为一个渲染块`);
     }
   }
 
@@ -940,8 +1002,6 @@ class BysanStyleSettingTab extends PluginSettingTab {
     const target = containerEl.querySelector(`#${targetId}`);
     if (!target) return;
     target.scrollIntoView({ behavior: "auto", block: "start" });
-    target.addClass("bysan-section-target-flash");
-    window.setTimeout(() => target.removeClass("bysan-section-target-flash"), 900);
   }
 
 
@@ -1123,7 +1183,7 @@ class BysanStyleSettingTab extends PluginSettingTab {
   }
 
 
-  addModeControl(setting, mode, kind, addControl) {
+  addModeControl(setting, mode, kind, addControl, resetControl = null) {
     const group = setting.controlEl.createDiv({
       cls: `bysan-mode-control bysan-mode-control-${kind}`
     });
@@ -1136,17 +1196,40 @@ class BysanStyleSettingTab extends PluginSettingTab {
     for (const child of [...setting.controlEl.children]) {
       if (!existing.has(child)) group.appendChild(child);
     }
+    if (resetControl) {
+      const label = this.plugin.t(mode === "light" ? "theme.light" : "theme.dark");
+      const resetButton = group.createEl("button", {
+        cls: "clickable-icon bysan-color-reset",
+        text: "↺",
+        attr: {
+          type: "button",
+          title: this.plugin.t("color.reset", { mode: label }),
+          "aria-label": this.plugin.t("color.reset", { mode: label })
+        }
+      });
+      resetButton.addEventListener("click", resetControl);
+    }
   }
 
 
   addDualColor(containerEl, name, lightKey, darkKey) {
     const setting = new Setting(containerEl).setName(name);
-    this.addModeControl(setting, "light", "color", () => setting.addColorPicker((picker) => picker
-      .setValue(this.plugin.settings[lightKey])
-      .onChange((value) => this.plugin.updateSetting(lightKey, value))));
-    this.addModeControl(setting, "dark", "color", () => setting.addColorPicker((picker) => picker
-      .setValue(this.plugin.settings[darkKey])
-      .onChange((value) => this.plugin.updateSetting(darkKey, value))));
+    let lightPicker;
+    this.addModeControl(setting, "light", "color", () => setting.addColorPicker((picker) => {
+      lightPicker = picker;
+      picker.setValue(this.plugin.settings[lightKey])
+        .onChange((value) => this.plugin.updateSetting(lightKey, value));
+    }), async () => {
+      if (await this.plugin.resetSetting(lightKey)) lightPicker.setValue(this.plugin.settings[lightKey]);
+    });
+    let darkPicker;
+    this.addModeControl(setting, "dark", "color", () => setting.addColorPicker((picker) => {
+      darkPicker = picker;
+      picker.setValue(this.plugin.settings[darkKey])
+        .onChange((value) => this.plugin.updateSetting(darkKey, value));
+    }), async () => {
+      if (await this.plugin.resetSetting(darkKey)) darkPicker.setValue(this.plugin.settings[darkKey]);
+    });
     setting.settingEl.addClass("bysan-dual-mode-setting");
   }
 

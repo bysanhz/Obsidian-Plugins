@@ -50,6 +50,22 @@ body {
     serif;
 }
 
+/* A fully transparent Chromium canvas is prone to stale-frame flashes when
+ * another desktop window moves across Obsidian. Keep the outermost canvas
+ * opaque while allowing note/workspace surfaces and background artwork to
+ * retain their configured transparency. */
+body.bysan-style-controller-active.theme-light {
+  background-color: #f7f9fc !important;
+}
+
+body.bysan-style-controller-active.theme-dark {
+  background-color: #151a20 !important;
+}
+
+body.bysan-style-controller-active .workspace {
+  isolation: isolate;
+}
+
 /* ------------------------- inline code ------------------------- */
 
 :is(.markdown-preview-view, .markdown-rendered) :not(pre) > code,
@@ -444,9 +460,8 @@ body.bysan-style-controller-active
   padding: 0.7rem 0.8rem;
   border: 1px solid var(--background-modifier-border);
   border-radius: 10px;
-  background: color-mix(in srgb, var(--background-primary) 94%, transparent);
+  background: var(--background-primary);
   box-shadow: 0 5px 18px rgba(30, 42, 54, 0.1);
-  backdrop-filter: blur(12px);
 }
 
 .bysan-settings-nav-title {
@@ -527,10 +542,6 @@ body.bysan-style-controller-active
   scroll-margin-top: 16rem;
 }
 
-.bysan-section-target-flash {
-  animation: bysan-section-target-flash 0.9s ease-out;
-}
-
 /* Make the hierarchy visible in the content itself, not only in navigation. */
 .bysan-style-settings > .setting-item.setting-item-heading[id^="bysan-section-"] {
   margin-top: 1.6rem;
@@ -593,6 +604,40 @@ body.bysan-style-controller-active
   border: 1px solid var(--background-modifier-border);
   border-radius: 8px;
   background: color-mix(in srgb, var(--background-secondary) 72%, transparent);
+}
+
+.bysan-mode-control-color {
+  grid-template-columns: max-content minmax(0, 1fr) max-content;
+}
+
+.bysan-color-reset {
+  flex: 0 0 auto;
+  width: 1.8rem !important;
+  min-width: 1.8rem !important;
+  height: 1.8rem !important;
+  padding: 0.2rem !important;
+  border: 1px solid var(--background-modifier-border) !important;
+  border-radius: 6px !important;
+  background: var(--background-secondary) !important;
+  color: var(--text-muted) !important;
+  opacity: 1 !important;
+  box-shadow: none !important;
+}
+
+.bysan-color-reset:hover,
+.bysan-color-reset:focus-visible {
+  border-color: var(--interactive-accent) !important;
+  background: var(--background-modifier-hover) !important;
+  color: var(--text-accent) !important;
+}
+
+.bysan-theme-color-setting .setting-item-control {
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.bysan-theme-color-setting input[type="color"] {
+  flex: 0 0 auto;
 }
 
 .bysan-mode-control-slider {
@@ -664,11 +709,6 @@ body.bysan-style-controller-active
     width: 100%;
     max-width: none;
   }
-}
-
-@keyframes bysan-section-target-flash {
-  0%, 35% { background-color: color-mix(in srgb, var(--interactive-accent) 18%, transparent); }
-  100% { background-color: transparent; }
 }
 
 /* Preset switching uses a modal instead of a transient Notice. Keep this

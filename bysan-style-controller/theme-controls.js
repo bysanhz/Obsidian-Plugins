@@ -492,48 +492,72 @@ class ThemeControls {
 
 
   applyVariables() {
-    const body = document.body;
-    const mode = body.classList.contains("theme-dark") ? "dark" : "light";
     for (const item of this.items) {
       if (!String(item.type || "").startsWith("variable-")) continue;
-      const hasStoredValue = Object.prototype.hasOwnProperty.call(this.stored, item.id);
-      const storedValue = this.stored[item.id];
-      const hasStoredMode = item.type !== "variable-themed-color"
-        || (storedValue && typeof storedValue === "object"
-          && Object.prototype.hasOwnProperty.call(storedValue, mode));
-
-      /* The theme metadata uses transparent colors such as #00000000 as
-       * "not customized" placeholders. Style Settings does not write those
-       * defaults inline. Only persist a CSS variable after the user actually
-       * changes it, otherwise the base stylesheet must remain authoritative. */
-      if (!hasStoredValue || !hasStoredMode) {
-        if (item.format === "hsl-split") {
-          for (const suffix of ["h", "s", "l", "a"]) this.restoreProperty(`--${item.id}-${suffix}`);
-        } else {
-          this.restoreProperty(`--${item.id}`);
-        }
-        continue;
-      }
-
-      const value = this.valueFor(item, mode);
-      if (!isDefined(value)) continue;
-
-      if (item.format === "hsl-split") {
-        const color = parseColor(value);
-        const hsl = rgbToHsl(color.red, color.green, color.blue);
-        body.style.setProperty(`--${item.id}-h`, String(hsl.hue));
-        body.style.setProperty(`--${item.id}-s`, `${hsl.saturation}%`);
-        body.style.setProperty(`--${item.id}-l`, `${hsl.lightness}%`);
-        body.style.setProperty(`--${item.id}-a`, String(color.alpha));
-        continue;
-      }
-
-      let formatted = String(value);
-      if (["variable-number", "variable-number-slider"].includes(item.type) && item.format) {
-        formatted += item.format;
-      }
-      body.style.setProperty(`--${item.id}`, formatted);
+      this.applyVariable(item);
     }
+  }
+
+
+  applySetting(id) {
+    const item = this.items.find((entry) => entry.id === id
+      && !["heading", "info-text"].includes(entry.type));
+    if (!item) return;
+    if (item.type === "class-toggle") {
+      document.body.classList.toggle(item.id, Boolean(this.valueFor(item)));
+      return;
+    }
+    if (item.type === "class-select") {
+      const selected = this.valueFor(item);
+      for (const option of item.options || []) {
+        if (option?.value) document.body.classList.toggle(option.value, option.value === selected);
+      }
+      return;
+    }
+    if (String(item.type || "").startsWith("variable-")) this.applyVariable(item);
+  }
+
+
+  applyVariable(item) {
+    const body = document.body;
+    const mode = body.classList.contains("theme-dark") ? "dark" : "light";
+    const hasStoredValue = Object.prototype.hasOwnProperty.call(this.stored, item.id);
+    const storedValue = this.stored[item.id];
+    const hasStoredMode = item.type !== "variable-themed-color"
+      || (storedValue && typeof storedValue === "object"
+        && Object.prototype.hasOwnProperty.call(storedValue, mode));
+
+    /* The theme metadata uses transparent colors such as #00000000 as
+     * "not customized" placeholders. Style Settings does not write those
+     * defaults inline. Only persist a CSS variable after the user actually
+     * changes it, otherwise the base stylesheet must remain authoritative. */
+    if (!hasStoredValue || !hasStoredMode) {
+      if (item.format === "hsl-split") {
+        for (const suffix of ["h", "s", "l", "a"]) this.restoreProperty(`--${item.id}-${suffix}`);
+      } else {
+        this.restoreProperty(`--${item.id}`);
+      }
+      return;
+    }
+
+    const value = this.valueFor(item, mode);
+    if (!isDefined(value)) return;
+
+    if (item.format === "hsl-split") {
+      const color = parseColor(value);
+      const hsl = rgbToHsl(color.red, color.green, color.blue);
+      body.style.setProperty(`--${item.id}-h`, String(hsl.hue));
+      body.style.setProperty(`--${item.id}-s`, `${hsl.saturation}%`);
+      body.style.setProperty(`--${item.id}-l`, `${hsl.lightness}%`);
+      body.style.setProperty(`--${item.id}-a`, String(color.alpha));
+      return;
+    }
+
+    let formatted = String(value);
+    if (["variable-number", "variable-number-slider"].includes(item.type) && item.format) {
+      formatted += item.format;
+    }
+    body.style.setProperty(`--${item.id}`, formatted);
   }
 
 
@@ -674,10 +698,14 @@ class ThemeControls {
 
 
   addThemedColorControls(setting, item) {
+    setting.settingEl.addClass("bysan-theme-color-setting");
+    setting.settingEl.dataset.bysanSettingId = item.id;
     for (const mode of ["light", "dark"]) {
       const label = mode === "light" ? this.plugin.t("theme.light") : this.plugin.t("theme.dark");
       const parsed = parseColor(this.valueFor(item, mode));
+      let pickerComponent;
       setting.addColorPicker((picker) => {
+        pickerComponent = picker;
         picker.setValue(parsed.hex);
         picker.colorPickerEl?.setAttribute("title", this.plugin.t("theme.colorTitle", { mode: label }));
         picker.onChange((hex) => {
@@ -685,8 +713,10 @@ class ThemeControls {
           this.updateThemedColor(item, mode, hex, current.alpha);
         });
       });
+      let sliderComponent;
       if (item.opacity) {
         setting.addSlider((slider) => {
+          sliderComponent = slider;
           slider.setLimits(0, 1, 0.01).setDynamicTooltip().setValue(parsed.alpha);
           slider.sliderEl?.setAttribute("title", this.plugin.t("theme.opacityTitle", { mode: label }));
           slider.onChange((alpha) => {
@@ -695,6 +725,18 @@ class ThemeControls {
           });
         });
       }
+      setting.addExtraButton((button) => {
+        button
+          .setIcon("rotate-ccw")
+          .setTooltip(this.plugin.t("color.resetTheme", { mode: label }))
+          .onClick(async () => {
+            await this.plugin.clearThemeColorMode(item.id, mode);
+            const restored = parseColor(this.valueFor(item, mode));
+            pickerComponent?.setValue(restored.hex);
+            sliderComponent?.setValue(restored.alpha);
+          });
+        button.extraSettingsEl?.addClass("bysan-color-reset");
+      });
     }
   }
 

@@ -1,9 +1,9 @@
 {
   "id": "bysan-style-controller",
   "name": "Bysan Style Controller",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "minAppVersion": "1.13.0",
-  "description": "Unified Bysan content styles and selected Blue Topaz appearance controls.",
+  "description": "Standalone Bysan theme and content style controller for Obsidian.",
   "author": "Bysan",
   "isDesktopOnly": true
 }

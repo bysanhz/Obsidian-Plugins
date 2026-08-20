@@ -1,6 +1,6 @@
 /**
  * Bysan Style Controller
- * Version: 0.1.2
+ * Version: 0.2.0
  *
  * Owns visual presentation only. Heading/equation numbering and media sizing
  * remain exclusively owned by their dedicated plugins.
@@ -44,6 +44,7 @@ const CONTROLLED_CLASSES = [
   ...LIGHT_BACKGROUND_CLASSES,
   ...DARK_BACKGROUND_CLASSES,
   "background-image-settings-switch",
+  "background-settings-workplace-background-image",
   "code-line-number",
   "whole-code-wrap",
   "nowrap-edit-codebox",
@@ -80,7 +81,8 @@ const CONTROLLED_PROPERTIES = [
 ];
 
 const DEFAULT_SETTINGS = {
-  settingsVersion: 2,
+  settingsVersion: 3,
+  bundledBaseTheme: true,
   workspaceBackground: true,
   lightBackground: "background-settings-workplace-waves2-light",
   darkBackground: "background-settings-workplace-theme-dark-in-the-sky",
@@ -174,6 +176,14 @@ module.exports = class BysanStyleController extends Plugin {
       this.settings.settingsVersion = 2;
       await this.saveData(this.settings);
     }
+
+    if ((savedSettings.settingsVersion || 0) < 3) {
+      this.settings.bundledBaseTheme = true;
+      this.settings.settingsVersion = 3;
+      await this.saveData(this.settings);
+    }
+
+    await this.syncBundledBaseTheme();
     this.originalClassState = new Map();
     this.originalPropertyState = new Map();
     this.lastDarkMode = document.body.classList.contains("theme-dark");
@@ -210,12 +220,18 @@ module.exports = class BysanStyleController extends Plugin {
       attributeFilter: ["class"]
     });
 
-    console.log("[Bysan Style Controller] v0.1.2 loaded");
+    for (const delay of [0, 250]) {
+      const timer = window.setTimeout(() => this.ensureStyleOrder(), delay);
+      this.register(() => window.clearTimeout(timer));
+    }
+
+    console.log("[Bysan Style Controller] v0.2.0 loaded");
   }
 
 
   onunload() {
     this.themeObserver?.disconnect();
+    this.baseThemeStyleEl?.remove();
 
     for (const [className, enabled] of this.originalClassState || []) {
       document.body.classList.toggle(className, enabled);
@@ -234,7 +250,58 @@ module.exports = class BysanStyleController extends Plugin {
   async updateSetting(key, value) {
     this.settings[key] = value;
     await this.saveData(this.settings);
+    if (key === "bundledBaseTheme") {
+      await this.syncBundledBaseTheme();
+    }
     this.applySettings();
+  }
+
+
+  async syncBundledBaseTheme() {
+    if (!this.settings.bundledBaseTheme) {
+      this.baseThemeStyleEl?.remove();
+      this.baseThemeStyleEl = null;
+      return;
+    }
+
+    if (!this.baseThemeCssText) {
+      const baseThemePath = `${this.manifest.dir}/blue-topaz-base.css`;
+      try {
+        this.baseThemeCssText = await this.app.vault.adapter.read(baseThemePath);
+      } catch (error) {
+        console.error("[Bysan Style Controller] Failed to load bundled base theme", error);
+        new Notice("Bysan 内置基础主题加载失败，请检查插件文件");
+        return;
+      }
+    }
+
+    if (!this.baseThemeStyleEl?.isConnected) {
+      const styleEl = document.createElement("style");
+      styleEl.dataset.bysanBaseTheme = "true";
+      styleEl.textContent = this.baseThemeCssText;
+
+      const overrideStyleEl = [...document.head.querySelectorAll("style")]
+        .find((element) => element.textContent.includes("Bysan Style Controller content styles"));
+
+      document.head.appendChild(styleEl);
+      /* Obsidian may register styles.css before or after onload depending on
+       * hot/cold loading. Moving the override node last makes the cascade
+       * deterministic without duplicating either stylesheet. */
+      if (overrideStyleEl) {
+        document.head.appendChild(overrideStyleEl);
+      }
+      this.baseThemeStyleEl = styleEl;
+    }
+  }
+
+
+  ensureStyleOrder() {
+    if (!this.baseThemeStyleEl?.isConnected) return;
+    const overrideStyleEl = [...document.head.querySelectorAll("style")]
+      .find((element) => element.textContent.includes("Bysan Style Controller content styles"));
+    if (overrideStyleEl) {
+      document.head.appendChild(overrideStyleEl);
+    }
   }
 
 
@@ -276,6 +343,7 @@ module.exports = class BysanStyleController extends Plugin {
     this.setExclusiveClass(DARK_BACKGROUND_CLASSES, this.settings.darkBackground);
 
     body.classList.toggle("background-image-settings-switch", this.settings.workspaceBackground);
+    body.classList.toggle("background-settings-workplace-background-image", this.settings.workspaceBackground);
     body.classList.toggle("code-line-number", this.settings.codeLineNumbers);
     body.classList.toggle("whole-code-wrap", this.settings.codeWrapReading);
     body.classList.toggle("nowrap-edit-codebox", this.settings.codeNoWrapLive);
@@ -295,6 +363,7 @@ module.exports = class BysanStyleController extends Plugin {
       && exactlySelected(LIGHT_BACKGROUND_CLASSES, this.settings.lightBackground)
       && exactlySelected(DARK_BACKGROUND_CLASSES, this.settings.darkBackground)
       && body.classList.contains("background-image-settings-switch") === this.settings.workspaceBackground
+      && body.classList.contains("background-settings-workplace-background-image") === this.settings.workspaceBackground
       && body.classList.contains("code-line-number") === this.settings.codeLineNumbers
       && body.classList.contains("whole-code-wrap") === this.settings.codeWrapReading
       && body.classList.contains("nowrap-edit-codebox") === this.settings.codeNoWrapLive
@@ -340,7 +409,7 @@ module.exports = class BysanStyleController extends Plugin {
     body.style.setProperty("--bysan-quote-border", get("quoteBorder"));
     body.style.setProperty("--bysan-muted-marker", get("marker"));
 
-    /* Keep the currently used Blue Topaz code surfaces in sync. */
+    /* Keep bundled base-theme code surfaces in sync with Bysan controls. */
     body.style.setProperty("--background-code", codeBackground);
     body.style.setProperty("--background-code-2", get("inlineBg"));
     body.style.setProperty("--code-background", codeBackground);
@@ -351,6 +420,7 @@ module.exports = class BysanStyleController extends Plugin {
   async resetSettings() {
     this.settings = Object.assign({}, DEFAULT_SETTINGS);
     await this.saveData(this.settings);
+    await this.syncBundledBaseTheme();
     this.applySettings();
     new Notice("Bysan 样式已恢复默认值");
   }
@@ -371,7 +441,7 @@ class BysanStyleSettingTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName("Bysan Style Controller")
-      .setDesc("统一控制 Bysan 内容样式与当前使用的 Blue Topaz 外观选项；不接管标题、公式或媒体缩放。")
+      .setDesc("独立提供 Bysan 内容样式与内置基础主题；不依赖外部主题，也不接管标题、公式或媒体缩放。")
       .setHeading();
 
     this.renderWorkspaceSettings(containerEl);
@@ -382,7 +452,7 @@ class BysanStyleSettingTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName("恢复默认样式")
-      .setDesc("恢复为迁移前的 Bysan CSS 与当前 Blue Topaz 选项。")
+      .setDesc("恢复 Bysan 内置基础主题与内容样式默认值。")
       .addButton((button) => button
         .setButtonText("Reset")
         .setWarning()
@@ -396,7 +466,8 @@ class BysanStyleSettingTab extends PluginSettingTab {
   renderWorkspaceSettings(containerEl) {
     new Setting(containerEl).setName("工作区").setHeading();
 
-    this.addToggle(containerEl, "动态工作区背景", "沿用当前 Blue Topaz 工作区背景开关。", "workspaceBackground");
+    this.addToggle(containerEl, "内置基础主题", "由本插件加载已打包的基础界面样式；关闭后只保留 Bysan 内容样式。", "bundledBaseTheme");
+    this.addToggle(containerEl, "动态工作区背景", "控制插件内置的工作区背景。", "workspaceBackground");
 
     new Setting(containerEl)
       .setName("浅色背景")
@@ -425,9 +496,9 @@ class BysanStyleSettingTab extends PluginSettingTab {
     new Setting(containerEl).setName("代码块").setHeading();
 
     new Setting(containerEl)
-      .setName("Blue Topaz 高亮主题")
+      .setName("Bysan 代码高亮主题")
       .addDropdown((dropdown) => dropdown
-        .addOption("code-theme-bt-default", "BT Default")
+        .addOption("code-theme-bt-default", "Bysan Default")
         .addOption("code-theme-solarized-light", "Solarized Light")
         .addOption("code-theme-material-palenight", "Material Palenight")
         .addOption("code-theme-dracula", "Dracula")
@@ -437,7 +508,7 @@ class BysanStyleSettingTab extends PluginSettingTab {
         .setValue(this.plugin.settings.codeTheme)
         .onChange((value) => this.plugin.updateSetting("codeTheme", value)));
 
-    this.addToggle(containerEl, "编辑视图代码行号", "控制 Blue Topaz 的 code-line-number class。", "codeLineNumbers");
+    this.addToggle(containerEl, "编辑视图代码行号", "由插件内置样式显示代码行号。", "codeLineNumbers");
     this.addToggle(containerEl, "阅读视图自动换行", "长代码在阅读视图中换行。", "codeWrapReading");
     this.addToggle(containerEl, "Live Preview 禁止换行", "需要横向滚动查看长代码。", "codeNoWrapLive");
     this.addToggle(containerEl, "关闭当前行高亮", "不显示代码块当前行背景。", "muteCodeActiveLine");

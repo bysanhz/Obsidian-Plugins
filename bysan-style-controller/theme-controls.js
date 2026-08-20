@@ -207,6 +207,25 @@ class ThemeControls {
     const mode = body.classList.contains("theme-dark") ? "dark" : "light";
     for (const item of this.items) {
       if (!String(item.type || "").startsWith("variable-")) continue;
+      const hasStoredValue = Object.prototype.hasOwnProperty.call(this.stored, item.id);
+      const storedValue = this.stored[item.id];
+      const hasStoredMode = item.type !== "variable-themed-color"
+        || (storedValue && typeof storedValue === "object"
+          && Object.prototype.hasOwnProperty.call(storedValue, mode));
+
+      /* The theme metadata uses transparent colors such as #00000000 as
+       * "not customized" placeholders. Style Settings does not write those
+       * defaults inline. Only persist a CSS variable after the user actually
+       * changes it, otherwise the base stylesheet must remain authoritative. */
+      if (!hasStoredValue || !hasStoredMode) {
+        if (item.format === "hsl-split") {
+          for (const suffix of ["h", "s", "l", "a"]) this.restoreProperty(`--${item.id}-${suffix}`);
+        } else {
+          this.restoreProperty(`--${item.id}`);
+        }
+        continue;
+      }
+
       const value = this.valueFor(item, mode);
       if (!isDefined(value)) continue;
 
@@ -225,6 +244,16 @@ class ThemeControls {
         formatted += item.format;
       }
       body.style.setProperty(`--${item.id}`, formatted);
+    }
+  }
+
+
+  restoreProperty(property) {
+    const original = this.plugin.originalPropertyState?.get(property);
+    if (original?.value) {
+      document.body.style.setProperty(property, original.value, original.priority);
+    } else {
+      document.body.style.removeProperty(property);
     }
   }
 

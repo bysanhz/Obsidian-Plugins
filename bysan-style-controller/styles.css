@@ -408,3 +408,27 @@ body.bysan-style-controller-active
 .bysan-theme-setting-item .setting-item-control input[type="range"] {
   max-width: 7rem;
 }
+
+/* Live Preview keeps source-line accuracy while replacing multi-line source
+ * blocks (Mermaid, display math, embeds) with one rendered widget. Show the
+ * covered range so a source jump such as 6 -> 52 is not mistaken for missing
+ * line numbers. */
+.markdown-source-view .cm-lineNumbers .cm-gutterElement.bysan-source-line-range {
+  position: relative;
+  min-width: 4.3em;
+  color: transparent !important;
+  overflow: visible;
+}
+
+.markdown-source-view .cm-lineNumbers .cm-gutterElement.bysan-source-line-range::after {
+  content: attr(data-bysan-source-line-range);
+  position: absolute;
+  inset-inline-end: 0.55em;
+  color: var(--text-faint);
+  font-size: 0.82em;
+  white-space: nowrap;
+}
+
+.markdown-source-view .cm-lineNumbers .cm-gutterElement.bysan-source-line-range.cm-active::after {
+  color: var(--interactive-accent);
+}

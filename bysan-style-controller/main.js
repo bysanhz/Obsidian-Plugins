@@ -1,6 +1,6 @@
 /**
  * Bysan Style Controller
- * Version: 0.3.1
+ * Version: 0.3.2
  *
  * Owns visual presentation only. Heading/equation numbering and media sizing
  * remain exclusively owned by their dedicated plugins.
@@ -90,6 +90,7 @@ const CONTROLLED_PROPERTIES = [
 const DEFAULT_SETTINGS = {
   settingsVersion: 4,
   themeSettings: {},
+  collapsedLineRanges: true,
   workspaceBackground: true,
   lightBackground: "background-settings-workplace-waves2-light",
   darkBackground: "background-settings-workplace-theme-dark-in-the-sky",
@@ -234,17 +235,30 @@ module.exports = class BysanStyleController extends Plugin {
       attributeFilter: ["class"]
     });
 
+    this.lineRangeObserver = new MutationObserver(() => this.scheduleLineRangeRefresh());
+    const workspaceEl = document.querySelector(".workspace");
+    if (workspaceEl) {
+      this.lineRangeObserver.observe(workspaceEl, { childList: true, subtree: true });
+    }
+    this.registerDomEvent(document, "scroll", () => this.scheduleLineRangeRefresh(), true);
+    this.registerEvent(this.app.workspace.on("layout-change", () => this.scheduleLineRangeRefresh()));
+    this.registerEvent(this.app.workspace.on("active-leaf-change", () => this.scheduleLineRangeRefresh()));
+    this.scheduleLineRangeRefresh();
+
     for (const delay of [0, 250]) {
       const timer = window.setTimeout(() => this.ensureStyleOrder(), delay);
       this.register(() => window.clearTimeout(timer));
     }
 
-    console.log(`[Bysan Style Controller] v0.3.1 loaded with ${this.themeControls.count} theme controls`);
+    console.log(`[Bysan Style Controller] v0.3.2 loaded with ${this.themeControls.count} theme controls`);
   }
 
 
   onunload() {
     this.themeObserver?.disconnect();
+    this.lineRangeObserver?.disconnect();
+    if (this.lineRangeFrame) window.cancelAnimationFrame(this.lineRangeFrame);
+    this.clearLineRangeLabels();
     this.baseThemeStyleEl?.remove();
 
     for (const [className, enabled] of this.originalClassState || []) {
@@ -360,6 +374,48 @@ module.exports = class BysanStyleController extends Plugin {
     this.lastDarkMode = body.classList.contains("theme-dark");
     this.applyPalette();
     this.themeControls.applyVariables();
+    this.scheduleLineRangeRefresh();
+  }
+
+
+  scheduleLineRangeRefresh() {
+    if (this.lineRangeFrame) return;
+    this.lineRangeFrame = window.requestAnimationFrame(() => {
+      this.lineRangeFrame = null;
+      this.refreshLineNumberRanges();
+    });
+  }
+
+
+  clearLineRangeLabels() {
+    for (const element of document.querySelectorAll("[data-bysan-source-line-range]")) {
+      delete element.dataset.bysanSourceLineRange;
+      element.classList.remove("bysan-source-line-range");
+      element.removeAttribute("title");
+    }
+  }
+
+
+  refreshLineNumberRanges() {
+    this.clearLineRangeLabels();
+    if (!this.settings.collapsedLineRanges) return;
+
+    for (const gutter of document.querySelectorAll(".markdown-source-view .cm-lineNumbers")) {
+      const elements = [...gutter.querySelectorAll(":scope > .cm-gutterElement")]
+        .filter((element) => /^\d+$/.test(element.textContent.trim()))
+        .filter((element) => getComputedStyle(element).visibility !== "hidden");
+
+      for (let index = 0; index < elements.length - 1; index += 1) {
+        const current = Number(elements[index].textContent.trim());
+        const next = Number(elements[index + 1].textContent.trim());
+        if (next <= current + 1) continue;
+
+        const label = `${current}–${next - 1}`;
+        elements[index].dataset.bysanSourceLineRange = label;
+        elements[index].classList.add("bysan-source-line-range");
+        elements[index].setAttribute("title", `Live Preview 已将源文件第 ${label} 行折叠为一个渲染块`);
+      }
+    }
   }
 
 
@@ -495,6 +551,7 @@ class BysanStyleSettingTab extends PluginSettingTab {
     new Setting(containerEl).setName("工作区").setHeading();
 
     this.addToggle(containerEl, "动态工作区背景", "控制插件内置的工作区背景。", "workspaceBackground");
+    this.addToggle(containerEl, "折叠块显示源行范围", "Live Preview 中 Mermaid、公式等多行源码渲染为一个块时显示 6–51，而不是看起来从 6 跳到 52。", "collapsedLineRanges");
 
     new Setting(containerEl)
       .setName("浅色背景")

@@ -1,6 +1,6 @@
 /**
  * Bysan Style Controller
- * Version: 0.5.0
+ * Version: 0.6.0
  *
  * Owns visual presentation only. Heading/equation numbering and media sizing
  * remain exclusively owned by their dedicated plugins.
@@ -274,7 +274,7 @@ module.exports = class BysanStyleController extends Plugin {
       this.register(() => window.clearTimeout(timer));
     }
 
-    console.log(`[Bysan Style Controller] v0.5.0 loaded with ${this.themeControls.count} theme controls`);
+    console.log(`[Bysan Style Controller] v0.6.0 loaded with ${this.themeControls.count} theme controls`);
   }
 
 
@@ -813,6 +813,7 @@ class BysanStyleSettingTab extends PluginSettingTab {
       .setDesc("独立提供 Bysan 内容样式与完整主题控件；不依赖外部主题，也不接管标题、公式或媒体缩放。")
       .setHeading();
 
+    this.renderSectionNavigation(containerEl);
     this.renderStylePresetSettings(containerEl);
     this.renderWorkspaceSettings(containerEl);
     this.renderCodeSettings(containerEl);
@@ -821,7 +822,7 @@ class BysanStyleSettingTab extends PluginSettingTab {
     this.renderComponentSettings(containerEl);
     this.plugin.themeControls.render(containerEl);
 
-    new Setting(containerEl)
+    const resetSetting = new Setting(containerEl)
       .setName("恢复默认样式")
       .setDesc("恢复 Bysan 内置基础主题与内容样式默认值。")
       .addButton((button) => button
@@ -831,14 +832,55 @@ class BysanStyleSettingTab extends PluginSettingTab {
           await this.plugin.requestStylePresetSwitch("__default__");
           this.display();
         }));
+    resetSetting.settingEl.id = "bysan-section-reset";
+  }
+
+
+  renderSectionNavigation(containerEl) {
+    const sections = [
+      ["preset", "风格预设"],
+      ["workspace", "工作区"],
+      ["code", "代码块"],
+      ["palette-light", "浅色配色"],
+      ["palette-dark", "深色配色"],
+      ["components", "表格与引用"],
+      ["theme", "完整主题"],
+      ["theme-general", "主题整体"],
+      ["theme-details", "主题细节"],
+      ["theme-plugins", "插件适配"],
+      ["theme-builtins", "内置样式"],
+      ["reset", "恢复默认"]
+    ];
+    const navigation = containerEl.createEl("nav", {
+      cls: "bysan-settings-nav",
+      attr: { "aria-label": "Bysan 样式设置功能导航" }
+    });
+    navigation.createDiv({ cls: "bysan-settings-nav-title", text: "功能导航" });
+    const links = navigation.createDiv({ cls: "bysan-settings-nav-links" });
+
+    for (const [id, label] of sections) {
+      const button = links.createEl("button", {
+        cls: "bysan-settings-nav-link",
+        text: label,
+        attr: { type: "button", "data-target": id }
+      });
+      button.addEventListener("click", () => {
+        const target = containerEl.querySelector(`#bysan-section-${id}`);
+        if (!target) return;
+        target.scrollIntoView({ behavior: "auto", block: "start" });
+        target.addClass("bysan-section-target-flash");
+        window.setTimeout(() => target.removeClass("bysan-section-target-flash"), 900);
+      });
+    }
   }
 
 
   renderStylePresetSettings(containerEl) {
-    new Setting(containerEl)
+    const heading = new Setting(containerEl)
       .setName("风格预设")
       .setDesc("一个预设同时保存浅色、深色及全部完整主题设置。")
       .setHeading();
+    heading.settingEl.id = "bysan-section-preset";
 
     const presets = this.plugin.settings.stylePresets || {};
     const activeId = this.plugin.settings.activeStylePreset || "__current__";
@@ -932,7 +974,8 @@ class BysanStyleSettingTab extends PluginSettingTab {
 
 
   renderWorkspaceSettings(containerEl) {
-    new Setting(containerEl).setName("工作区").setHeading();
+    const heading = new Setting(containerEl).setName("工作区").setHeading();
+    heading.settingEl.id = "bysan-section-workspace";
 
     this.addToggle(containerEl, "动态工作区背景", "控制插件内置的工作区背景。", "workspaceBackground");
     this.addToggle(containerEl, "折叠块显示源行范围", "Live Preview 中 Mermaid、公式等多行源码渲染为一个块时显示 6–51，而不是看起来从 6 跳到 52。", "collapsedLineRanges");
@@ -963,7 +1006,8 @@ class BysanStyleSettingTab extends PluginSettingTab {
 
 
   renderCodeSettings(containerEl) {
-    new Setting(containerEl).setName("代码块").setHeading();
+    const heading = new Setting(containerEl).setName("代码块").setHeading();
+    heading.settingEl.id = "bysan-section-code";
 
     new Setting(containerEl)
       .setName("Bysan 代码高亮主题")
@@ -989,7 +1033,8 @@ class BysanStyleSettingTab extends PluginSettingTab {
 
 
   renderPaletteSettings(containerEl, suffix, title) {
-    new Setting(containerEl).setName(title).setHeading();
+    const heading = new Setting(containerEl).setName(title).setHeading();
+    heading.settingEl.id = `bysan-section-palette-${suffix.toLowerCase()}`;
 
     this.addColor(containerEl, "代码块背景", `codeBg${suffix}`);
     this.addSlider(containerEl, "代码块背景透明度", "0 为完全透明，1 为完全不透明。", `codeBgOpacity${suffix}`, 0, 1, 0.01);
@@ -1009,7 +1054,8 @@ class BysanStyleSettingTab extends PluginSettingTab {
 
 
   renderComponentSettings(containerEl) {
-    new Setting(containerEl).setName("表格与引用").setHeading();
+    const heading = new Setting(containerEl).setName("表格与引用").setHeading();
+    heading.settingEl.id = "bysan-section-components";
     this.addToggle(containerEl, "表格斑马纹", "交替显示数据行背景。", "tableZebra");
     this.addToggle(containerEl, "表格居中", "保持 Live Preview 与阅读视图表格居中。", "tableCentered");
     this.addToggle(containerEl, "引用块使用衬线字体", "关闭后跟随正文界面字体。", "quoteSerif");

@@ -434,6 +434,66 @@ body.bysan-style-controller-active
   border-color: var(--bysan-settings-cta-hover) !important;
 }
 
+/* Sticky section navigation keeps the large settings catalog usable without
+ * forcing the user to traverse hundreds of controls linearly. */
+.bysan-settings-nav {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  margin: 0.8rem 0 1.1rem;
+  padding: 0.7rem 0.8rem;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--background-primary) 94%, transparent);
+  box-shadow: 0 5px 18px rgba(30, 42, 54, 0.1);
+  backdrop-filter: blur(12px);
+}
+
+.bysan-settings-nav-title {
+  margin-bottom: 0.45rem;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  font-weight: 700;
+}
+
+.bysan-settings-nav-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.38rem;
+}
+
+.bysan-settings-nav-link {
+  min-height: 2rem;
+  padding: 0.25rem 0.65rem;
+  border: 1px solid var(--background-modifier-border) !important;
+  border-radius: 999px;
+  background: var(--background-secondary) !important;
+  color: var(--text-normal) !important;
+  box-shadow: none !important;
+  font-size: var(--font-ui-smaller);
+  white-space: nowrap;
+}
+
+.bysan-settings-nav-link:hover,
+.bysan-settings-nav-link:focus-visible {
+  border-color: var(--interactive-accent) !important;
+  background: var(--background-modifier-hover) !important;
+}
+
+.bysan-settings-section-anchor,
+.bysan-style-settings [id^="bysan-section-"] {
+  scroll-margin-top: 10rem;
+}
+
+.bysan-section-target-flash {
+  animation: bysan-section-target-flash 0.9s ease-out;
+}
+
+@keyframes bysan-section-target-flash {
+  0%, 35% { background-color: color-mix(in srgb, var(--interactive-accent) 18%, transparent); }
+  100% { background-color: transparent; }
+}
+
 /* Preset switching uses a modal instead of a transient Notice. Keep this
  * surface readable even when the active style makes global theme colors or
  * the interactive accent transparent. */

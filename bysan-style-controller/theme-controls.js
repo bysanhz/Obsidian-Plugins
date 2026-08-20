@@ -9,6 +9,15 @@ const MANUAL_SETTING_IDS = new Set([
   "background-settings-workplace-theme-dark"
 ]);
 
+/* Attribution remains in THIRD_PARTY_NOTICES.md. Promotional footer entries
+ * from the bundled theme metadata are not plugin settings and must not leak
+ * into Bysan Style Controller's settings page. */
+const HIDDEN_CATALOG_IDS = new Set([
+  "topaz-community",
+  "bt-buyacoffe",
+  "bt-github"
+]);
+
 
 function localised(item, key) {
   return item[`${key}.zh`] || item[key] || "";
@@ -97,9 +106,13 @@ function rgbToHsl(red, green, blue) {
 class ThemeControls {
   constructor(plugin, catalog) {
     this.plugin = plugin;
-    this.catalogItems = (catalog?.settings || []).filter((item) => item && item.id);
+    this.catalogItems = (catalog?.settings || [])
+      .filter((item) => item && item.id && !HIDDEN_CATALOG_IDS.has(item.id));
     this.items = (catalog?.settings || [])
-      .filter((item) => item && item.id && !MANUAL_SETTING_IDS.has(item.id));
+      .filter((item) => item
+        && item.id
+        && !MANUAL_SETTING_IDS.has(item.id)
+        && !HIDDEN_CATALOG_IDS.has(item.id));
     this.controlItems = this.items.filter((item) => !["heading", "info-text"].includes(item.type));
   }
 
@@ -264,6 +277,7 @@ class ThemeControls {
       .setDesc("下列控件来自已打包主题的完整设置定义，均由本插件独立保存并即时应用。")
       .setHeading();
     introduction.settingEl.addClass("bysan-theme-catalog-title");
+    introduction.settingEl.id = "bysan-section-theme";
 
     const search = new Setting(containerEl)
       .setName("搜索主题功能")
@@ -288,6 +302,10 @@ class ThemeControls {
     if (item.type === "heading") {
       setting.setHeading();
       setting.settingEl.addClass(`bysan-theme-heading-${item.level || 2}`);
+      if (item.level === 1) {
+        const sectionId = this.sectionIdForHeading(title);
+        if (sectionId) setting.settingEl.id = `bysan-section-${sectionId}`;
+      }
       return;
     }
 
@@ -342,6 +360,15 @@ class ThemeControls {
       .setPlaceholder("CSS 值")
       .setValue(String(this.valueFor(item) ?? ""))
       .onChange((value) => this.plugin.updateThemeSetting(item.id, value)));
+  }
+
+
+  sectionIdForHeading(title) {
+    if (/^1[.、\s]/.test(title)) return "theme-general";
+    if (/^2[.、\s]/.test(title)) return "theme-details";
+    if (/^3[.、\s]/.test(title)) return "theme-plugins";
+    if (/^4[.、\s]/.test(title)) return "theme-builtins";
+    return null;
   }
 
 

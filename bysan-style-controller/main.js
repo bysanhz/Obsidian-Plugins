@@ -1,6 +1,6 @@
 /**
  * Bysan Style Controller
- * Version: 0.4.0
+ * Version: 0.4.1
  *
  * Owns visual presentation only. Heading/equation numbering and media sizing
  * remain exclusively owned by their dedicated plugins.
@@ -273,7 +273,7 @@ module.exports = class BysanStyleController extends Plugin {
       this.register(() => window.clearTimeout(timer));
     }
 
-    console.log(`[Bysan Style Controller] v0.4.0 loaded with ${this.themeControls.count} theme controls`);
+    console.log(`[Bysan Style Controller] v0.4.1 loaded with ${this.themeControls.count} theme controls`);
   }
 
 
@@ -394,6 +394,41 @@ module.exports = class BysanStyleController extends Plugin {
       return false;
     }
     await this.saveStylePreset(preset.name, id);
+    return true;
+  }
+
+
+  async renameStylePreset(presetId, name) {
+    const preset = this.settings.stylePresets?.[presetId];
+    if (!preset) {
+      new Notice("内置默认风格不可重命名");
+      return false;
+    }
+
+    const normalizedName = String(name || "").trim().slice(0, 60);
+    if (!normalizedName) {
+      new Notice("风格名称不能为空");
+      return false;
+    }
+
+    const duplicate = Object.entries(this.settings.stylePresets || {})
+      .some(([id, item]) => id !== presetId
+        && String(item.name || "").trim().toLocaleLowerCase() === normalizedName.toLocaleLowerCase());
+    if (duplicate) {
+      new Notice("已有同名风格，请使用其他名称");
+      return false;
+    }
+
+    this.settings.stylePresets = {
+      ...(this.settings.stylePresets || {}),
+      [presetId]: {
+        ...preset,
+        name: normalizedName,
+        updatedAt: new Date().toISOString()
+      }
+    };
+    await this.saveData(this.settings);
+    new Notice(`风格已重命名为：${normalizedName}`);
     return true;
   }
 
@@ -725,6 +760,33 @@ class BysanStyleSettingTab extends PluginSettingTab {
         }));
 
     if (activePreset) {
+      const renameValue = this.pendingRenamePresetId === activeId
+        ? this.pendingRenameName
+        : activePreset.name;
+
+      new Setting(containerEl)
+        .setName("重命名当前风格")
+        .setDesc("只修改显示名称，不改变风格内容、预设 ID 或浅色/深色配置。")
+        .addText((text) => text
+          .setPlaceholder("新风格名称")
+          .setValue(renameValue || "")
+          .onChange((value) => {
+            this.pendingRenamePresetId = activeId;
+            this.pendingRenameName = value;
+          }))
+        .addButton((button) => button
+          .setButtonText("重命名")
+          .onClick(async () => {
+            const value = this.pendingRenamePresetId === activeId
+              ? this.pendingRenameName
+              : activePreset.name;
+            if (await this.plugin.renameStylePreset(activeId, value)) {
+              this.pendingRenamePresetId = null;
+              this.pendingRenameName = "";
+              this.display();
+            }
+          }));
+
       new Setting(containerEl)
         .setName("管理当前自定义风格")
         .setDesc("覆盖会用当前全部设置更新该风格；删除不会改变当前画面。")

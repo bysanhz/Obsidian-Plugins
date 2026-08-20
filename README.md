@@ -9,7 +9,7 @@
 | [Academic Heading Numbering](./academic-heading-numbering/) | 0.4.1 | 为 Live Preview、阅读视图、Outline 和 PDF 提供统一的学术标题编号 |
 | [Mermaid Inline Resizer](./mermaid-inline-resizer/) | 0.11.0 | 在编辑视图和阅读视图中持久化调整 Mermaid、图片和表格宽度 |
 | [Selection Review Toolbar](./selection-review-toolbar/) | 0.1.1 | 选中文字后显示浮动审阅工具栏，支持格式、颜色、评论与源码模式切换 |
-| [Bysan Style Controller](./bysan-style-controller/) | 0.1.1 | 统一控制 Bysan 内容样式与选定的 Blue Topaz / Style Settings 外观选项 |
+| [Bysan Style Controller](./bysan-style-controller/) | 0.1.2 | 统一控制 Bysan 内容样式与选定的 Blue Topaz / Style Settings 外观选项 |
 
 ## 安装
 

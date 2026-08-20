@@ -1,6 +1,6 @@
 /**
  * Bysan Style Controller
- * Version: 0.1.1
+ * Version: 0.1.2
  *
  * Owns visual presentation only. Heading/equation numbering and media sizing
  * remain exclusively owned by their dedicated plugins.
@@ -80,6 +80,7 @@ const CONTROLLED_PROPERTIES = [
 ];
 
 const DEFAULT_SETTINGS = {
+  settingsVersion: 2,
   workspaceBackground: true,
   lightBackground: "background-settings-workplace-waves2-light",
   darkBackground: "background-settings-workplace-theme-dark-in-the-sky",
@@ -95,14 +96,14 @@ const DEFAULT_SETTINGS = {
   quoteSerif: true,
 
   codeBgLight: "#c6efd2",
-  codeBgOpacityLight: 0.22,
+  codeBgOpacityLight: 0.42,
   codeBorderLight: "#5ca671",
   codeTextLight: "#263238",
   inlineBgLight: "#fefefe",
   inlineTextLight: "#3c70c6",
   inlineShadowLight: "#c8d3df",
   tableHeadLight: "#def4fe",
-  tableStripeLight: "#f1faff",
+  tableStripeLight: "#e4f3fa",
   tableHoverLight: "#e7f7ff",
   tableBorderLight: "#dfe2e5",
   quoteBgLight: "#def4fe",
@@ -111,7 +112,7 @@ const DEFAULT_SETTINGS = {
   markerLight: "#5f82a8",
 
   codeBgDark: "#5bad70",
-  codeBgOpacityDark: 0.10,
+  codeBgOpacityDark: 0.18,
   codeBorderDark: "#7bcd91",
   codeTextDark: "#e9eded",
   inlineBgDark: "#161616",
@@ -154,7 +155,25 @@ function hexToRgba(hex, opacity) {
 module.exports = class BysanStyleController extends Plugin {
 
   async onload() {
-    this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+    const savedSettings = await this.loadData() || {};
+    this.settings = Object.assign({}, DEFAULT_SETTINGS, savedSettings);
+
+    /* v0.1.0/0.1.1 used values that were technically present but nearly
+     * indistinguishable on a white page. Migrate only untouched old defaults;
+     * preserve any color or opacity the user has actually customized. */
+    if ((savedSettings.settingsVersion || 0) < 2) {
+      if (savedSettings.codeBgOpacityLight === 0.22) {
+        this.settings.codeBgOpacityLight = DEFAULT_SETTINGS.codeBgOpacityLight;
+      }
+      if (savedSettings.codeBgOpacityDark === 0.10) {
+        this.settings.codeBgOpacityDark = DEFAULT_SETTINGS.codeBgOpacityDark;
+      }
+      if (String(savedSettings.tableStripeLight).toLowerCase() === "#f1faff") {
+        this.settings.tableStripeLight = DEFAULT_SETTINGS.tableStripeLight;
+      }
+      this.settings.settingsVersion = 2;
+      await this.saveData(this.settings);
+    }
     this.originalClassState = new Map();
     this.originalPropertyState = new Map();
     this.lastDarkMode = document.body.classList.contains("theme-dark");
@@ -191,7 +210,7 @@ module.exports = class BysanStyleController extends Plugin {
       attributeFilter: ["class"]
     });
 
-    console.log("[Bysan Style Controller] v0.1.1 loaded");
+    console.log("[Bysan Style Controller] v0.1.2 loaded");
   }
 
 

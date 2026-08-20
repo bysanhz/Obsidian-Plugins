@@ -1,5 +1,5 @@
 /**
- * Selection Review Toolbar v0.1.0
+ * Selection Review Toolbar v0.1.1
  * The eight review colors are intentionally centralized here.
  */
 
@@ -151,23 +151,25 @@ mark.art-hl-gray { background-color: color-mix(in srgb, var(--art-gray) 30%, tra
   box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6);
 }
 
-.art-color-clear {
+.art-toolbar .art-color-swatch.art-color-clear {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   color: var(--text-muted);
-  background: var(--background-secondary);
+  background-color: var(--background-secondary) !important;
+  background-image: none !important;
   font-size: 18px;
 }
 
-.art-color-yellow { background: var(--art-yellow); }
-.art-color-red { background: var(--art-red); }
-.art-color-green { background: var(--art-green); }
-.art-color-blue { background: var(--art-blue); }
-.art-color-purple { background: var(--art-purple); }
-.art-color-magenta { background: var(--art-magenta); }
-.art-color-orange { background: var(--art-orange); }
-.art-color-gray { background: var(--art-gray); }
+/* Obsidian themes often give button backgrounds !important priority. */
+.art-toolbar .art-color-swatch.art-color-yellow { background-color: var(--art-yellow) !important; background-image: none !important; }
+.art-toolbar .art-color-swatch.art-color-red { background-color: var(--art-red) !important; background-image: none !important; }
+.art-toolbar .art-color-swatch.art-color-green { background-color: var(--art-green) !important; background-image: none !important; }
+.art-toolbar .art-color-swatch.art-color-blue { background-color: var(--art-blue) !important; background-image: none !important; }
+.art-toolbar .art-color-swatch.art-color-purple { background-color: var(--art-purple) !important; background-image: none !important; }
+.art-toolbar .art-color-swatch.art-color-magenta { background-color: var(--art-magenta) !important; background-image: none !important; }
+.art-toolbar .art-color-swatch.art-color-orange { background-color: var(--art-orange) !important; background-image: none !important; }
+.art-toolbar .art-color-swatch.art-color-gray { background-color: var(--art-gray) !important; background-image: none !important; }
 
 .art-color-modes {
   display: grid;

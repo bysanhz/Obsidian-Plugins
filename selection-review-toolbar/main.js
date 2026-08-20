@@ -1,6 +1,6 @@
 /**
  * Selection Review Toolbar
- * Version: 0.1.0
+ * Version: 0.1.1
  *
  * A selection-driven, fixed-position review toolbar for Obsidian 1.13.x.
  * It intentionally edits Markdown through Obsidian's Editor API and never
@@ -102,7 +102,7 @@ module.exports = class SelectionReviewToolbar extends Plugin {
       this.sourceModeCommandId = this.findSourceModeCommandId();
     });
 
-    console.log("[Selection Review Toolbar] v0.1.0 loaded");
+    console.log("[Selection Review Toolbar] v0.1.1 loaded");
   }
 
 

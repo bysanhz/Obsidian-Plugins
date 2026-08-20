@@ -69,7 +69,7 @@ YourVault/.obsidian/plugins/selection-review-toolbar/
 
 ## 当前版本
 
-0.1.0
+0.1.1
 
 ## 作者
 

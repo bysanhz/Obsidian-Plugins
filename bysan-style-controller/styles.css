@@ -398,14 +398,6 @@ body.bysan-style-controller-active
   margin-top: 2.5rem;
 }
 
-.bysan-theme-search {
-  position: sticky;
-  top: 0;
-  z-index: 5;
-  background: var(--background-primary);
-  border-bottom: 1px solid var(--background-modifier-border);
-}
-
 .bysan-theme-setting-item.setting-item-heading {
   margin-top: 1.2rem;
 }
@@ -430,11 +422,19 @@ body.bysan-style-controller-active
 .bysan-style-settings {
   --bysan-settings-cta: #168fc4;
   --bysan-settings-cta-hover: #117aa9;
+  --bysan-settings-surface: #ffffff;
+  --bysan-settings-surface-secondary: #f5f7fa;
+  --bysan-settings-border: #d7dde5;
+  --bysan-settings-text: #1d2329;
 }
 
 .theme-dark .bysan-style-settings {
   --bysan-settings-cta: #3da7d7;
   --bysan-settings-cta-hover: #63b9df;
+  --bysan-settings-surface: #20252b;
+  --bysan-settings-surface-secondary: #2a3037;
+  --bysan-settings-border: #414a55;
+  --bysan-settings-text: #edf1f5;
 }
 
 .bysan-style-settings button.mod-cta {
@@ -458,17 +458,44 @@ body.bysan-style-controller-active
   z-index: 20;
   margin: 0.8rem 0 1.1rem;
   padding: 0.7rem 0.8rem;
-  border: 1px solid var(--background-modifier-border);
+  border: 1px solid var(--bysan-settings-border);
   border-radius: 10px;
-  background: var(--background-primary);
+  background: var(--bysan-settings-surface) !important;
+  color: var(--bysan-settings-text);
   box-shadow: 0 5px 18px rgba(30, 42, 54, 0.1);
+  isolation: isolate;
+  contain: paint;
+}
+
+.bysan-settings-nav-header {
+  display: grid;
+  grid-template-columns: max-content minmax(12rem, 1fr);
+  align-items: center;
+  gap: 0.8rem;
+  margin-bottom: 0.6rem;
 }
 
 .bysan-settings-nav-title {
-  margin-bottom: 0.45rem;
   color: var(--text-muted);
   font-size: var(--font-ui-smaller);
   font-weight: 700;
+}
+
+.bysan-settings-nav-search {
+  width: 100%;
+  min-width: 0;
+  height: 2rem;
+  padding: 0.25rem 0.7rem;
+  border: 1px solid var(--bysan-settings-border) !important;
+  border-radius: 7px;
+  background: var(--bysan-settings-surface-secondary) !important;
+  color: var(--bysan-settings-text) !important;
+  box-shadow: none !important;
+}
+
+.bysan-settings-nav-search:focus {
+  border-color: var(--bysan-settings-cta) !important;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--bysan-settings-cta) 24%, transparent) !important;
 }
 
 .bysan-settings-nav-links {
@@ -485,14 +512,14 @@ body.bysan-style-controller-active
 
 .bysan-settings-nav-group {
   padding: 0.55rem;
-  border: 1px solid var(--background-modifier-border);
+  border: 1px solid var(--bysan-settings-border);
   border-radius: 8px;
-  background: color-mix(in srgb, var(--background-secondary) 72%, transparent);
+  background: var(--bysan-settings-surface-secondary);
 }
 
 .bysan-settings-nav-group-title {
   margin: 0 0 0.42rem 0.15rem;
-  color: var(--text-accent);
+  color: var(--bysan-settings-cta);
   font-size: var(--font-ui-small);
   font-weight: 700;
 }
@@ -504,7 +531,7 @@ body.bysan-style-controller-active
   gap: 0.7rem;
   margin-top: 0.65rem;
   padding-top: 0.65rem;
-  border-top: 1px solid var(--background-modifier-border);
+  border-top: 1px solid var(--bysan-settings-border);
 }
 
 .bysan-settings-nav-detail label {
@@ -516,15 +543,18 @@ body.bysan-style-controller-active
 .bysan-settings-nav-detail select {
   width: 100%;
   max-width: none;
+  border-color: var(--bysan-settings-border);
+  background-color: var(--bysan-settings-surface-secondary);
+  color: var(--bysan-settings-text);
 }
 
 .bysan-settings-nav-link {
   min-height: 2rem;
   padding: 0.25rem 0.65rem;
-  border: 1px solid var(--background-modifier-border) !important;
+  border: 1px solid var(--bysan-settings-border) !important;
   border-radius: 999px;
-  background: var(--background-secondary) !important;
-  color: var(--text-normal) !important;
+  background: var(--bysan-settings-surface) !important;
+  color: var(--bysan-settings-text) !important;
   box-shadow: none !important;
   font-size: var(--font-ui-smaller);
   white-space: nowrap;
@@ -532,8 +562,8 @@ body.bysan-style-controller-active
 
 .bysan-settings-nav-link:hover,
 .bysan-settings-nav-link:focus-visible {
-  border-color: var(--interactive-accent) !important;
-  background: var(--background-modifier-hover) !important;
+  border-color: var(--bysan-settings-cta) !important;
+  background: var(--bysan-settings-surface-secondary) !important;
 }
 
 .bysan-settings-section-anchor,
@@ -685,6 +715,11 @@ body.bysan-style-controller-active
 }
 
 @media (max-width: 760px) {
+  .bysan-settings-nav-header {
+    grid-template-columns: 1fr;
+    gap: 0.4rem;
+  }
+
   .bysan-settings-nav-groups {
     grid-template-columns: 1fr;
   }

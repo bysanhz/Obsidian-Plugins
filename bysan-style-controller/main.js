@@ -1,6 +1,6 @@
 /**
  * Bysan Style Controller
- * Version: 0.8.0
+ * Version: 0.8.1
  *
  * Owns visual presentation only. Heading/equation numbering and media sizing
  * remain exclusively owned by their dedicated plugins.
@@ -298,7 +298,7 @@ module.exports = class BysanStyleController extends Plugin {
       this.register(() => window.clearTimeout(timer));
     }
 
-    console.log(`[Bysan Style Controller] v0.8.0 loaded with ${this.themeControls.count} theme controls`);
+    console.log(`[Bysan Style Controller] v0.8.1 loaded with ${this.themeControls.count} theme controls`);
   }
 
 
@@ -965,7 +965,19 @@ class BysanStyleSettingTab extends PluginSettingTab {
       cls: "bysan-settings-nav",
       attr: { "aria-label": this.plugin.t("nav.title") }
     });
-    navigation.createDiv({ cls: "bysan-settings-nav-title", text: this.plugin.t("nav.title") });
+    const header = navigation.createDiv({ cls: "bysan-settings-nav-header" });
+    header.createDiv({ cls: "bysan-settings-nav-title", text: this.plugin.t("nav.title") });
+    const search = header.createEl("input", {
+      cls: "bysan-settings-nav-search",
+      attr: {
+        type: "search",
+        placeholder: this.plugin.t("theme.searchPlaceholder"),
+        "aria-label": this.plugin.t("theme.search")
+      }
+    });
+    search.addEventListener("input", () => {
+      this.plugin.themeControls.filterRows(containerEl, search.value);
+    });
     const groupGrid = navigation.createDiv({ cls: "bysan-settings-nav-groups" });
 
     for (const [groupLabel, sections] of groups) {

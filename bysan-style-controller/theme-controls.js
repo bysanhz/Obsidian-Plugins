@@ -579,14 +579,6 @@ class ThemeControls {
     introduction.settingEl.addClass("bysan-theme-catalog-title");
     introduction.settingEl.id = "bysan-section-theme";
 
-    const search = new Setting(containerEl)
-      .setName(this.plugin.t("theme.search"))
-      .setDesc(this.plugin.t("theme.searchDesc"))
-      .addSearch((component) => component
-        .setPlaceholder(this.plugin.t("theme.searchPlaceholder"))
-        .onChange((query) => this.filterRows(containerEl, query)));
-    search.settingEl.addClass("bysan-theme-search");
-
     for (const item of this.items) this.renderItem(containerEl, item);
   }
 

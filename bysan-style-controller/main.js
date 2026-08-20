@@ -1,6 +1,6 @@
 /**
  * Bysan Style Controller
- * Version: 0.3.2
+ * Version: 0.4.0
  *
  * Owns visual presentation only. Heading/equation numbering and media sizing
  * remain exclusively owned by their dedicated plugins.
@@ -88,7 +88,10 @@ const CONTROLLED_PROPERTIES = [
 ];
 
 const DEFAULT_SETTINGS = {
-  settingsVersion: 4,
+  settingsVersion: 5,
+  stylePresets: {},
+  activeStylePreset: "__default__",
+  stylePresetDirty: false,
   themeSettings: {},
   collapsedLineRanges: true,
   workspaceBackground: true,
@@ -137,6 +140,18 @@ const DEFAULT_SETTINGS = {
   quoteBorderDark: "#607d8b",
   markerDark: "#8bb1f9"
 };
+
+const PRESET_META_KEYS = new Set([
+  "settingsVersion",
+  "stylePresets",
+  "activeStylePreset",
+  "stylePresetDirty"
+]);
+
+
+function deepClone(value) {
+  return JSON.parse(JSON.stringify(value));
+}
 
 
 function clamp(value, minimum, maximum) {
@@ -189,6 +204,14 @@ module.exports = class BysanStyleController extends Plugin {
       delete this.settings.bundledBaseTheme;
       this.settings.themeSettings = savedSettings.themeSettings || {};
       this.settings.settingsVersion = 4;
+      await this.saveData(this.settings);
+    }
+
+    if ((savedSettings.settingsVersion || 0) < 5) {
+      this.settings.stylePresets = savedSettings.stylePresets || {};
+      this.settings.activeStylePreset = "__current__";
+      this.settings.stylePresetDirty = true;
+      this.settings.settingsVersion = 5;
       await this.saveData(this.settings);
     }
 
@@ -250,7 +273,7 @@ module.exports = class BysanStyleController extends Plugin {
       this.register(() => window.clearTimeout(timer));
     }
 
-    console.log(`[Bysan Style Controller] v0.3.2 loaded with ${this.themeControls.count} theme controls`);
+    console.log(`[Bysan Style Controller] v0.4.0 loaded with ${this.themeControls.count} theme controls`);
   }
 
 
@@ -277,6 +300,7 @@ module.exports = class BysanStyleController extends Plugin {
 
   async updateSetting(key, value) {
     this.settings[key] = value;
+    if (!PRESET_META_KEYS.has(key)) this.settings.stylePresetDirty = true;
     await this.saveData(this.settings);
     this.applySettings();
   }
@@ -287,8 +311,104 @@ module.exports = class BysanStyleController extends Plugin {
       ...(this.settings.themeSettings || {}),
       [id]: value
     };
+    this.settings.stylePresetDirty = true;
     await this.saveData(this.settings);
     this.applySettings();
+  }
+
+
+  captureStyleSettings(source = this.settings) {
+    return Object.fromEntries(Object.entries(source)
+      .filter(([key]) => !PRESET_META_KEYS.has(key))
+      .map(([key, value]) => [key, deepClone(value)]));
+  }
+
+
+  async saveStylePreset(name, presetId = null) {
+    const normalizedName = String(name || "").trim().slice(0, 60);
+    if (!normalizedName) {
+      new Notice("请先输入风格名称");
+      return null;
+    }
+
+    const id = presetId || `preset-${Date.now().toString(36)}`;
+    const existing = this.settings.stylePresets?.[id];
+    this.settings.stylePresets = {
+      ...(this.settings.stylePresets || {}),
+      [id]: {
+        name: normalizedName,
+        createdAt: existing?.createdAt || new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        settings: this.captureStyleSettings()
+      }
+    };
+    this.settings.activeStylePreset = id;
+    this.settings.stylePresetDirty = false;
+    await this.saveData(this.settings);
+    new Notice(existing ? `已覆盖风格：${normalizedName}` : `已保存风格：${normalizedName}`);
+    return id;
+  }
+
+
+  async loadStylePreset(presetId, options = {}) {
+    if (this.settings.stylePresetDirty && !options.allowDiscard) {
+      new Notice("当前风格有未保存修改，请先另存为新风格或覆盖当前风格");
+      return false;
+    }
+
+    const preservedPresets = deepClone(this.settings.stylePresets || {});
+    let snapshot;
+    let label;
+
+    if (presetId === "__default__") {
+      snapshot = this.captureStyleSettings(DEFAULT_SETTINGS);
+      label = "Bysan 默认（浅色/深色自适应）";
+    } else {
+      const preset = preservedPresets[presetId];
+      if (!preset) {
+        new Notice("未找到该风格预设");
+        return false;
+      }
+      snapshot = deepClone(preset.settings || {});
+      label = preset.name;
+    }
+
+    this.settings = Object.assign({}, deepClone(DEFAULT_SETTINGS), snapshot, {
+      settingsVersion: DEFAULT_SETTINGS.settingsVersion,
+      stylePresets: preservedPresets,
+      activeStylePreset: presetId,
+      stylePresetDirty: false
+    });
+    await this.saveData(this.settings);
+    this.applySettings();
+    new Notice(`已载入风格：${label}`);
+    return true;
+  }
+
+
+  async overwriteActiveStylePreset() {
+    const id = this.settings.activeStylePreset;
+    const preset = this.settings.stylePresets?.[id];
+    if (!preset) {
+      new Notice("内置默认风格不可覆盖，请另存为新风格");
+      return false;
+    }
+    await this.saveStylePreset(preset.name, id);
+    return true;
+  }
+
+
+  async deleteStylePreset(presetId) {
+    const preset = this.settings.stylePresets?.[presetId];
+    if (!preset) return false;
+    const presets = { ...(this.settings.stylePresets || {}) };
+    delete presets[presetId];
+    this.settings.stylePresets = presets;
+    this.settings.activeStylePreset = "__current__";
+    this.settings.stylePresetDirty = true;
+    await this.saveData(this.settings);
+    new Notice(`已删除风格：${preset.name}；当前画面设置仍保留`);
+    return true;
   }
 
 
@@ -502,7 +622,12 @@ module.exports = class BysanStyleController extends Plugin {
 
 
   async resetSettings() {
-    this.settings = Object.assign({}, DEFAULT_SETTINGS);
+    const presets = deepClone(this.settings.stylePresets || {});
+    this.settings = Object.assign({}, deepClone(DEFAULT_SETTINGS), {
+      stylePresets: presets,
+      activeStylePreset: "__default__",
+      stylePresetDirty: false
+    });
     await this.saveData(this.settings);
     this.applySettings();
     new Notice("Bysan 样式已恢复默认值");
@@ -527,6 +652,7 @@ class BysanStyleSettingTab extends PluginSettingTab {
       .setDesc("独立提供 Bysan 内容样式与完整主题控件；不依赖外部主题，也不接管标题、公式或媒体缩放。")
       .setHeading();
 
+    this.renderStylePresetSettings(containerEl);
     this.renderWorkspaceSettings(containerEl);
     this.renderCodeSettings(containerEl);
     this.renderPaletteSettings(containerEl, "Light", "浅色模式");
@@ -544,6 +670,76 @@ class BysanStyleSettingTab extends PluginSettingTab {
           await this.plugin.resetSettings();
           this.display();
         }));
+  }
+
+
+  renderStylePresetSettings(containerEl) {
+    new Setting(containerEl)
+      .setName("风格预设")
+      .setDesc("一个预设同时保存浅色、深色及全部完整主题设置。")
+      .setHeading();
+
+    const presets = this.plugin.settings.stylePresets || {};
+    const activeId = this.plugin.settings.activeStylePreset || "__current__";
+    const activePreset = presets[activeId];
+    const activeLabel = activeId === "__default__"
+      ? "Bysan 默认（浅色/深色自适应）"
+      : activePreset?.name || "当前设置（尚未保存为风格）";
+    const stateLabel = this.plugin.settings.stylePresetDirty ? "已修改" : "已保存";
+
+    new Setting(containerEl)
+      .setName("当前风格")
+      .setDesc(`${activeLabel} · ${stateLabel}；切换明暗模式会自动使用同一风格中的对应配色。`)
+      .addDropdown((dropdown) => {
+        if (activeId === "__current__") {
+          dropdown.addOption("__current__", "当前设置（尚未保存）");
+        }
+        dropdown.addOption("__default__", "Bysan 默认（浅色/深色自适应）");
+        for (const [id, preset] of Object.entries(presets)) {
+          dropdown.addOption(id, preset.name);
+        }
+        dropdown.setValue(activeId);
+        dropdown.onChange(async (value) => {
+          if (value === "__current__") return;
+          await this.plugin.loadStylePreset(value);
+          this.display();
+        });
+      });
+
+    new Setting(containerEl)
+      .setName("另存为新风格")
+      .setDesc("输入名称后保存当前全部设置，原有风格不会被覆盖。")
+      .addText((text) => text
+        .setPlaceholder("例如：论文浅绿 / 夜间阅读")
+        .setValue(this.pendingPresetName || "")
+        .onChange((value) => { this.pendingPresetName = value; }))
+      .addButton((button) => button
+        .setButtonText("保存")
+        .setCta()
+        .onClick(async () => {
+          const id = await this.plugin.saveStylePreset(this.pendingPresetName);
+          if (id) {
+            this.pendingPresetName = "";
+            this.display();
+          }
+        }));
+
+    if (activePreset) {
+      new Setting(containerEl)
+        .setName("管理当前自定义风格")
+        .setDesc("覆盖会用当前全部设置更新该风格；删除不会改变当前画面。")
+        .addButton((button) => button
+          .setButtonText("覆盖保存")
+          .onClick(async () => {
+            if (await this.plugin.overwriteActiveStylePreset()) this.display();
+          }))
+        .addButton((button) => button
+          .setButtonText("删除")
+          .setWarning()
+          .onClick(async () => {
+            if (await this.plugin.deleteStylePreset(activeId)) this.display();
+          }));
+    }
   }
 
 

@@ -1,0 +1,9 @@
+{
+  "id": "academic-heading-numbering",
+  "name": "Academic Heading Numbering",
+  "version": "0.4.1",
+  "minAppVersion": "1.13.0",
+  "description": "Stable academic heading numbering for Live Preview, Reading View, Outline, and PDF without modifying Markdown source.",
+  "author": "Bysan",
+  "isDesktopOnly": true
+}

@@ -1,0 +1,9 @@
+{
+  "id": "selection-review-toolbar",
+  "name": "Selection Review Toolbar",
+  "version": "0.1.0",
+  "minAppVersion": "1.13.0",
+  "description": "A floating academic review and formatting toolbar shown when text is selected.",
+  "author": "Bysan",
+  "isDesktopOnly": true
+}

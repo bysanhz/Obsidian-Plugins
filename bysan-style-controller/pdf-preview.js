@@ -282,6 +282,10 @@ class BysanPdfPreviewModal extends Modal {
       if (!whitespace) hasContent = true;
     });
 
+    this.previewPagesEl.querySelectorAll(".mermaid svg").forEach((svg) => {
+      this.replaceForeignObjectsWithText(svg, svg);
+    });
+
     this.pageCount = pageNumber;
     this.pageCountEl.setText(this.plugin.t("pdf.pageCount", { count: pageNumber }));
     this.showPage(Math.min(this.currentPage, pageNumber));
@@ -313,11 +317,118 @@ class BysanPdfPreviewModal extends Modal {
     return rules.join("\n");
   }
 
-  exportHtml() {
-    const { width, height } = this.dimensions();
+  renderedLabelLines(label) {
+    const lineMap = new Map();
+    const walker = document.createTreeWalker(label, NodeFilter.SHOW_TEXT);
+    let textNode;
+    while ((textNode = walker.nextNode())) {
+      for (let index = 0; index < textNode.data.length; index += 1) {
+        const character = textNode.data[index];
+        const range = document.createRange();
+        range.setStart(textNode, index);
+        range.setEnd(textNode, index + 1);
+        const rect = range.getBoundingClientRect();
+        if (!rect.width && !rect.height) continue;
+        const lineKey = Math.round(rect.top * 2) / 2;
+        lineMap.set(lineKey, `${lineMap.get(lineKey) || ""}${character}`);
+      }
+    }
+    const lines = Array.from(lineMap.entries())
+      .sort(([first], [second]) => first - second)
+      .map(([, text]) => text.replace(/\s+/g, " ").trim())
+      .filter(Boolean);
+    return lines.length ? lines : [label.textContent.trim()];
+  }
+
+  replaceForeignObjectsWithText(sourceSvg, exportSvg) {
+    const namespace = "http://www.w3.org/2000/svg";
+    const sourceObjects = Array.from(sourceSvg.querySelectorAll("foreignObject"));
+    const exportObjects = Array.from(exportSvg.querySelectorAll("foreignObject"));
+    sourceObjects.forEach((sourceObject, index) => {
+      const exportObject = exportObjects[index];
+      const label = Array.from(sourceObject.querySelectorAll(".nodeLabel,.label,span,p,div"))
+        .find((element) => element.textContent?.trim());
+      if (!exportObject || !label) return;
+      const x = Number(sourceObject.getAttribute("x") || 0);
+      const y = Number(sourceObject.getAttribute("y") || 0);
+      const width = Number(sourceObject.getAttribute("width") || 0);
+      const height = Number(sourceObject.getAttribute("height") || 0);
+      if (!(width > 0) || !(height > 0)) return;
+      const computed = getComputedStyle(label);
+      const fontSize = Number.parseFloat(computed.fontSize) || 16;
+      const lineHeight = Number.parseFloat(computed.lineHeight) || fontSize * 1.2;
+      const lines = this.renderedLabelLines(label);
+      const text = document.createElementNS(namespace, "text");
+      text.setAttribute("x", String(x + width / 2));
+      text.setAttribute("y", String(y + height / 2));
+      text.setAttribute("text-anchor", "middle");
+      text.setAttribute("dominant-baseline", "middle");
+      text.style.setProperty("text-anchor", "middle", "important");
+      text.style.setProperty("dominant-baseline", "middle", "important");
+      text.setAttribute("fill", computed.color || "currentColor");
+      text.setAttribute("font-family", computed.fontFamily || "sans-serif");
+      text.setAttribute("font-size", String(fontSize));
+      text.setAttribute("font-weight", computed.fontWeight || "400");
+      if (computed.fontStyle && computed.fontStyle !== "normal") {
+        text.setAttribute("font-style", computed.fontStyle);
+      }
+      const firstOffset = -((lines.length - 1) * lineHeight) / 2;
+      lines.forEach((line, lineIndex) => {
+        const span = document.createElementNS(namespace, "tspan");
+        span.setAttribute("x", String(x + width / 2));
+        span.setAttribute("y", String(y + height / 2 + firstOffset + lineIndex * lineHeight));
+        span.setAttribute("dominant-baseline", "middle");
+        span.style.setProperty("text-anchor", "middle", "important");
+        span.style.setProperty("dominant-baseline", "middle", "important");
+        span.textContent = line;
+        const maximumTextWidth = Math.max(1, width - 12);
+        const canvas = document.createElement("canvas");
+        const context = canvas.getContext("2d");
+        context.font = `${computed.fontStyle} ${computed.fontWeight} ${fontSize}px ${computed.fontFamily}`;
+        const measuredWidth = Math.max(1, context.measureText(line).width);
+        span.setAttribute("textLength", String(Math.min(measuredWidth, maximumTextWidth)));
+        span.setAttribute("lengthAdjust", "spacingAndGlyphs");
+        text.appendChild(span);
+      });
+      exportObject.replaceWith(text);
+    });
+  }
+
+  async buildExportPages() {
     const pages = this.previewPagesEl.cloneNode(true);
     pages.style.removeProperty("zoom");
-    pages.querySelectorAll(".bysan-pdf-preview-page").forEach((page) => page.classList.remove("is-hidden"));
+    const sourcePages = Array.from(this.previewPagesEl.querySelectorAll(".bysan-pdf-preview-page"));
+    const exportPages = Array.from(pages.querySelectorAll(".bysan-pdf-preview-page"));
+    const originalVisibility = this.previewPagesEl.style.visibility;
+    const originalZoom = this.previewPagesEl.style.zoom;
+    this.previewPagesEl.style.visibility = "hidden";
+    this.previewPagesEl.style.zoom = "1";
+    try {
+      for (let pageIndex = 0; pageIndex < sourcePages.length; pageIndex += 1) {
+        const sourcePage = sourcePages[pageIndex];
+        const exportPage = exportPages[pageIndex];
+        const wasHidden = sourcePage.classList.contains("is-hidden");
+        sourcePage.classList.remove("is-hidden");
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+        const sourceSvgs = Array.from(sourcePage.querySelectorAll(".mermaid svg"));
+        const exportSvgs = Array.from(exportPage.querySelectorAll(".mermaid svg"));
+        sourceSvgs.forEach((sourceSvg, svgIndex) => {
+          const exportSvg = exportSvgs[svgIndex];
+          if (exportSvg) this.replaceForeignObjectsWithText(sourceSvg, exportSvg);
+        });
+        if (wasHidden) sourcePage.classList.add("is-hidden");
+      }
+    } finally {
+      this.previewPagesEl.style.visibility = originalVisibility;
+      this.previewPagesEl.style.zoom = originalZoom;
+    }
+    exportPages.forEach((page) => page.classList.remove("is-hidden"));
+    return pages;
+  }
+
+  async exportHtml() {
+    const { width, height } = this.dimensions();
+    const pages = await this.buildExportPages();
     const bodyClasses = Array.from(document.body.classList).join(" ");
     const exportCss = `
       @page { size: ${width}mm ${height}mm; margin: 0; }
@@ -366,7 +477,7 @@ class BysanPdfPreviewModal extends Modal {
         height: 1200,
         webPreferences: { sandbox: false }
       });
-      const html = this.exportHtml();
+      const html = await this.exportHtml();
       temporaryHtmlPath = path.join(
         os.tmpdir(),
         `bysan-pdf-${Date.now()}-${Math.random().toString(36).slice(2)}.html`

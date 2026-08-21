@@ -973,7 +973,12 @@ body.bysan-style-controller-active
 }
 
 .bysan-mode-control-color {
-  grid-template-columns: max-content minmax(0, 1fr) max-content;
+  grid-template-columns: max-content 2rem minmax(5.8rem, 1fr) max-content;
+}
+
+.bysan-mode-control-color input[type="color"] {
+  width: 2rem;
+  min-width: 2rem;
 }
 
 .bysan-color-reset {
@@ -997,17 +1002,56 @@ body.bysan-style-controller-active
   color: var(--text-accent) !important;
 }
 
-.bysan-theme-color-setting .setting-item-control {
-  flex-wrap: wrap;
-  gap: 0.45rem;
+.bysan-theme-color-setting {
+  align-items: flex-start;
+  flex-direction: column;
 }
 
-.bysan-theme-color-setting input[type="color"] {
-  flex: 0 0 auto;
+.bysan-theme-color-setting .setting-item-control {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: stretch;
+  gap: 0.75rem;
+  width: 100%;
+}
+
+.bysan-theme-color-mode {
+  display: grid;
+  grid-template-columns: max-content 2rem minmax(5.8rem, max-content) minmax(5rem, 1fr) max-content;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 0;
+  padding: 0.35rem 0.45rem;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--background-secondary) 72%, transparent);
+}
+
+.bysan-theme-color-mode input[type="color"] {
+  width: 2rem;
+  min-width: 2rem;
+  height: 1.75rem;
+  padding: 0.1rem;
+}
+
+.bysan-theme-color-value {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-family: var(--font-monospace);
+  font-size: var(--font-ui-smaller);
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bysan-theme-color-mode .slider {
+  width: 100% !important;
+  min-width: 0 !important;
+  margin: 0 !important;
 }
 
 .bysan-mode-control-slider {
-  grid-template-columns: max-content 2.8rem minmax(0, 1fr);
+  grid-template-columns: max-content 2.8rem minmax(0, 1fr) max-content;
 }
 
 .bysan-mode-label {
@@ -1063,6 +1107,15 @@ body.bysan-style-controller-active
   .bysan-settings-nav-detail {
     grid-template-columns: 1fr;
     gap: 0.35rem;
+  }
+
+  .bysan-theme-color-setting .setting-item-control {
+    grid-template-columns: 1fr;
+    width: 100%;
+  }
+
+  .bysan-theme-color-mode {
+    grid-template-columns: max-content 2rem minmax(5.8rem, max-content) minmax(4rem, 1fr) max-content;
   }
 
   .bysan-dual-mode-setting {

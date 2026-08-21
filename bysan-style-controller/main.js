@@ -1,6 +1,6 @@
 /**
  * Bysan Style Controller
- * Version: 0.9.1
+ * Version: 0.10.0
  *
  * Owns visual presentation only. Heading/equation numbering and media sizing
  * remain exclusively owned by their dedicated plugins.
@@ -326,7 +326,7 @@ module.exports = class BysanStyleController extends Plugin {
       this.register(() => window.clearTimeout(timer));
     }
 
-    console.log(`[Bysan Style Controller] v0.9.1 loaded with ${this.themeControls.count} theme controls`);
+    console.log(`[Bysan Style Controller] v0.10.0 loaded with ${this.themeControls.count} theme controls`);
   }
 
 
@@ -358,6 +358,7 @@ module.exports = class BysanStyleController extends Plugin {
   onunload() {
     this.themeObserver?.disconnect();
     this.lineRangeObserver?.disconnect();
+    this.themeControls?.destroy();
     if (this.lineRangeFrame) window.cancelAnimationFrame(this.lineRangeFrame);
     this.clearLineRangeLabels();
     this.baseThemeStyleEl?.remove();
@@ -1335,20 +1336,46 @@ class BysanStyleSettingTab extends PluginSettingTab {
   addDualColor(containerEl, name, lightKey, darkKey) {
     const setting = new Setting(containerEl).setName(name);
     let lightPicker;
-    this.addModeControl(setting, "light", "color", () => setting.addColorPicker((picker) => {
-      lightPicker = picker;
-      picker.setValue(this.plugin.settings[lightKey])
-        .onChange((value) => this.plugin.updateSetting(lightKey, value));
-    }), async () => {
-      if (await this.plugin.resetSetting(lightKey)) lightPicker.setValue(this.plugin.settings[lightKey]);
+    let lightValue;
+    this.addModeControl(setting, "light", "color", () => {
+      setting.addColorPicker((picker) => {
+        lightPicker = picker;
+        picker.setValue(this.plugin.settings[lightKey])
+          .onChange((value) => {
+            lightValue?.setText(value.toUpperCase());
+            this.plugin.updateSetting(lightKey, value);
+          });
+      });
+      lightValue = setting.controlEl.createSpan({
+        cls: "bysan-theme-color-value",
+        text: String(this.plugin.settings[lightKey]).toUpperCase()
+      });
+    }, async () => {
+      if (await this.plugin.resetSetting(lightKey)) {
+        lightPicker.setValue(this.plugin.settings[lightKey]);
+        lightValue?.setText(String(this.plugin.settings[lightKey]).toUpperCase());
+      }
     });
     let darkPicker;
-    this.addModeControl(setting, "dark", "color", () => setting.addColorPicker((picker) => {
-      darkPicker = picker;
-      picker.setValue(this.plugin.settings[darkKey])
-        .onChange((value) => this.plugin.updateSetting(darkKey, value));
-    }), async () => {
-      if (await this.plugin.resetSetting(darkKey)) darkPicker.setValue(this.plugin.settings[darkKey]);
+    let darkValue;
+    this.addModeControl(setting, "dark", "color", () => {
+      setting.addColorPicker((picker) => {
+        darkPicker = picker;
+        picker.setValue(this.plugin.settings[darkKey])
+          .onChange((value) => {
+            darkValue?.setText(value.toUpperCase());
+            this.plugin.updateSetting(darkKey, value);
+          });
+      });
+      darkValue = setting.controlEl.createSpan({
+        cls: "bysan-theme-color-value",
+        text: String(this.plugin.settings[darkKey]).toUpperCase()
+      });
+    }, async () => {
+      if (await this.plugin.resetSetting(darkKey)) {
+        darkPicker.setValue(this.plugin.settings[darkKey]);
+        darkValue?.setText(String(this.plugin.settings[darkKey]).toUpperCase());
+      }
     });
     setting.settingEl.addClass("bysan-dual-mode-setting");
   }
@@ -1356,16 +1383,26 @@ class BysanStyleSettingTab extends PluginSettingTab {
 
   addDualSlider(containerEl, name, description, lightKey, darkKey, minimum, maximum, step) {
     const setting = new Setting(containerEl).setName(name).setDesc(description);
-    this.addModeControl(setting, "light", "slider", () => setting.addSlider((slider) => slider
-      .setLimits(minimum, maximum, step)
-      .setDynamicTooltip()
-      .setValue(this.plugin.settings[lightKey])
-      .onChange((value) => this.plugin.updateSetting(lightKey, value))));
-    this.addModeControl(setting, "dark", "slider", () => setting.addSlider((slider) => slider
-      .setLimits(minimum, maximum, step)
-      .setDynamicTooltip()
-      .setValue(this.plugin.settings[darkKey])
-      .onChange((value) => this.plugin.updateSetting(darkKey, value))));
+    let lightSlider;
+    this.addModeControl(setting, "light", "slider", () => setting.addSlider((slider) => {
+      lightSlider = slider;
+      slider.setLimits(minimum, maximum, step)
+        .setDynamicTooltip()
+        .setValue(this.plugin.settings[lightKey])
+        .onChange((value) => this.plugin.updateSetting(lightKey, value));
+    }), async () => {
+      if (await this.plugin.resetSetting(lightKey)) lightSlider.setValue(this.plugin.settings[lightKey]);
+    });
+    let darkSlider;
+    this.addModeControl(setting, "dark", "slider", () => setting.addSlider((slider) => {
+      darkSlider = slider;
+      slider.setLimits(minimum, maximum, step)
+        .setDynamicTooltip()
+        .setValue(this.plugin.settings[darkKey])
+        .onChange((value) => this.plugin.updateSetting(darkKey, value));
+    }), async () => {
+      if (await this.plugin.resetSetting(darkKey)) darkSlider.setValue(this.plugin.settings[darkKey]);
+    });
     setting.settingEl.addClass("bysan-dual-mode-setting");
   }
 

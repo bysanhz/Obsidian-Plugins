@@ -18,6 +18,28 @@ const HIDDEN_CATALOG_IDS = new Set([
   "bt-github"
 ]);
 
+const COLOR_FALLBACK_VARIABLES = new Map([
+  ["print-h1-color", "h1-color"],
+  ["print-h2-color", "h2-color"],
+  ["print-h3-color", "h3-color"],
+  ["print-h4-color", "h4-color"],
+  ["print-h5-color", "h5-color"],
+  ["print-h6-color", "h6-color"],
+  ["h1-underline-color", "h1-color"],
+  ["h2-underline-color", "h2-color"],
+  ["h3-underline-color", "h3-color"],
+  ["h4-underline-color", "h4-color"],
+  ["h5-underline-color", "h5-color"],
+  ["h6-underline-color", "h6-color"],
+  ["inline-title-color", "h1-color"],
+  ["inline-title-underline-color", "h1-color"],
+  ["list-ul-marker-color-1", "list-marker-color"],
+  ["list-ul-marker-color-2", "list-marker-color"],
+  ["list-ul-marker-color-3", "list-marker-color"],
+  ["list-ul-marker-color-4", "list-marker-color"],
+  ["checklist-done-color", "text-muted"]
+]);
+
 
 const ZH_TITLE = {
   "Light mode": "浅色模式",
@@ -308,6 +330,9 @@ function clamp(value, minimum, maximum) {
 
 function parseColor(value) {
   const text = String(value || "").trim();
+  if (text.toLowerCase() === "transparent") {
+    return { hex: "#000000", red: 0, green: 0, blue: 0, alpha: 0, valid: true };
+  }
   const hex = text.match(/^#([0-9a-f]{6})([0-9a-f]{2})?$/i);
   if (hex) {
     const rgb = Number.parseInt(hex[1], 16);
@@ -316,7 +341,8 @@ function parseColor(value) {
       red: (rgb >> 16) & 255,
       green: (rgb >> 8) & 255,
       blue: rgb & 255,
-      alpha: hex[2] ? Number.parseInt(hex[2], 16) / 255 : 1
+      alpha: hex[2] ? Number.parseInt(hex[2], 16) / 255 : 1,
+      valid: true
     };
   }
 
@@ -333,11 +359,26 @@ function parseColor(value) {
       red,
       green,
       blue,
-      alpha: isDefined(rgba[4]) ? clamp(rgba[4], 0, 1) : 1
+      alpha: isDefined(rgba[4]) ? clamp(rgba[4], 0, 1) : 1,
+      valid: true
     };
   }
 
-  return { hex: "#000000", red: 0, green: 0, blue: 0, alpha: 1 };
+  const modernRgb = text.match(/^rgba?\(\s*([\d.]+)\s+([\d.]+)\s+([\d.]+)(?:\s*\/\s*([\d.]+)%?)?\s*\)$/i);
+  if (modernRgb) {
+    const red = clamp(modernRgb[1], 0, 255);
+    const green = clamp(modernRgb[2], 0, 255);
+    const blue = clamp(modernRgb[3], 0, 255);
+    const alpha = isDefined(modernRgb[4])
+      ? clamp(Number(modernRgb[4]) / (text.includes("%") ? 100 : 1), 0, 1)
+      : 1;
+    const hexPart = [red, green, blue]
+      .map((part) => Math.round(part).toString(16).padStart(2, "0"))
+      .join("");
+    return { hex: `#${hexPart}`, red, green, blue, alpha, valid: true };
+  }
+
+  return { hex: "#000000", red: 0, green: 0, blue: 0, alpha: 1, valid: false };
 }
 
 
@@ -387,6 +428,8 @@ class ThemeControls {
         && !HIDDEN_CATALOG_IDS.has(item.id));
     this.controlItems = this.items.filter((item) => !["heading", "info-text"].includes(item.type));
     this.headingAnchors = new Map();
+    this.displayDefaults = new Map();
+    this.probeFrame = null;
     this.items.forEach((item, index) => {
       if (item.type === "heading") this.headingAnchors.set(item, `bysan-theme-heading-${index}`);
     });
@@ -429,6 +472,147 @@ class ThemeControls {
       return item[`default-${mode}`];
     }
     return isDefined(storedValue) ? storedValue : item.default;
+  }
+
+
+  displayValueFor(item, mode) {
+    const storedValue = this.stored[item.id];
+    if (item.type === "variable-themed-color") {
+      if (storedValue && typeof storedValue === "object" && isDefined(storedValue[mode])) {
+        return storedValue[mode];
+      }
+      return this.displayDefaults.get(`${item.id}:${mode}`) ?? item[`default-${mode}`];
+    }
+    if (isDefined(storedValue)) return storedValue;
+    return this.displayDefaults.get(item.id) ?? item.default;
+  }
+
+
+  ensureProbeFrame() {
+    if (this.probeFrame?.isConnected) return this.probeFrame;
+    const frame = document.createElement("iframe");
+    frame.className = "bysan-theme-value-probe";
+    frame.setAttribute("aria-hidden", "true");
+    frame.setAttribute("tabindex", "-1");
+    Object.assign(frame.style, {
+      position: "fixed",
+      left: "-10000px",
+      top: "0",
+      width: "32px",
+      height: "32px",
+      border: "0",
+      opacity: "0",
+      pointerEvents: "none"
+    });
+    document.body.appendChild(frame);
+    const probeDocument = frame.contentDocument;
+    probeDocument.open();
+    probeDocument.write("<!doctype html><html><head></head><body></body></html>");
+    probeDocument.close();
+    const style = probeDocument.createElement("style");
+    const hostRules = [];
+    for (const sheet of document.styleSheets) {
+      if (sheet.ownerNode === this.plugin.baseThemeStyleEl) continue;
+      try {
+        for (const rule of sheet.cssRules) hostRules.push(rule.cssText);
+      } catch (_) {}
+    }
+    style.textContent = `${hostRules.join("\n")}\n${this.plugin.baseThemeCssText || ""}`;
+    probeDocument.head.appendChild(style);
+    this.probeFrame = frame;
+    return frame;
+  }
+
+
+  applyStoredVariablesToProbe(body, mode) {
+    for (const item of this.items) {
+      if (!String(item.type || "").startsWith("variable-")) continue;
+      const storedValue = this.stored[item.id];
+      const value = item.type === "variable-themed-color"
+        ? storedValue && typeof storedValue === "object" && storedValue[mode]
+        : storedValue;
+      if (!isDefined(value)) continue;
+      if (item.format === "hsl-split") {
+        const color = parseColor(value);
+        const hsl = rgbToHsl(color.red, color.green, color.blue);
+        body.style.setProperty(`--${item.id}-h`, String(hsl.hue));
+        body.style.setProperty(`--${item.id}-s`, `${hsl.saturation}%`);
+        body.style.setProperty(`--${item.id}-l`, `${hsl.lightness}%`);
+        body.style.setProperty(`--${item.id}-a`, String(color.alpha));
+      } else {
+        const suffix = ["variable-number", "variable-number-slider"].includes(item.type) && item.format
+          ? item.format
+          : "";
+        body.style.setProperty(`--${item.id}`, `${value}${suffix}`);
+      }
+    }
+  }
+
+
+  resolvedProbeColor(item, probeDocument, body) {
+    const bodyStyle = probeDocument.defaultView.getComputedStyle(body);
+    const fallbackVariable = COLOR_FALLBACK_VARIABLES.get(item.id);
+    const expression = item.format === "hsl-split"
+      ? `hsla(var(--${item.id}-h), var(--${item.id}-s), var(--${item.id}-l), var(--${item.id}-a, 1))`
+      : fallbackVariable
+        ? `var(--${item.id}, var(--${fallbackVariable}))`
+        : `var(--${item.id})`;
+    const rawValue = item.format === "hsl-split"
+      ? bodyStyle.getPropertyValue(`--${item.id}-h`).trim()
+      : bodyStyle.getPropertyValue(`--${item.id}`).trim();
+    const fallbackValue = fallbackVariable
+      ? bodyStyle.getPropertyValue(`--${fallbackVariable}`).trim()
+      : "";
+    if (!rawValue && !fallbackValue) return null;
+    const sample = probeDocument.createElement("span");
+    sample.style.color = expression;
+    body.appendChild(sample);
+    const resolved = probeDocument.defaultView.getComputedStyle(sample).color;
+    sample.remove();
+    const parsed = parseColor(resolved);
+    return parsed.valid ? colorWithAlpha(parsed.hex, parsed.alpha) : null;
+  }
+
+
+  refreshDisplayDefaults() {
+    const frame = this.ensureProbeFrame();
+    const probeDocument = frame.contentDocument;
+    const body = probeDocument.body;
+    const root = probeDocument.documentElement;
+    const baseClasses = Array.from(document.body.classList)
+      .filter((name) => name !== "theme-light" && name !== "theme-dark");
+    this.displayDefaults.clear();
+
+    for (const mode of ["light", "dark"]) {
+      body.removeAttribute("style");
+      body.className = [...baseClasses, `theme-${mode}`].join(" ");
+      root.className = `theme-${mode}`;
+      this.applyStoredVariablesToProbe(body, mode);
+      const bodyStyle = probeDocument.defaultView.getComputedStyle(body);
+      for (const item of this.controlItems) {
+        if (item.type === "variable-themed-color") {
+          const resolved = this.resolvedProbeColor(item, probeDocument, body);
+          if (resolved) this.displayDefaults.set(`${item.id}:${mode}`, resolved);
+          continue;
+        }
+        if (mode !== "light" || !String(item.type || "").startsWith("variable-")) continue;
+        const rawValue = bodyStyle.getPropertyValue(`--${item.id}`).trim();
+        if (!rawValue) continue;
+        if (["variable-number", "variable-number-slider"].includes(item.type)) {
+          const numeric = Number.parseFloat(rawValue);
+          if (Number.isFinite(numeric)) this.displayDefaults.set(item.id, numeric);
+        } else {
+          this.displayDefaults.set(item.id, rawValue);
+        }
+      }
+    }
+  }
+
+
+  destroy() {
+    this.probeFrame?.remove();
+    this.probeFrame = null;
+    this.displayDefaults.clear();
   }
 
 
@@ -572,6 +756,7 @@ class ThemeControls {
 
 
   render(containerEl) {
+    this.refreshDisplayDefaults();
     const introduction = new Setting(containerEl)
       .setName(this.plugin.t("theme.title", { count: this.count }))
       .setDesc(this.plugin.t("theme.desc"))
@@ -589,6 +774,7 @@ class ThemeControls {
     const setting = new Setting(containerEl).setName(title);
     if (description) setting.setDesc(description);
     setting.settingEl.addClass("bysan-theme-setting-item");
+    setting.settingEl.dataset.bysanSettingId = item.id;
     setting.settingEl.dataset.bysanSearch = `${title} ${item.title || ""} ${description} ${item.id}`.toLowerCase();
 
     if (item.type === "heading") {
@@ -634,7 +820,7 @@ class ThemeControls {
       setting.addSlider((slider) => slider
         .setLimits(Number(item.min), Number(item.max), Number(item.step || 1))
         .setDynamicTooltip()
-        .setValue(Number(this.valueFor(item)))
+        .setValue(Number(this.displayValueFor(item)))
         .onChange((value) => this.plugin.updateThemeSetting(item.id, value)));
       return;
     }
@@ -642,7 +828,7 @@ class ThemeControls {
     if (item.type === "variable-number") {
       setting.addText((text) => {
         text.inputEl.type = "number";
-        text.setValue(String(this.valueFor(item)));
+        text.setValue(String(this.displayValueFor(item)));
         text.onChange((value) => {
           const number = Number(value);
           if (Number.isFinite(number)) this.plugin.updateThemeSetting(item.id, number);
@@ -653,7 +839,7 @@ class ThemeControls {
 
     setting.addText((text) => text
       .setPlaceholder(this.plugin.t("theme.cssValue"))
-      .setValue(String(this.valueFor(item) ?? ""))
+      .setValue(String(this.displayValueFor(item) ?? ""))
       .onChange((value) => this.plugin.updateThemeSetting(item.id, value)));
   }
 
@@ -694,41 +880,64 @@ class ThemeControls {
     setting.settingEl.dataset.bysanSettingId = item.id;
     for (const mode of ["light", "dark"]) {
       const label = mode === "light" ? this.plugin.t("theme.light") : this.plugin.t("theme.dark");
-      const parsed = parseColor(this.valueFor(item, mode));
+      const parsed = parseColor(this.displayValueFor(item, mode));
+      const group = setting.controlEl.createDiv({
+        cls: `bysan-theme-color-mode bysan-theme-color-mode-${mode}`
+      });
+      group.createSpan({
+        cls: `bysan-mode-label bysan-mode-label-${mode}`,
+        text: label
+      });
+      const appendNewControls = (callback) => {
+        const existing = new Set(setting.controlEl.children);
+        callback();
+        for (const child of Array.from(setting.controlEl.children)) {
+          if (!existing.has(child) && child !== group) group.appendChild(child);
+        }
+      };
       let pickerComponent;
-      setting.addColorPicker((picker) => {
+      let valueLabel;
+      appendNewControls(() => setting.addColorPicker((picker) => {
         pickerComponent = picker;
         picker.setValue(parsed.hex);
         picker.colorPickerEl?.setAttribute("title", this.plugin.t("theme.colorTitle", { mode: label }));
         picker.onChange((hex) => {
-          const current = parseColor(this.valueFor(item, mode));
+          const current = parseColor(this.displayValueFor(item, mode));
+          valueLabel?.setText(colorWithAlpha(hex, item.opacity ? current.alpha : 1).toUpperCase());
           this.updateThemedColor(item, mode, hex, current.alpha);
         });
+      }));
+      valueLabel = group.createSpan({
+        cls: "bysan-theme-color-value",
+        text: colorWithAlpha(parsed.hex, item.opacity ? parsed.alpha : 1).toUpperCase()
       });
       let sliderComponent;
       if (item.opacity) {
-        setting.addSlider((slider) => {
+        appendNewControls(() => setting.addSlider((slider) => {
           sliderComponent = slider;
           slider.setLimits(0, 1, 0.01).setDynamicTooltip().setValue(parsed.alpha);
           slider.sliderEl?.setAttribute("title", this.plugin.t("theme.opacityTitle", { mode: label }));
           slider.onChange((alpha) => {
-            const current = parseColor(this.valueFor(item, mode));
+            const current = parseColor(this.displayValueFor(item, mode));
+            valueLabel?.setText(colorWithAlpha(current.hex, alpha).toUpperCase());
             this.updateThemedColor(item, mode, current.hex, alpha);
           });
-        });
+        }));
       }
-      setting.addExtraButton((button) => {
+      appendNewControls(() => setting.addExtraButton((button) => {
         button
           .setIcon("rotate-ccw")
           .setTooltip(this.plugin.t("color.resetTheme", { mode: label }))
           .onClick(async () => {
             await this.plugin.clearThemeColorMode(item.id, mode);
-            const restored = parseColor(this.valueFor(item, mode));
+            this.refreshDisplayDefaults();
+            const restored = parseColor(this.displayValueFor(item, mode));
             pickerComponent?.setValue(restored.hex);
             sliderComponent?.setValue(restored.alpha);
+            valueLabel?.setText(colorWithAlpha(restored.hex, item.opacity ? restored.alpha : 1).toUpperCase());
           });
         button.extraSettingsEl?.addClass("bysan-color-reset");
-      });
+      }));
     }
   }
 

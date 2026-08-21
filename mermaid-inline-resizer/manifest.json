@@ -1,7 +1,7 @@
 {
   "id": "mermaid-inline-resizer",
   "name": "Mermaid Inline Resizer",
-  "version": "0.11.1",
+  "version": "0.12.0",
   "minAppVersion": "1.13.0",
   "description": "Resize Mermaid diagrams, standalone images, and Markdown tables across Live Preview, Reading View, and PDF.",
   "author": "Bysan",

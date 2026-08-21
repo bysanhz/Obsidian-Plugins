@@ -1,7 +1,7 @@
 /**
  * Mermaid Inline Resizer
  *
- * Version: 0.11.1
+ * Version: 0.12.0
  *
  * 稳定四按钮 + PDF 同步版。
  *
@@ -38,7 +38,10 @@
 
 const {
   Plugin,
-  MarkdownView
+  MarkdownView,
+  MarkdownRenderer,
+  Modal,
+  Notice
 } = require("obsidian");
 
 const {
@@ -69,6 +72,416 @@ const STEP_OPTIONS = [
 ];
 
 const DEFAULT_STEP = 3;
+
+
+class PdfPreviewModal extends Modal {
+
+  constructor(app, plugin, view) {
+    super(app);
+    this.plugin = plugin;
+    this.view = view;
+    this.previewTimer = null;
+    this.paperSize = "A4";
+    this.orientation = "portrait";
+    this.marginMode = "normal";
+    this.previewZoom = 75;
+    this.currentPage = 1;
+    this.pageCount = 1;
+  }
+
+
+  onOpen() {
+    this.modalEl.addClass("mir-pdf-preview-modal");
+    this.contentEl.empty();
+
+    const header = this.contentEl.createDiv({ cls: "mir-pdf-preview-header" });
+    const titleGroup = header.createDiv({ cls: "mir-pdf-preview-title-group" });
+    titleGroup.createEl("h2", {
+      text: `PDF 预览：${this.view.file?.basename || "当前笔记"}`
+    });
+    titleGroup.createDiv({
+      cls: "mir-pdf-preview-hint",
+      text: "A4 分页预览；最终页边距和文件位置由 Obsidian 导出窗口决定。"
+    });
+    this.pageCountEl = titleGroup.createDiv({
+      cls: "mir-pdf-preview-page-count",
+      text: "正在生成分页…"
+    });
+
+    const workspace = this.contentEl.createDiv({
+      cls: "mir-pdf-preview-workspace"
+    });
+    const previewPane = workspace.createDiv({ cls: "mir-pdf-preview-pane" });
+    this.previewScrollEl = previewPane.createDiv({
+      cls: "mir-pdf-preview-scroll"
+    });
+    this.previewPagesEl = this.previewScrollEl.createDiv({
+      cls: "mir-pdf-preview-pages"
+    });
+    const navigation = previewPane.createDiv({
+      cls: "mir-pdf-preview-navigation"
+    });
+    this.previousPageButton = navigation.createEl("button", {
+      text: "←",
+      attr: { type: "button", title: "上一页" }
+    });
+    const pageJump = navigation.createDiv({ cls: "mir-pdf-preview-page-jump" });
+    pageJump.createSpan({ text: "第" });
+    this.pageInput = pageJump.createEl("input", {
+      attr: { type: "number", min: "1", value: "1", "aria-label": "跳转页码" }
+    });
+    this.pageTotalEl = pageJump.createSpan({ text: "/ 1 页" });
+    this.nextPageButton = navigation.createEl("button", {
+      text: "→",
+      attr: { type: "button", title: "下一页" }
+    });
+
+    const sidebar = workspace.createDiv({ cls: "mir-pdf-preview-sidebar" });
+    sidebar.createEl("h3", { text: "预览与导出" });
+    const makeField = (label) => {
+      const field = sidebar.createDiv({ cls: "mir-pdf-preview-field" });
+      field.createEl("label", { text: label });
+      return field;
+    };
+
+    const paperField = makeField("纸张尺寸");
+    const paperSelect = paperField.createEl("select");
+    ["A3", "A4", "A5", "Letter", "Legal", "Tabloid"].forEach((name) => {
+      const option = paperSelect.createEl("option", { text: name });
+      option.value = name;
+      option.selected = name === this.paperSize;
+    });
+
+    const orientationField = makeField("页面方向");
+    const orientationSelect = orientationField.createEl("select");
+    [["portrait", "纵向"], ["landscape", "横向"]].forEach(([value, text]) => {
+      const option = orientationSelect.createEl("option", { text });
+      option.value = value;
+    });
+
+    const marginField = makeField("页边距");
+    const marginSelect = marginField.createEl("select");
+    [["normal", "默认"], ["small", "小"], ["none", "无"]].forEach(
+      ([value, text]) => {
+        const option = marginSelect.createEl("option", { text });
+        option.value = value;
+      }
+    );
+
+    const zoomField = makeField("预览缩放");
+    const zoomRow = zoomField.createDiv({ cls: "mir-pdf-preview-zoom-row" });
+    const zoomInput = zoomRow.createEl("input", {
+      attr: { type: "range", min: "40", max: "120", step: "5", value: "75" }
+    });
+    const zoomValue = zoomRow.createSpan({ text: "75%" });
+
+    const actions = sidebar.createDiv({ cls: "mir-pdf-preview-actions" });
+    const refresh = actions.createEl("button", {
+      text: "刷新预览",
+      attr: { type: "button" }
+    });
+    const exportButton = actions.createEl("button", {
+      cls: "mod-cta",
+      text: "导出 PDF",
+      attr: { type: "button" }
+    });
+    sidebar.createDiv({
+      cls: "mir-pdf-preview-sidebar-hint",
+      text: "导出时会打开 Obsidian 原生打印设置；请在其中确认相同的纸张、方向与页边距。"
+    });
+
+    this.previewStagingEl = this.contentEl.createDiv({
+      cls: "mir-pdf-preview-staging markdown-rendered"
+    });
+
+    this.previousPageButton.addEventListener("click", () => {
+      this.showPage(this.currentPage - 1);
+    });
+    this.nextPageButton.addEventListener("click", () => {
+      this.showPage(this.currentPage + 1);
+    });
+    this.pageInput.addEventListener("change", () => {
+      this.showPage(Number(this.pageInput.value));
+    });
+    paperSelect.addEventListener("change", () => {
+      this.paperSize = paperSelect.value;
+      this.applyLayoutSettings();
+    });
+    orientationSelect.addEventListener("change", () => {
+      this.orientation = orientationSelect.value;
+      this.applyLayoutSettings();
+    });
+    marginSelect.addEventListener("change", () => {
+      this.marginMode = marginSelect.value;
+      this.applyLayoutSettings();
+    });
+    zoomInput.addEventListener("input", () => {
+      this.previewZoom = Number(zoomInput.value);
+      zoomValue.setText(`${this.previewZoom}%`);
+      this.previewPagesEl.style.zoom = String(this.previewZoom / 100);
+    });
+    refresh.addEventListener("click", () => void this.renderPreview());
+    exportButton.addEventListener("click", () => {
+      this.close();
+      window.setTimeout(() => void this.plugin.exportActiveNoteToPdf(), 50);
+    });
+
+    this.previewObserver = new MutationObserver(() => {
+      this.schedulePagination(120);
+    });
+    this.previewObserver.observe(this.previewStagingEl, {
+      childList: true,
+      subtree: true
+    });
+
+    this.applyLayoutSettings(false);
+    void this.renderPreview();
+  }
+
+
+  async renderPreview() {
+    const markdown = this.view.editor?.getValue();
+    if (typeof markdown !== "string") {
+      this.previewPagesEl.setText("无法读取当前笔记。");
+      return;
+    }
+
+    this.previewPagesEl.empty();
+    this.previewStagingEl.empty();
+    this.pageCountEl.setText("正在生成分页…");
+    await MarkdownRenderer.render(
+      this.app,
+      markdown,
+      this.previewStagingEl,
+      this.view.file?.path || "",
+      this
+    );
+    this.plugin.applyWidthsToPdfPreview(this.previewStagingEl, markdown);
+    this.previewStagingEl.querySelectorAll("img").forEach((image) => {
+      if (!image.complete) {
+        image.addEventListener("load", () => this.schedulePagination(40), {
+          once: true
+        });
+      }
+    });
+    this.schedulePagination(40);
+    this.schedulePagination(500);
+  }
+
+
+  schedulePagination(delay = 100) {
+    window.clearTimeout(this.previewTimer);
+    this.previewTimer = window.setTimeout(() => this.paginatePreview(), delay);
+  }
+
+
+  applyLayoutSettings(repaginate = true) {
+    const sizes = {
+      A3: [297, 420],
+      A4: [210, 297],
+      A5: [148, 210],
+      Letter: [216, 279],
+      Legal: [216, 356],
+      Tabloid: [279, 432]
+    };
+    let [width, height] = sizes[this.paperSize] || sizes.A4;
+    if (this.orientation === "landscape") [width, height] = [height, width];
+    const margins = {
+      normal: [18, 16],
+      small: [10, 10],
+      none: [0, 0]
+    };
+    const [marginY, marginX] = margins[this.marginMode] || margins.normal;
+    [this.previewPagesEl, this.previewStagingEl].forEach((element) => {
+      element.style.setProperty("--mir-pdf-page-width", `${width}mm`);
+      element.style.setProperty("--mir-pdf-page-height", `${height}mm`);
+      element.style.setProperty("--mir-pdf-margin-y", `${marginY}mm`);
+      element.style.setProperty("--mir-pdf-margin-x", `${marginX}mm`);
+    });
+    this.previewPagesEl.style.zoom = String(this.previewZoom / 100);
+    if (repaginate) this.schedulePagination(40);
+  }
+
+
+  createPreviewPage(pageNumber) {
+    const page = this.previewPagesEl.createDiv({ cls: "mir-pdf-preview-page" });
+    page.dataset.pageNumber = String(pageNumber);
+    const content = page.createDiv({
+      cls: "mir-pdf-preview-page-content markdown-rendered"
+    });
+    return { page, content };
+  }
+
+
+  paginatePreview() {
+    if (!this.previewStagingEl?.isConnected) return;
+    const markdown = this.view.editor?.getValue() || "";
+    this.plugin.applyWidthsToPdfPreview(this.previewStagingEl, markdown);
+    this.previewPagesEl.empty();
+
+    let pageNumber = 1;
+    let { content } = this.createPreviewPage(pageNumber);
+    let hasContent = false;
+    const nodes = Array.from(this.previewStagingEl.childNodes);
+
+    nodes.forEach((sourceNode) => {
+      const clone = sourceNode.cloneNode(true);
+      content.appendChild(clone);
+      const isWhitespace =
+        clone.nodeType === Node.TEXT_NODE && !clone.textContent.trim();
+      const overflows = content.scrollHeight > content.clientHeight + 1;
+
+      if (overflows && hasContent && !isWhitespace) {
+        clone.remove();
+        pageNumber += 1;
+        ({ content } = this.createPreviewPage(pageNumber));
+        content.appendChild(clone);
+      }
+      if (!isWhitespace) hasContent = true;
+    });
+
+    this.pageCount = pageNumber;
+    this.pageCountEl.setText(`共 ${pageNumber} 页`);
+    this.showPage(Math.min(this.currentPage, pageNumber));
+  }
+
+
+  showPage(pageNumber) {
+    const target = Math.min(
+      this.pageCount,
+      Math.max(1, Number.isFinite(pageNumber) ? Math.round(pageNumber) : 1)
+    );
+    this.currentPage = target;
+    this.previewPagesEl.querySelectorAll(".mir-pdf-preview-page").forEach(
+      (page, index) => page.classList.toggle("is-hidden", index + 1 !== target)
+    );
+    this.pageInput.value = String(target);
+    this.pageInput.max = String(this.pageCount);
+    this.pageTotalEl.setText(`/ ${this.pageCount} 页`);
+    this.previousPageButton.disabled = target <= 1;
+    this.nextPageButton.disabled = target >= this.pageCount;
+    this.previewScrollEl.scrollTo({ top: 0, left: 0 });
+  }
+
+
+  onClose() {
+    window.clearTimeout(this.previewTimer);
+    this.previewObserver?.disconnect();
+    this.contentEl.empty();
+  }
+}
+
+
+class MermaidZoomModal extends Modal {
+
+  constructor(app, sourceMermaid) {
+    super(app);
+    this.sourceMermaid = sourceMermaid;
+    this.scale = 1;
+    this.panX = 0;
+    this.panY = 0;
+    this.dragging = false;
+  }
+
+
+  onOpen() {
+    this.modalEl.addClass("mir-zoom-modal");
+    this.contentEl.empty();
+
+    const toolbar = this.contentEl.createDiv({ cls: "mir-zoom-toolbar" });
+    const makeButton = (text, title, className = "") => {
+      const button = toolbar.createEl("button", {
+        cls: className,
+        text,
+        attr: { type: "button", title }
+      });
+      button.tabIndex = -1;
+      return button;
+    };
+    const minus = makeButton("−", "缩小");
+    this.scaleButton = makeButton("100%", "恢复 100%", "mir-zoom-reset");
+    const plus = makeButton("+", "放大");
+    const close = makeButton("×", "关闭", "mir-zoom-close");
+
+    this.viewportEl = this.contentEl.createDiv({ cls: "mir-zoom-viewport" });
+    this.canvasEl = this.viewportEl.createDiv({ cls: "mir-zoom-canvas" });
+    const svg = this.sourceMermaid.querySelector("svg");
+    if (!svg) {
+      this.canvasEl.setText("当前 Mermaid 尚未渲染完成。");
+      return;
+    }
+    const clone = svg.cloneNode(true);
+    clone.removeAttribute("style");
+    clone.style.width = "auto";
+    clone.style.maxWidth = "none";
+    clone.style.height = "auto";
+    this.canvasEl.appendChild(clone);
+
+    minus.addEventListener("click", () => this.zoomBy(0.8));
+    plus.addEventListener("click", () => this.zoomBy(1.25));
+    this.scaleButton.addEventListener("click", () => this.resetTransform());
+    close.addEventListener("click", () => this.close());
+
+    this.viewportEl.addEventListener("wheel", (event) => {
+      event.preventDefault();
+      this.zoomBy(event.deltaY < 0 ? 1.12 : 1 / 1.12);
+    }, { passive: false });
+    this.viewportEl.addEventListener("dblclick", () => this.resetTransform());
+    this.viewportEl.addEventListener("pointerdown", (event) => {
+      if (event.button !== 0) return;
+      this.dragging = true;
+      this.lastX = event.clientX;
+      this.lastY = event.clientY;
+      this.viewportEl.setPointerCapture(event.pointerId);
+      this.viewportEl.classList.add("is-dragging");
+    });
+    this.viewportEl.addEventListener("pointermove", (event) => {
+      if (!this.dragging) return;
+      this.panX += event.clientX - this.lastX;
+      this.panY += event.clientY - this.lastY;
+      this.lastX = event.clientX;
+      this.lastY = event.clientY;
+      this.updateTransform();
+    });
+    const stopDragging = () => {
+      this.dragging = false;
+      this.viewportEl.classList.remove("is-dragging");
+    };
+    this.viewportEl.addEventListener("pointerup", stopDragging);
+    this.viewportEl.addEventListener("pointercancel", stopDragging);
+
+    this.updateTransform();
+  }
+
+
+  zoomBy(factor) {
+    this.scale = Math.min(5, Math.max(0.25, this.scale * factor));
+    this.updateTransform();
+  }
+
+
+  resetTransform() {
+    this.scale = 1;
+    this.panX = 0;
+    this.panY = 0;
+    this.updateTransform();
+  }
+
+
+  updateTransform() {
+    if (!this.canvasEl) return;
+    this.canvasEl.style.transform =
+      `translate(${this.panX}px, ${this.panY}px) scale(${this.scale})`;
+    if (this.scaleButton) {
+      this.scaleButton.textContent = `${Math.round(this.scale * 100)}%`;
+    }
+  }
+
+
+  onClose() {
+    this.contentEl.empty();
+  }
+}
 
 
 /*
@@ -288,8 +701,10 @@ module.exports = class MermaidInlineResizer extends Plugin {
 
   async onload() {
     console.log(
-      "[Mermaid Inline Resizer] v0.11.1 loaded"
+      "[Mermaid Inline Resizer] v0.12.0 loaded"
     );
+
+    document.body.classList.add("mir-plugin-active");
 
 
     /* -------------------------------------------------------
@@ -349,6 +764,40 @@ module.exports = class MermaidInlineResizer extends Plugin {
     });
     this.registerDomEvent(document, "mousedown", captureControlPointer, {
       capture: true
+    });
+
+    this.addCommand({
+      id: "preview-active-note-pdf",
+      name: "预览当前笔记的 PDF",
+      checkCallback: (checking) => {
+        const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+        if (!view) {
+          return false;
+        }
+        if (!checking) {
+          this.openPdfPreview(view);
+        }
+        return true;
+      }
+    });
+
+    this.addCommand({
+      id: "export-active-note-pdf",
+      name: "导出当前笔记为 PDF",
+      checkCallback: (checking) => {
+        const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+        if (!view) {
+          return false;
+        }
+        if (!checking) {
+          void this.exportActiveNoteToPdf(view);
+        }
+        return true;
+      }
+    });
+
+    this.addRibbonIcon("file-down", "PDF 预览与导出", () => {
+      this.openPdfPreview();
     });
 
 
@@ -580,6 +1029,8 @@ module.exports = class MermaidInlineResizer extends Plugin {
 
   onunload() {
 
+    document.body.classList.remove("mir-plugin-active");
+
     if (this.observer) {
 
       this.observer.disconnect();
@@ -602,7 +1053,7 @@ module.exports = class MermaidInlineResizer extends Plugin {
      */
     document
       .querySelectorAll(
-        ".mir-button-group:not(.mir-source-table-controls)"
+        ".mir-button-group:not(.mir-source-table-controls), .mir-fullscreen-button"
       )
       .forEach(
       (control) => control.remove()
@@ -2662,6 +3113,100 @@ module.exports = class MermaidInlineResizer extends Plugin {
     });
   }
 
+
+  openPdfPreview(view = this.app.workspace.getActiveViewOfType(MarkdownView)) {
+    if (!view?.editor) {
+      new Notice("请先打开一个 Markdown 笔记。");
+      return;
+    }
+    window.setTimeout(() => {
+      new PdfPreviewModal(this.app, this, view).open();
+    }, 80);
+  }
+
+
+  async exportActiveNoteToPdf(
+    view = this.app.workspace.getActiveViewOfType(MarkdownView)
+  ) {
+    if (!view?.editor) {
+      new Notice("请先打开一个 Markdown 笔记。");
+      return;
+    }
+    this.updateActiveWidthCacheFromEditor(view.editor);
+    this.applyCachedWidthsToRenderedCopies();
+    await new Promise((resolve) => window.requestAnimationFrame(resolve));
+    await new Promise((resolve) => window.requestAnimationFrame(resolve));
+    if (typeof view.printToPdf === "function") {
+      view.printToPdf();
+      return;
+    }
+    this.app.commands.executeCommandById("workspace:export-pdf");
+  }
+
+
+  applyWidthsToPdfPreview(root, markdown) {
+    const mermaidEntries = this.extractWidthEntriesFromMarkdown(markdown);
+    root.querySelectorAll(".mermaid").forEach((mermaid, index) => {
+      const entry = mermaidEntries[index];
+      if (entry) this.applyWidth(mermaid, entry.width);
+    });
+
+    const mediaEntries = this.extractMediaEntriesFromMarkdown(markdown);
+    const imageEntries = mediaEntries.filter((entry) => entry.kind === "image");
+    const tableEntries = mediaEntries.filter((entry) => entry.kind === "table");
+    const images = Array.from(new Set(root.querySelectorAll(".image-embed img, img")));
+    images.forEach((image, index) => {
+      const entry = imageEntries[index];
+      if (entry) this.applyMediaWidth(image, entry.width, "image");
+    });
+    root.querySelectorAll("table").forEach((table, index) => {
+      const entry = tableEntries[index];
+      if (entry) this.applyMediaWidth(table, entry.width, "table");
+    });
+  }
+
+
+  shouldInstallFullscreenControl(mermaidEl) {
+    return !mermaidEl.closest(
+      ".print, .print-container, .pdf-export, .mir-pdf-preview-page, .mir-pdf-preview-staging, .mir-zoom-modal"
+    );
+  }
+
+
+  installFullscreenZoomControl(mermaidEl) {
+    if (
+      !this.shouldInstallFullscreenControl(mermaidEl) ||
+      mermaidEl.querySelector(":scope > .mir-fullscreen-button")
+    ) {
+      return;
+    }
+    const button = document.createElement("button");
+    button.type = "button";
+    button.tabIndex = -1;
+    button.className = "mir-fullscreen-button";
+    button.textContent = "⛶";
+    button.title = "全屏查看并缩放 Mermaid";
+    ["pointerdown", "mousedown"].forEach((eventName) => {
+      button.addEventListener(eventName, (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+      });
+    });
+    button.onclick = (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      window.setTimeout(() => {
+        try {
+          new MermaidZoomModal(this.app, mermaidEl).open();
+        } catch (error) {
+          console.error("[Mermaid Inline Resizer] 无法打开缩放窗口", error);
+          new Notice(`无法打开 Mermaid 缩放窗口：${error?.message || error}`);
+        }
+      }, 80);
+    };
+    mermaidEl.appendChild(button);
+  }
+
   clampWidth(
     value
   ) {
@@ -2749,6 +3294,8 @@ module.exports = class MermaidInlineResizer extends Plugin {
       "border-box",
       "important"
     );
+
+    this.installFullscreenZoomControl(mermaidEl);
 
 
     /*

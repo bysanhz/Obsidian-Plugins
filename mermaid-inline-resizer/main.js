@@ -1,9 +1,9 @@
 /**
  * Mermaid Inline Resizer
  *
- * Version: 0.12.0
+ * Version: 0.12.1
  *
- * 稳定四按钮 + PDF 同步版。
+ * 稳定四按钮版。
  *
  * 控件：
  *
@@ -25,8 +25,8 @@
  *      %% width: 72%
  *
  * 7. Reading View 自动读取同一宽度。
- * 8. PDF Export 自动读取同一宽度。
- * 9. PDF 中不会显示控制按钮。
+ * 8. 对外提供渲染结果宽度同步接口，供其他插件的预览使用。
+ * 9. 打印时不会显示控制按钮。
  * 10. 不使用 Slider，不监听滚轮，避免连续触发 Mermaid 重绘。
  *
  * Target:
@@ -39,7 +39,6 @@
 const {
   Plugin,
   MarkdownView,
-  MarkdownRenderer,
   Modal,
   Notice
 } = require("obsidian");
@@ -72,304 +71,6 @@ const STEP_OPTIONS = [
 ];
 
 const DEFAULT_STEP = 3;
-
-
-class PdfPreviewModal extends Modal {
-
-  constructor(app, plugin, view) {
-    super(app);
-    this.plugin = plugin;
-    this.view = view;
-    this.previewTimer = null;
-    this.paperSize = "A4";
-    this.orientation = "portrait";
-    this.marginMode = "normal";
-    this.previewZoom = 75;
-    this.currentPage = 1;
-    this.pageCount = 1;
-  }
-
-
-  onOpen() {
-    this.modalEl.addClass("mir-pdf-preview-modal");
-    this.contentEl.empty();
-
-    const header = this.contentEl.createDiv({ cls: "mir-pdf-preview-header" });
-    const titleGroup = header.createDiv({ cls: "mir-pdf-preview-title-group" });
-    titleGroup.createEl("h2", {
-      text: `PDF 预览：${this.view.file?.basename || "当前笔记"}`
-    });
-    titleGroup.createDiv({
-      cls: "mir-pdf-preview-hint",
-      text: "A4 分页预览；最终页边距和文件位置由 Obsidian 导出窗口决定。"
-    });
-    this.pageCountEl = titleGroup.createDiv({
-      cls: "mir-pdf-preview-page-count",
-      text: "正在生成分页…"
-    });
-
-    const workspace = this.contentEl.createDiv({
-      cls: "mir-pdf-preview-workspace"
-    });
-    const previewPane = workspace.createDiv({ cls: "mir-pdf-preview-pane" });
-    this.previewScrollEl = previewPane.createDiv({
-      cls: "mir-pdf-preview-scroll"
-    });
-    this.previewPagesEl = this.previewScrollEl.createDiv({
-      cls: "mir-pdf-preview-pages"
-    });
-    const navigation = previewPane.createDiv({
-      cls: "mir-pdf-preview-navigation"
-    });
-    this.previousPageButton = navigation.createEl("button", {
-      text: "←",
-      attr: { type: "button", title: "上一页" }
-    });
-    const pageJump = navigation.createDiv({ cls: "mir-pdf-preview-page-jump" });
-    pageJump.createSpan({ text: "第" });
-    this.pageInput = pageJump.createEl("input", {
-      attr: { type: "number", min: "1", value: "1", "aria-label": "跳转页码" }
-    });
-    this.pageTotalEl = pageJump.createSpan({ text: "/ 1 页" });
-    this.nextPageButton = navigation.createEl("button", {
-      text: "→",
-      attr: { type: "button", title: "下一页" }
-    });
-
-    const sidebar = workspace.createDiv({ cls: "mir-pdf-preview-sidebar" });
-    sidebar.createEl("h3", { text: "预览与导出" });
-    const makeField = (label) => {
-      const field = sidebar.createDiv({ cls: "mir-pdf-preview-field" });
-      field.createEl("label", { text: label });
-      return field;
-    };
-
-    const paperField = makeField("纸张尺寸");
-    const paperSelect = paperField.createEl("select");
-    ["A3", "A4", "A5", "Letter", "Legal", "Tabloid"].forEach((name) => {
-      const option = paperSelect.createEl("option", { text: name });
-      option.value = name;
-      option.selected = name === this.paperSize;
-    });
-
-    const orientationField = makeField("页面方向");
-    const orientationSelect = orientationField.createEl("select");
-    [["portrait", "纵向"], ["landscape", "横向"]].forEach(([value, text]) => {
-      const option = orientationSelect.createEl("option", { text });
-      option.value = value;
-    });
-
-    const marginField = makeField("页边距");
-    const marginSelect = marginField.createEl("select");
-    [["normal", "默认"], ["small", "小"], ["none", "无"]].forEach(
-      ([value, text]) => {
-        const option = marginSelect.createEl("option", { text });
-        option.value = value;
-      }
-    );
-
-    const zoomField = makeField("预览缩放");
-    const zoomRow = zoomField.createDiv({ cls: "mir-pdf-preview-zoom-row" });
-    const zoomInput = zoomRow.createEl("input", {
-      attr: { type: "range", min: "40", max: "120", step: "5", value: "75" }
-    });
-    const zoomValue = zoomRow.createSpan({ text: "75%" });
-
-    const actions = sidebar.createDiv({ cls: "mir-pdf-preview-actions" });
-    const refresh = actions.createEl("button", {
-      text: "刷新预览",
-      attr: { type: "button" }
-    });
-    const exportButton = actions.createEl("button", {
-      cls: "mod-cta",
-      text: "导出 PDF",
-      attr: { type: "button" }
-    });
-    sidebar.createDiv({
-      cls: "mir-pdf-preview-sidebar-hint",
-      text: "导出时会打开 Obsidian 原生打印设置；请在其中确认相同的纸张、方向与页边距。"
-    });
-
-    this.previewStagingEl = this.contentEl.createDiv({
-      cls: "mir-pdf-preview-staging markdown-rendered"
-    });
-
-    this.previousPageButton.addEventListener("click", () => {
-      this.showPage(this.currentPage - 1);
-    });
-    this.nextPageButton.addEventListener("click", () => {
-      this.showPage(this.currentPage + 1);
-    });
-    this.pageInput.addEventListener("change", () => {
-      this.showPage(Number(this.pageInput.value));
-    });
-    paperSelect.addEventListener("change", () => {
-      this.paperSize = paperSelect.value;
-      this.applyLayoutSettings();
-    });
-    orientationSelect.addEventListener("change", () => {
-      this.orientation = orientationSelect.value;
-      this.applyLayoutSettings();
-    });
-    marginSelect.addEventListener("change", () => {
-      this.marginMode = marginSelect.value;
-      this.applyLayoutSettings();
-    });
-    zoomInput.addEventListener("input", () => {
-      this.previewZoom = Number(zoomInput.value);
-      zoomValue.setText(`${this.previewZoom}%`);
-      this.previewPagesEl.style.zoom = String(this.previewZoom / 100);
-    });
-    refresh.addEventListener("click", () => void this.renderPreview());
-    exportButton.addEventListener("click", () => {
-      this.close();
-      window.setTimeout(() => void this.plugin.exportActiveNoteToPdf(), 50);
-    });
-
-    this.previewObserver = new MutationObserver(() => {
-      this.schedulePagination(120);
-    });
-    this.previewObserver.observe(this.previewStagingEl, {
-      childList: true,
-      subtree: true
-    });
-
-    this.applyLayoutSettings(false);
-    void this.renderPreview();
-  }
-
-
-  async renderPreview() {
-    const markdown = this.view.editor?.getValue();
-    if (typeof markdown !== "string") {
-      this.previewPagesEl.setText("无法读取当前笔记。");
-      return;
-    }
-
-    this.previewPagesEl.empty();
-    this.previewStagingEl.empty();
-    this.pageCountEl.setText("正在生成分页…");
-    await MarkdownRenderer.render(
-      this.app,
-      markdown,
-      this.previewStagingEl,
-      this.view.file?.path || "",
-      this
-    );
-    this.plugin.applyWidthsToPdfPreview(this.previewStagingEl, markdown);
-    this.previewStagingEl.querySelectorAll("img").forEach((image) => {
-      if (!image.complete) {
-        image.addEventListener("load", () => this.schedulePagination(40), {
-          once: true
-        });
-      }
-    });
-    this.schedulePagination(40);
-    this.schedulePagination(500);
-  }
-
-
-  schedulePagination(delay = 100) {
-    window.clearTimeout(this.previewTimer);
-    this.previewTimer = window.setTimeout(() => this.paginatePreview(), delay);
-  }
-
-
-  applyLayoutSettings(repaginate = true) {
-    const sizes = {
-      A3: [297, 420],
-      A4: [210, 297],
-      A5: [148, 210],
-      Letter: [216, 279],
-      Legal: [216, 356],
-      Tabloid: [279, 432]
-    };
-    let [width, height] = sizes[this.paperSize] || sizes.A4;
-    if (this.orientation === "landscape") [width, height] = [height, width];
-    const margins = {
-      normal: [18, 16],
-      small: [10, 10],
-      none: [0, 0]
-    };
-    const [marginY, marginX] = margins[this.marginMode] || margins.normal;
-    [this.previewPagesEl, this.previewStagingEl].forEach((element) => {
-      element.style.setProperty("--mir-pdf-page-width", `${width}mm`);
-      element.style.setProperty("--mir-pdf-page-height", `${height}mm`);
-      element.style.setProperty("--mir-pdf-margin-y", `${marginY}mm`);
-      element.style.setProperty("--mir-pdf-margin-x", `${marginX}mm`);
-    });
-    this.previewPagesEl.style.zoom = String(this.previewZoom / 100);
-    if (repaginate) this.schedulePagination(40);
-  }
-
-
-  createPreviewPage(pageNumber) {
-    const page = this.previewPagesEl.createDiv({ cls: "mir-pdf-preview-page" });
-    page.dataset.pageNumber = String(pageNumber);
-    const content = page.createDiv({
-      cls: "mir-pdf-preview-page-content markdown-rendered"
-    });
-    return { page, content };
-  }
-
-
-  paginatePreview() {
-    if (!this.previewStagingEl?.isConnected) return;
-    const markdown = this.view.editor?.getValue() || "";
-    this.plugin.applyWidthsToPdfPreview(this.previewStagingEl, markdown);
-    this.previewPagesEl.empty();
-
-    let pageNumber = 1;
-    let { content } = this.createPreviewPage(pageNumber);
-    let hasContent = false;
-    const nodes = Array.from(this.previewStagingEl.childNodes);
-
-    nodes.forEach((sourceNode) => {
-      const clone = sourceNode.cloneNode(true);
-      content.appendChild(clone);
-      const isWhitespace =
-        clone.nodeType === Node.TEXT_NODE && !clone.textContent.trim();
-      const overflows = content.scrollHeight > content.clientHeight + 1;
-
-      if (overflows && hasContent && !isWhitespace) {
-        clone.remove();
-        pageNumber += 1;
-        ({ content } = this.createPreviewPage(pageNumber));
-        content.appendChild(clone);
-      }
-      if (!isWhitespace) hasContent = true;
-    });
-
-    this.pageCount = pageNumber;
-    this.pageCountEl.setText(`共 ${pageNumber} 页`);
-    this.showPage(Math.min(this.currentPage, pageNumber));
-  }
-
-
-  showPage(pageNumber) {
-    const target = Math.min(
-      this.pageCount,
-      Math.max(1, Number.isFinite(pageNumber) ? Math.round(pageNumber) : 1)
-    );
-    this.currentPage = target;
-    this.previewPagesEl.querySelectorAll(".mir-pdf-preview-page").forEach(
-      (page, index) => page.classList.toggle("is-hidden", index + 1 !== target)
-    );
-    this.pageInput.value = String(target);
-    this.pageInput.max = String(this.pageCount);
-    this.pageTotalEl.setText(`/ ${this.pageCount} 页`);
-    this.previousPageButton.disabled = target <= 1;
-    this.nextPageButton.disabled = target >= this.pageCount;
-    this.previewScrollEl.scrollTo({ top: 0, left: 0 });
-  }
-
-
-  onClose() {
-    window.clearTimeout(this.previewTimer);
-    this.previewObserver?.disconnect();
-    this.contentEl.empty();
-  }
-}
 
 
 class MermaidZoomModal extends Modal {
@@ -701,7 +402,7 @@ module.exports = class MermaidInlineResizer extends Plugin {
 
   async onload() {
     console.log(
-      "[Mermaid Inline Resizer] v0.12.0 loaded"
+      "[Mermaid Inline Resizer] v0.12.1 loaded"
     );
 
     document.body.classList.add("mir-plugin-active");
@@ -765,41 +466,6 @@ module.exports = class MermaidInlineResizer extends Plugin {
     this.registerDomEvent(document, "mousedown", captureControlPointer, {
       capture: true
     });
-
-    this.addCommand({
-      id: "preview-active-note-pdf",
-      name: "预览当前笔记的 PDF",
-      checkCallback: (checking) => {
-        const view = this.app.workspace.getActiveViewOfType(MarkdownView);
-        if (!view) {
-          return false;
-        }
-        if (!checking) {
-          this.openPdfPreview(view);
-        }
-        return true;
-      }
-    });
-
-    this.addCommand({
-      id: "export-active-note-pdf",
-      name: "导出当前笔记为 PDF",
-      checkCallback: (checking) => {
-        const view = this.app.workspace.getActiveViewOfType(MarkdownView);
-        if (!view) {
-          return false;
-        }
-        if (!checking) {
-          void this.exportActiveNoteToPdf(view);
-        }
-        return true;
-      }
-    });
-
-    this.addRibbonIcon("file-down", "PDF 预览与导出", () => {
-      this.openPdfPreview();
-    });
-
 
     /*
      * 当前缓存对应的文件路径。
@@ -3114,37 +2780,7 @@ module.exports = class MermaidInlineResizer extends Plugin {
   }
 
 
-  openPdfPreview(view = this.app.workspace.getActiveViewOfType(MarkdownView)) {
-    if (!view?.editor) {
-      new Notice("请先打开一个 Markdown 笔记。");
-      return;
-    }
-    window.setTimeout(() => {
-      new PdfPreviewModal(this.app, this, view).open();
-    }, 80);
-  }
-
-
-  async exportActiveNoteToPdf(
-    view = this.app.workspace.getActiveViewOfType(MarkdownView)
-  ) {
-    if (!view?.editor) {
-      new Notice("请先打开一个 Markdown 笔记。");
-      return;
-    }
-    this.updateActiveWidthCacheFromEditor(view.editor);
-    this.applyCachedWidthsToRenderedCopies();
-    await new Promise((resolve) => window.requestAnimationFrame(resolve));
-    await new Promise((resolve) => window.requestAnimationFrame(resolve));
-    if (typeof view.printToPdf === "function") {
-      view.printToPdf();
-      return;
-    }
-    this.app.commands.executeCommandById("workspace:export-pdf");
-  }
-
-
-  applyWidthsToPdfPreview(root, markdown) {
+  applyWidthsToRenderedRoot(root, markdown) {
     const mermaidEntries = this.extractWidthEntriesFromMarkdown(markdown);
     root.querySelectorAll(".mermaid").forEach((mermaid, index) => {
       const entry = mermaidEntries[index];
@@ -3168,7 +2804,7 @@ module.exports = class MermaidInlineResizer extends Plugin {
 
   shouldInstallFullscreenControl(mermaidEl) {
     return !mermaidEl.closest(
-      ".print, .print-container, .pdf-export, .mir-pdf-preview-page, .mir-pdf-preview-staging, .mir-zoom-modal"
+      ".print, .print-container, .pdf-export, .mir-pdf-preview-page, .mir-pdf-preview-staging, .bysan-pdf-preview-page, .bysan-pdf-preview-staging, .mir-zoom-modal"
     );
   }
 

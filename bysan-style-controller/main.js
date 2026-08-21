@@ -1,12 +1,14 @@
 /**
  * Bysan Style Controller
- * Version: 0.8.1
+ * Version: 0.9.0
  *
  * Owns visual presentation only. Heading/equation numbering and media sizing
  * remain exclusively owned by their dedicated plugins.
  */
 
 const {
+  MarkdownRenderer,
+  MarkdownView,
   Modal,
   Notice,
   Plugin,
@@ -22,6 +24,11 @@ const { ThemeControls } = require(app.vault.adapter.getFullPath(
 const { resolveLanguage, translate } = require(app.vault.adapter.getFullPath(
   ".obsidian/plugins/bysan-style-controller/i18n.js"
 ));
+globalThis.__bysanPdfApi = { MarkdownRenderer, Modal, Notice };
+const { BysanPdfPreviewModal } = require(app.vault.adapter.getFullPath(
+  ".obsidian/plugins/bysan-style-controller/pdf-preview.js"
+));
+delete globalThis.__bysanPdfApi;
 delete globalThis.__bysanObsidianSetting;
 
 
@@ -96,6 +103,11 @@ const CONTROLLED_PROPERTIES = [
 const DEFAULT_SETTINGS = {
   settingsVersion: 6,
   uiLanguage: "auto",
+  pdfPaperSize: "A4",
+  pdfOrientation: "portrait",
+  pdfMarginMode: "normal",
+  pdfPreviewZoom: 75,
+  pdfActualScale: 100,
   stylePresets: {},
   activeStylePreset: "__default__",
   stylePresetDirty: false,
@@ -153,7 +165,12 @@ const PRESET_META_KEYS = new Set([
   "stylePresets",
   "activeStylePreset",
   "stylePresetDirty",
-  "uiLanguage"
+  "uiLanguage",
+  "pdfPaperSize",
+  "pdfOrientation",
+  "pdfMarginMode",
+  "pdfPreviewZoom",
+  "pdfActualScale"
 ]);
 
 const PALETTE_SETTING_KEYS = new Set([
@@ -268,6 +285,17 @@ module.exports = class BysanStyleController extends Plugin {
     }
 
     this.addSettingTab(new BysanStyleSettingTab(this.app, this));
+    this.addCommand({
+      id: "preview-and-export-pdf",
+      name: this.t("pdf.command"),
+      checkCallback: (checking) => {
+        const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+        if (!view?.editor) return false;
+        if (!checking) this.openPdfPreview(view);
+        return true;
+      }
+    });
+    this.addRibbonIcon("file-down", this.t("pdf.command"), () => this.openPdfPreview());
     this.applySettings();
 
     this.themeObserver = new MutationObserver(() => {
@@ -298,7 +326,16 @@ module.exports = class BysanStyleController extends Plugin {
       this.register(() => window.clearTimeout(timer));
     }
 
-    console.log(`[Bysan Style Controller] v0.8.2 loaded with ${this.themeControls.count} theme controls`);
+    console.log(`[Bysan Style Controller] v0.9.0 loaded with ${this.themeControls.count} theme controls`);
+  }
+
+
+  openPdfPreview(view = this.app.workspace.getActiveViewOfType(MarkdownView)) {
+    if (!view?.editor) {
+      new Notice(this.t("pdf.openNote"));
+      return;
+    }
+    window.setTimeout(() => new BysanPdfPreviewModal(this.app, this, view).open(), 80);
   }
 
 

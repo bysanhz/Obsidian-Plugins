@@ -10,8 +10,6 @@
 - 图片宽度保存为 `%% image-width: 85% %%`。
 - 表格宽度保存为 `%% table-width: 90% %%`。
 - 支持 Live Preview、阅读视图和 PDF 导出。
-- 内置逐页 PDF 预览：左侧支持页码跳转与箭头翻页，右侧集中调整纸张、方向、页边距和预览缩放。
-- 预览会按实际纸张内容高度重新分页，并可调用 Obsidian 原生 PDF 导出。
 - Mermaid 右上角提供自有全屏按钮；弹窗支持滚轮缩放、`− / + / 100%` 控制、拖拽平移和双击复位。
 - 表格缩放保持 Obsidian 原生表格 Widget，不会切回源码。
 - 点击控件时保留编辑器滚动位置；在 macOS 上会从 `pointerdown` 捕获阶段提前保存滚动快照，避免 CodeMirror 先处理焦点后跳到页首。
@@ -36,7 +34,7 @@ YourVault/.obsidian/plugins/mermaid-inline-resizer/
 
 ## 当前版本
 
-0.12.0
+0.12.1
 
 ## 作者
 

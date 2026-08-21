@@ -746,10 +746,20 @@ class ThemeControls {
 
   filterRows(containerEl, query) {
     const normalized = String(query || "").trim().toLowerCase();
-    for (const row of containerEl.querySelectorAll(".bysan-theme-setting-item")) {
-      row.classList.toggle("bysan-setting-filtered", Boolean(normalized)
-        && !String(row.dataset.bysanSearch || "").includes(normalized));
+    const rows = Array.from(containerEl.querySelectorAll(".setting-item"))
+      .filter((row) => !row.closest(".bysan-settings-nav"));
+    const matches = [];
+
+    for (const row of rows) {
+      const searchable = String(
+        row.dataset.bysanSearch || row.textContent || ""
+      ).toLowerCase();
+      const matched = !normalized || searchable.includes(normalized);
+      row.classList.toggle("bysan-setting-filtered", Boolean(normalized) && !matched);
+      if (normalized && matched) matches.push(row);
     }
+
+    return matches;
   }
 }
 

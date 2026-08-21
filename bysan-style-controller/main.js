@@ -298,7 +298,7 @@ module.exports = class BysanStyleController extends Plugin {
       this.register(() => window.clearTimeout(timer));
     }
 
-    console.log(`[Bysan Style Controller] v0.8.1 loaded with ${this.themeControls.count} theme controls`);
+    console.log(`[Bysan Style Controller] v0.8.2 loaded with ${this.themeControls.count} theme controls`);
   }
 
 
@@ -975,8 +975,79 @@ class BysanStyleSettingTab extends PluginSettingTab {
         "aria-label": this.plugin.t("theme.search")
       }
     });
+    const searchResults = navigation.createDiv({
+      cls: "bysan-settings-search-results is-hidden"
+    });
+    let currentMatches = [];
+    const clearSearch = () => {
+      search.value = "";
+      currentMatches = this.plugin.themeControls.filterRows(containerEl, "");
+      searchResults.empty();
+      searchResults.addClass("is-hidden");
+    };
+    const jumpToResult = (row) => {
+      if (!row?.isConnected) return;
+      clearSearch();
+      window.requestAnimationFrame(() => {
+        row.scrollIntoView({ behavior: "auto", block: "center" });
+        row.classList.add("bysan-search-target");
+        window.setTimeout(() => row.classList.remove("bysan-search-target"), 1400);
+      });
+    };
+    const renderSearchResults = () => {
+      currentMatches = this.plugin.themeControls.filterRows(containerEl, search.value);
+      searchResults.empty();
+      const query = search.value.trim();
+      if (!query) {
+        searchResults.addClass("is-hidden");
+        return;
+      }
+
+      searchResults.removeClass("is-hidden");
+      const chinese = this.plugin.language === "zh";
+      searchResults.createDiv({
+        cls: "bysan-settings-search-summary",
+        text: currentMatches.length
+          ? (chinese ? `找到 ${currentMatches.length} 项` : `${currentMatches.length} results`)
+          : (chinese ? "没有匹配的设置" : "No matching settings")
+      });
+      const list = searchResults.createDiv({ cls: "bysan-settings-search-list" });
+      currentMatches.slice(0, 16).forEach((row) => {
+        const name = row.querySelector(".setting-item-name")?.textContent?.trim()
+          || row.textContent?.trim()
+          || (chinese ? "未命名设置" : "Unnamed setting");
+        const description = row.querySelector(".setting-item-description")
+          ?.textContent?.trim();
+        const button = list.createEl("button", {
+          cls: "bysan-settings-search-result",
+          attr: { type: "button" }
+        });
+        button.createSpan({ cls: "bysan-settings-search-result-name", text: name });
+        if (description) {
+          button.createSpan({
+            cls: "bysan-settings-search-result-desc",
+            text: description
+          });
+        }
+        button.addEventListener("click", () => jumpToResult(row));
+      });
+      if (currentMatches.length > 16) {
+        searchResults.createDiv({
+          cls: "bysan-settings-search-more",
+          text: chinese
+            ? `另有 ${currentMatches.length - 16} 项，请继续输入以缩小范围`
+            : `${currentMatches.length - 16} more; keep typing to narrow the results`
+        });
+      }
+    };
     search.addEventListener("input", () => {
-      this.plugin.themeControls.filterRows(containerEl, search.value);
+      renderSearchResults();
+    });
+    search.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" && currentMatches.length) {
+        event.preventDefault();
+        jumpToResult(currentMatches[0]);
+      }
     });
     const groupGrid = navigation.createDiv({ cls: "bysan-settings-nav-groups" });
 

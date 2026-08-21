@@ -498,6 +498,92 @@ body.bysan-style-controller-active
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--bysan-settings-cta) 24%, transparent) !important;
 }
 
+.bysan-settings-search-results {
+  margin: 0 0 0.65rem;
+  padding: 0.55rem;
+  border: 1px solid var(--bysan-settings-border);
+  border-radius: 8px;
+  background: var(--bysan-settings-surface-secondary);
+}
+
+.bysan-settings-search-results.is-hidden {
+  display: none;
+}
+
+.bysan-settings-search-summary,
+.bysan-settings-search-more {
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+}
+
+.bysan-settings-search-summary {
+  margin: 0 0 0.45rem 0.15rem;
+  font-weight: 650;
+}
+
+.bysan-settings-search-more {
+  margin: 0.45rem 0.15rem 0;
+}
+
+.bysan-settings-search-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.4rem;
+  max-height: 13rem;
+  overflow-y: auto;
+}
+
+.bysan-settings-search-result {
+  display: flex;
+  min-width: 0;
+  min-height: 2.4rem;
+  padding: 0.42rem 0.58rem;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  border: 1px solid var(--bysan-settings-border) !important;
+  border-radius: 7px;
+  background: var(--bysan-settings-surface) !important;
+  color: var(--bysan-settings-text) !important;
+  text-align: left;
+}
+
+.bysan-settings-search-result:hover,
+.bysan-settings-search-result:focus-visible {
+  border-color: var(--bysan-settings-cta) !important;
+}
+
+.bysan-settings-search-result-name,
+.bysan-settings-search-result-desc {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bysan-settings-search-result-name {
+  font-weight: 650;
+}
+
+.bysan-settings-search-result-desc {
+  margin-top: 0.12rem;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+}
+
+.bysan-search-target {
+  outline: 2px solid var(--bysan-settings-cta);
+  outline-offset: 3px;
+  border-radius: 7px;
+}
+
+@media (max-width: 760px) {
+  .bysan-settings-search-list {
+    grid-template-columns: 1fr;
+  }
+}
+
 .bysan-settings-nav-links {
   display: flex;
   flex-wrap: wrap;

@@ -9,7 +9,7 @@
 | [Academic Heading Numbering](./academic-heading-numbering/) | 0.4.1 | 为 Live Preview、阅读视图、Outline 和 PDF 提供统一的学术标题编号 |
 | [Mermaid Inline Resizer](./mermaid-inline-resizer/) | 0.12.0 | 持久化调整 Mermaid、图片和表格宽度，内置 Mermaid 全屏缩放及 PDF 预览/导出，并防止 macOS 点击控件后跳到页首 |
 | [Selection Review Toolbar](./selection-review-toolbar/) | 0.1.1 | 选中文字后显示浮动审阅工具栏，支持格式、颜色、评论与源码模式切换 |
-| [Bysan Style Controller](./bysan-style-controller/) | 0.8.1 | 独立提供 Bysan 基础主题、中英文界面、集成式搜索导航、双模式配色、逐项颜色恢复及低闪烁的 478 项完整原生主题控件 |
+| [Bysan Style Controller](./bysan-style-controller/) | 0.8.2 | 独立提供 Bysan 基础主题、中英文界面、可定位搜索导航、双模式配色、逐项颜色恢复及低闪烁的 478 项完整原生主题控件 |
 
 ## 安装
 

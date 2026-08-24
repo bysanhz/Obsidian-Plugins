@@ -424,8 +424,8 @@ mark.art-hl-gray { background-color: color-mix(in srgb, var(--art-gray) 30%, tra
 }
 
 .art-review-save {
-  color: var(--text-on-accent);
-  background: var(--interactive-accent);
+  color: var(--text-on-accent) !important;
+  background: var(--interactive-accent) !important;
 }
 
 .art-review-delete {

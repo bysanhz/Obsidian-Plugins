@@ -10,6 +10,7 @@
 - Strikethrough：`~~text~~`
 - 8 色高亮：`<mark class="art-hl-red">text</mark>`
 - 8 色字体：`<span class="art-text-blue">text</span>`
+- 4 个用户颜色槽：左侧编号色块用于应用，右侧颜色选择器用于修改；自定义颜色同时支持高亮和字体颜色并在重启后保留。
 - 评论角标：正文仅保留 `%% BYSAN-REVIEW:id %%` 定位标记，评论正文由插件按 ID 管理。
 - 点击角标打开独立评论窗；窗口支持拖拽位置、拖动右下角调整大小，并记忆尺寸与位置。
 - 评论窗左侧书写 Markdown/LaTeX，右侧即时预览；支持 `$...$`、`$$...$$` 及 Obsidian Markdown。
@@ -75,7 +76,7 @@ YourVault/.obsidian/plugins/selection-review-toolbar/
 
 ## 当前版本
 
-0.2.0
+0.2.1
 
 ## 作者
 

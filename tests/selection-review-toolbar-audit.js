@@ -45,6 +45,8 @@ assert(parsed[0].start < parsed[1].start, "markers must be source ordered");
 assert.equal(createReviewId(), "123456781234");
 assert.equal(DEFAULT_DATA.popup.width, 560);
 assert.equal(DEFAULT_DATA.popup.height, 420);
+assert.equal(DEFAULT_DATA.customColors.length, 4);
+assert(DEFAULT_DATA.customColors.every((value) => /^#[0-9a-f]{6}$/i.test(value)));
 
 for (const method of [
   "createReviewWindow", "installReviewWindowDrag", "renderReviewPreview",
@@ -63,7 +65,12 @@ for (const selector of [
 assert(css.includes("resize: both"), "review window must be resizable");
 assert(source.includes("MarkdownRenderer.render"), "Markdown/LaTeX preview must use Obsidian renderer");
 assert(source.includes("%% BYSAN-REVIEW:${id} %%"), "new comments must insert a short marker");
-assert.equal(manifest.version, "0.2.0");
+for (const index of [1, 2, 3, 4]) {
+  assert(css.includes(`.art-text-custom-${index}`), `missing custom text color ${index}`);
+  assert(css.includes(`mark.art-hl-custom-${index}`), `missing custom highlight ${index}`);
+}
+assert(source.includes("this.commentPanelEl?.classList.remove"), "color panel must tolerate removed legacy comment panel");
+assert.equal(manifest.version, "0.2.1");
 
 console.log(JSON.stringify({
   version: manifest.version,
@@ -72,5 +79,6 @@ console.log(JSON.stringify({
   reviewSelectors: 6,
   markdownRenderer: true,
   draggable: true,
-  resizable: true
+  resizable: true,
+  customColorSlots: 4
 }, null, 2));

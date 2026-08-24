@@ -1,6 +1,6 @@
 /**
  * Selection Review Toolbar
- * Version: 0.2.0
+ * Version: 0.2.1
  *
  * A selection-driven, fixed-position review toolbar for Obsidian 1.13.x.
  * Formatting edits Markdown through Obsidian's Editor API. Review bodies are
@@ -31,6 +31,7 @@ const COLORS = [
   { id: "orange", label: "橙色：待处理" },
   { id: "gray", label: "灰色：弱化" }
 ];
+const CUSTOM_COLOR_DEFAULTS = ["#1E88E5", "#8E24AA", "#00897B", "#E64A19"];
 
 const SELECTION_DELAY = 55;
 const VIEWPORT_GAP = 8;
@@ -38,8 +39,14 @@ const REVIEW_MARKER_PATTERN = /%%\s*BYSAN-REVIEW:([a-zA-Z0-9_-]+)\s*%%/g;
 const LEGACY_REVIEW_PATTERN = /%%\s*REVIEW:\s*([\s\S]*?)\s*%%/g;
 const DEFAULT_DATA = {
   comments: {},
-  popup: { left: null, top: null, width: 560, height: 420 }
+  popup: { left: null, top: null, width: 560, height: 420 },
+  customColors: [...CUSTOM_COLOR_DEFAULTS]
 };
+
+
+function validHexColor(value) {
+  return /^#[0-9a-f]{6}$/i.test(String(value || ""));
+}
 
 
 function parseReviewMarkers(text) {
@@ -119,7 +126,10 @@ module.exports = class SelectionReviewToolbar extends Plugin {
       ...DEFAULT_DATA,
       ...(loaded || {}),
       comments: { ...DEFAULT_DATA.comments, ...(loaded?.comments || {}) },
-      popup: { ...DEFAULT_DATA.popup, ...(loaded?.popup || {}) }
+      popup: { ...DEFAULT_DATA.popup, ...(loaded?.popup || {}) },
+      customColors: CUSTOM_COLOR_DEFAULTS.map((fallback, index) => (
+        validHexColor(loaded?.customColors?.[index]) ? loaded.customColors[index] : fallback
+      ))
     };
     this.toolbarEl = null;
     this.mainRowEl = null;
@@ -145,6 +155,7 @@ module.exports = class SelectionReviewToolbar extends Plugin {
     this.activeReview = null;
 
     this.createToolbar();
+    this.applyCustomColors();
     this.createReviewWindow();
     this.registerSelectionTracking();
     this.registerWorkspaceTracking();
@@ -154,7 +165,7 @@ module.exports = class SelectionReviewToolbar extends Plugin {
       this.scheduleReviewBadgeRefresh();
     });
 
-    console.log("[Selection Review Toolbar] v0.2.0 loaded");
+    console.log("[Selection Review Toolbar] v0.2.1 loaded");
   }
 
 
@@ -168,6 +179,7 @@ module.exports = class SelectionReviewToolbar extends Plugin {
     this.reviewWindowEl?.remove();
     this.clearReviewBadges();
     this.reviewPreviewComponent?.unload();
+    this.clearCustomColorProperties();
     if (this.reviewBadgeFrame !== null) window.cancelAnimationFrame(this.reviewBadgeFrame);
     if (this.reviewPreviewTimer !== null) window.clearTimeout(this.reviewPreviewTimer);
     this.toolbarEl = null;
@@ -592,14 +604,16 @@ module.exports = class SelectionReviewToolbar extends Plugin {
 
     this.toolbarEl.addEventListener("pointerdown", (event) => {
       event.stopPropagation();
-      if (!(event.target instanceof HTMLTextAreaElement)) {
+      const colorInput = event.target instanceof HTMLInputElement && event.target.type === "color";
+      if (!(event.target instanceof HTMLTextAreaElement) && !colorInput) {
         event.preventDefault();
       }
     });
 
     this.toolbarEl.addEventListener("mousedown", (event) => {
       event.stopPropagation();
-      if (!(event.target instanceof HTMLTextAreaElement)) {
+      const colorInput = event.target instanceof HTMLInputElement && event.target.type === "color";
+      if (!(event.target instanceof HTMLTextAreaElement) && !colorInput) {
         event.preventDefault();
       }
     });
@@ -673,6 +687,39 @@ module.exports = class SelectionReviewToolbar extends Plugin {
     });
     clear.addEventListener("click", () => this.applyColor(null));
 
+    const custom = this.colorPanelEl.createDiv({ cls: "art-custom-colors" });
+    custom.createDiv({ cls: "art-custom-colors-label", text: "自定义颜色" });
+    const customGrid = custom.createDiv({ cls: "art-custom-colors-grid" });
+    this.data.customColors.forEach((value, index) => {
+      const id = `custom-${index + 1}`;
+      const item = customGrid.createDiv({ cls: "art-custom-color-item" });
+      const swatch = item.createEl("button", {
+        cls: "art-color-swatch art-custom-color-swatch",
+        text: String(index + 1),
+        attr: {
+          type: "button",
+          title: `应用自定义颜色 ${index + 1}`,
+          "aria-label": `应用自定义颜色 ${index + 1}`
+        }
+      });
+      swatch.style.setProperty("--art-custom-swatch", `var(--art-${id})`);
+      swatch.addEventListener("click", () => this.applyColor(id));
+      this.colorSwatches.set(id, swatch);
+
+      const input = item.createEl("input", {
+        cls: "art-custom-color-input",
+        attr: {
+          type: "color",
+          value,
+          title: `编辑自定义颜色 ${index + 1}`,
+          "aria-label": `编辑自定义颜色 ${index + 1}`
+        }
+      });
+      input.value = value;
+      input.addEventListener("input", () => this.updateCustomColor(index, input.value));
+      input.addEventListener("change", () => this.updateCustomColor(index, input.value, true));
+    });
+
     const modes = this.colorPanelEl.createDiv({ cls: "art-color-modes" });
     const highlight = modes.createEl("button", {
       cls: "art-mode-button",
@@ -689,6 +736,31 @@ module.exports = class SelectionReviewToolbar extends Plugin {
     text.addEventListener("click", () => this.setColorMode("text"));
     this.colorModeButtons.set("highlight", highlight);
     this.colorModeButtons.set("text", text);
+  }
+
+
+  applyCustomColors() {
+    this.data.customColors.forEach((value, index) => {
+      document.documentElement.style.setProperty(`--art-custom-${index + 1}`, value);
+    });
+  }
+
+
+  clearCustomColorProperties() {
+    CUSTOM_COLOR_DEFAULTS.forEach((_, index) => {
+      document.documentElement.style.removeProperty(`--art-custom-${index + 1}`);
+    });
+  }
+
+
+  async updateCustomColor(index, value, persist = false) {
+    if (!validHexColor(value) || index < 0 || index >= CUSTOM_COLOR_DEFAULTS.length) return;
+    document.documentElement.style.setProperty(`--art-custom-${index + 1}`, value);
+    if (persist) {
+      this.data.customColors[index] = value.toUpperCase();
+      await this.saveData(this.data);
+      new Notice(`自定义颜色 ${index + 1} 已保存`);
+    }
   }
 
 
@@ -1051,7 +1123,7 @@ module.exports = class SelectionReviewToolbar extends Plugin {
       return;
     }
 
-    this.commentPanelEl.classList.remove("art-open");
+    this.commentPanelEl?.classList.remove("art-open");
     this.colorPanelEl.classList.add("art-open");
     this.setColorMode(mode);
     this.updateActiveColor();
@@ -1084,7 +1156,7 @@ module.exports = class SelectionReviewToolbar extends Plugin {
     const { tag, classPrefix } = this.getColorWrapper(mode);
     const escapedPrefix = classPrefix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const whole = new RegExp(
-      `^<${tag} class=["']${escapedPrefix}([a-z]+)["']>[\\s\\S]*<\\/${tag}>$`
+      `^<${tag} class=["']${escapedPrefix}([a-z0-9-]+)["']>[\\s\\S]*<\\/${tag}>$`
     ).exec(cache.text);
 
     if (whole) {
@@ -1094,7 +1166,7 @@ module.exports = class SelectionReviewToolbar extends Plugin {
     const before = cache.editor.getValue().slice(0, cache.fromOffset);
     const after = cache.editor.getValue().slice(cache.toOffset);
     const opening = new RegExp(
-      `<${tag} class=["']${escapedPrefix}([a-z]+)["']>$`
+      `<${tag} class=["']${escapedPrefix}([a-z0-9-]+)["']>$`
     ).exec(before);
 
     if (opening && after.startsWith(`</${tag}>`)) {
@@ -1123,7 +1195,7 @@ module.exports = class SelectionReviewToolbar extends Plugin {
     const { tag, classPrefix } = this.getColorWrapper(this.colorMode);
     const escapedPrefix = classPrefix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const wholePattern = new RegExp(
-      `^<${tag} class=["']${escapedPrefix}[a-z]+["']>([\\s\\S]*)<\\/${tag}>$`
+      `^<${tag} class=["']${escapedPrefix}[a-z0-9-]+["']>([\\s\\S]*)<\\/${tag}>$`
     );
     const whole = wholePattern.exec(cache.text);
 
@@ -1148,7 +1220,7 @@ module.exports = class SelectionReviewToolbar extends Plugin {
     const before = documentText.slice(0, cache.fromOffset);
     const after = documentText.slice(cache.toOffset);
     const opening = new RegExp(
-      `<${tag} class=["']${escapedPrefix}[a-z]+["']>$`
+      `<${tag} class=["']${escapedPrefix}[a-z0-9-]+["']>$`
     ).exec(before);
     const closing = `</${tag}>`;
 

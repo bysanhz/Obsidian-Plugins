@@ -1,13 +1,15 @@
 /**
  * Selection Review Toolbar
- * Version: 0.1.1
+ * Version: 0.2.0
  *
  * A selection-driven, fixed-position review toolbar for Obsidian 1.13.x.
- * It intentionally edits Markdown through Obsidian's Editor API and never
- * writes formatting state into plugin data.
+ * Formatting edits Markdown through Obsidian's Editor API. Review bodies are
+ * stored by marker id so Markdown and LaTeX never have to be flattened.
  */
 
 const {
+  Component,
+  MarkdownRenderer,
   MarkdownView,
   Notice,
   Plugin,
@@ -32,6 +34,39 @@ const COLORS = [
 
 const SELECTION_DELAY = 55;
 const VIEWPORT_GAP = 8;
+const REVIEW_MARKER_PATTERN = /%%\s*BYSAN-REVIEW:([a-zA-Z0-9_-]+)\s*%%/g;
+const LEGACY_REVIEW_PATTERN = /%%\s*REVIEW:\s*([\s\S]*?)\s*%%/g;
+const DEFAULT_DATA = {
+  comments: {},
+  popup: { left: null, top: null, width: 560, height: 420 }
+};
+
+
+function parseReviewMarkers(text) {
+  const markers = [];
+  for (const pattern of [REVIEW_MARKER_PATTERN, LEGACY_REVIEW_PATTERN]) {
+    pattern.lastIndex = 0;
+    let match;
+    while ((match = pattern.exec(text)) !== null) {
+      markers.push({
+        id: pattern === REVIEW_MARKER_PATTERN ? match[1] : null,
+        legacyBody: pattern === LEGACY_REVIEW_PATTERN ? match[1].trim() : null,
+        start: match.index,
+        end: match.index + match[0].length,
+        raw: match[0]
+      });
+    }
+  }
+  return markers.sort((left, right) => left.start - right.start);
+}
+
+
+function createReviewId() {
+  if (globalThis.crypto?.randomUUID) {
+    return globalThis.crypto.randomUUID().replace(/-/g, "").slice(0, 12);
+  }
+  return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+}
 
 
 /* =========================================================
@@ -79,6 +114,13 @@ function orderedPositions(anchor, head) {
 module.exports = class SelectionReviewToolbar extends Plugin {
 
   async onload() {
+    const loaded = await this.loadData();
+    this.data = {
+      ...DEFAULT_DATA,
+      ...(loaded || {}),
+      comments: { ...DEFAULT_DATA.comments, ...(loaded?.comments || {}) },
+      popup: { ...DEFAULT_DATA.popup, ...(loaded?.popup || {}) }
+    };
     this.toolbarEl = null;
     this.mainRowEl = null;
     this.colorPanelEl = null;
@@ -93,16 +135,26 @@ module.exports = class SelectionReviewToolbar extends Plugin {
     this.colorMode = "highlight";
     this.suppressedSelectionKey = null;
     this.sourceModeCommandId = null;
+    this.reviewBadgeEls = [];
+    this.reviewBadgeFrame = null;
+    this.reviewWindowEl = null;
+    this.reviewInputEl = null;
+    this.reviewPreviewEl = null;
+    this.reviewPreviewComponent = null;
+    this.reviewPreviewTimer = null;
+    this.activeReview = null;
 
     this.createToolbar();
+    this.createReviewWindow();
     this.registerSelectionTracking();
     this.registerWorkspaceTracking();
 
     this.app.workspace.onLayoutReady(() => {
       this.sourceModeCommandId = this.findSourceModeCommandId();
+      this.scheduleReviewBadgeRefresh();
     });
 
-    console.log("[Selection Review Toolbar] v0.1.1 loaded");
+    console.log("[Selection Review Toolbar] v0.2.0 loaded");
   }
 
 
@@ -113,6 +165,11 @@ module.exports = class SelectionReviewToolbar extends Plugin {
     }
 
     this.toolbarEl?.remove();
+    this.reviewWindowEl?.remove();
+    this.clearReviewBadges();
+    this.reviewPreviewComponent?.unload();
+    if (this.reviewBadgeFrame !== null) window.cancelAnimationFrame(this.reviewBadgeFrame);
+    if (this.reviewPreviewTimer !== null) window.clearTimeout(this.reviewPreviewTimer);
     this.toolbarEl = null;
     this.cachedSelection = null;
     this.cachedRect = null;
@@ -128,7 +185,7 @@ module.exports = class SelectionReviewToolbar extends Plugin {
       document,
       "pointerdown",
       (event) => {
-        if (this.toolbarEl?.contains(event.target)) {
+        if (this.isPluginSurface(event.target)) {
           return;
         }
 
@@ -142,7 +199,7 @@ module.exports = class SelectionReviewToolbar extends Plugin {
       document,
       "pointerup",
       (event) => {
-        if (this.toolbarEl?.contains(event.target)) {
+        if (this.isPluginSurface(event.target)) {
           return;
         }
 
@@ -186,6 +243,7 @@ module.exports = class SelectionReviewToolbar extends Plugin {
         if (this.isToolbarVisible()) {
           window.requestAnimationFrame(() => this.refreshToolbarPosition());
         }
+        this.scheduleReviewBadgeRefresh();
       },
       true
     );
@@ -197,7 +255,19 @@ module.exports = class SelectionReviewToolbar extends Plugin {
         if (this.isToolbarVisible()) {
           window.requestAnimationFrame(() => this.refreshToolbarPosition());
         }
+        this.scheduleReviewBadgeRefresh();
       }
+    );
+  }
+
+
+  isPluginSurface(target) {
+    return Boolean(
+      target instanceof Node && (
+        this.toolbarEl?.contains(target) ||
+        this.reviewWindowEl?.contains(target) ||
+        this.reviewBadgeEls.some((element) => element.contains(target))
+      )
     );
   }
 
@@ -206,6 +276,8 @@ module.exports = class SelectionReviewToolbar extends Plugin {
     const close = () => {
       this.suppressedSelectionKey = null;
       this.hideToolbar({ clearCache: true });
+      this.closeReviewWindow();
+      this.scheduleReviewBadgeRefresh();
     };
 
     this.registerEvent(this.app.workspace.on("file-open", close));
@@ -215,12 +287,14 @@ module.exports = class SelectionReviewToolbar extends Plugin {
       if (!view) {
         close();
       }
+      this.scheduleReviewBadgeRefresh();
     }));
 
     this.registerEvent(this.app.workspace.on("editor-change", () => {
       if (!this.toolbarEl?.contains(document.activeElement)) {
         this.scheduleSelectionCheck(70);
       }
+      this.scheduleReviewBadgeRefresh();
     }));
   }
 
@@ -515,7 +589,6 @@ module.exports = class SelectionReviewToolbar extends Plugin {
     this.addIconButton("code-2", "切换 Live Preview / Source Mode", () => this.toggleSourceMode());
 
     this.createColorPanel();
-    this.createCommentPanel();
 
     this.toolbarEl.addEventListener("pointerdown", (event) => {
       event.stopPropagation();
@@ -619,39 +692,99 @@ module.exports = class SelectionReviewToolbar extends Plugin {
   }
 
 
-  createCommentPanel() {
-    this.commentPanelEl = this.toolbarEl.createDiv({ cls: "art-comment-panel" });
-    this.commentInputEl = this.commentPanelEl.createEl("textarea", {
-      cls: "art-comment-textarea",
+  createReviewWindow() {
+    this.reviewWindowEl = document.body.createDiv({ cls: "art-review-window" });
+    this.reviewWindowEl.setAttribute("role", "dialog");
+    this.reviewWindowEl.setAttribute("aria-label", "审阅评论");
+
+    const header = this.reviewWindowEl.createDiv({ cls: "art-review-header" });
+    const title = header.createDiv({ cls: "art-review-title" });
+    setIcon(title.createSpan({ cls: "art-review-title-icon" }), "message-square");
+    title.createSpan({ text: "审阅评论" });
+    const close = header.createEl("button", {
+      cls: "art-review-icon-button",
+      attr: { type: "button", title: "关闭", "aria-label": "关闭评论窗口" }
+    });
+    setIcon(close, "x");
+    close.addEventListener("click", () => this.closeReviewWindow());
+
+    const content = this.reviewWindowEl.createDiv({ cls: "art-review-content" });
+    const editorPane = content.createDiv({ cls: "art-review-pane art-review-editor-pane" });
+    editorPane.createDiv({ cls: "art-review-pane-label", text: "Markdown / LaTeX" });
+    this.reviewInputEl = editorPane.createEl("textarea", {
+      cls: "art-review-editor",
       attr: {
-        placeholder: "请输入评论……",
-        "aria-label": "审阅评论"
+        placeholder: "输入 Markdown；行内公式使用 $...$，块公式使用 $$...$$",
+        "aria-label": "评论 Markdown 编辑器",
+        spellcheck: "true"
       }
     });
+    const previewPane = content.createDiv({ cls: "art-review-pane art-review-preview-pane" });
+    previewPane.createDiv({ cls: "art-review-pane-label", text: "预览" });
+    this.reviewPreviewEl = previewPane.createDiv({ cls: "art-review-preview markdown-rendered" });
 
-    const actions = this.commentPanelEl.createDiv({ cls: "art-comment-actions" });
+    const footer = this.reviewWindowEl.createDiv({ cls: "art-review-footer" });
+    const hint = footer.createDiv({ cls: "art-review-hint", text: "Ctrl/⌘ + Enter 保存" });
+    const actions = footer.createDiv({ cls: "art-review-actions" });
+    this.reviewDeleteButton = actions.createEl("button", {
+      cls: "art-review-button art-review-delete",
+      text: "删除",
+      attr: { type: "button" }
+    });
     const cancel = actions.createEl("button", {
-      cls: "art-comment-action",
-      text: "Cancel",
+      cls: "art-review-button",
+      text: "关闭",
       attr: { type: "button" }
     });
-    const add = actions.createEl("button", {
-      cls: "art-comment-action art-comment-add",
-      text: "Add",
+    const save = actions.createEl("button", {
+      cls: "art-review-button art-review-save",
+      text: "保存",
       attr: { type: "button" }
     });
+    hint.setAttribute("aria-hidden", "true");
 
-    cancel.addEventListener("click", () => {
-      this.commentInputEl.value = "";
-      this.closePanels();
-      this.refreshToolbarPosition();
-    });
-    add.addEventListener("click", () => this.addComment());
-    this.commentInputEl.addEventListener("keydown", (event) => {
+    this.reviewDeleteButton.addEventListener("click", () => this.deleteActiveReview());
+    cancel.addEventListener("click", () => this.closeReviewWindow());
+    save.addEventListener("click", () => this.saveActiveReview());
+    this.reviewInputEl.addEventListener("input", () => this.scheduleReviewPreview());
+    this.reviewInputEl.addEventListener("keydown", (event) => {
       if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
         event.preventDefault();
-        this.addComment();
+        this.saveActiveReview();
       }
+    });
+
+    this.installReviewWindowDrag(header);
+    this.registerDomEvent(window, "pointerup", () => this.persistReviewWindowGeometry());
+  }
+
+
+  installReviewWindowDrag(handle) {
+    handle.addEventListener("pointerdown", (event) => {
+      if (event.button !== 0 || event.target.closest("button")) return;
+      event.preventDefault();
+      const rect = this.reviewWindowEl.getBoundingClientRect();
+      const startX = event.clientX;
+      const startY = event.clientY;
+      const startLeft = rect.left;
+      const startTop = rect.top;
+      const move = (moveEvent) => {
+        const maxLeft = Math.max(VIEWPORT_GAP, window.innerWidth - rect.width - VIEWPORT_GAP);
+        const maxTop = Math.max(VIEWPORT_GAP, window.innerHeight - 48);
+        const left = Math.max(VIEWPORT_GAP, Math.min(maxLeft, startLeft + moveEvent.clientX - startX));
+        const top = Math.max(VIEWPORT_GAP, Math.min(maxTop, startTop + moveEvent.clientY - startY));
+        this.reviewWindowEl.style.left = `${Math.round(left)}px`;
+        this.reviewWindowEl.style.top = `${Math.round(top)}px`;
+      };
+      const up = () => {
+        window.removeEventListener("pointermove", move, true);
+        window.removeEventListener("pointerup", up, true);
+        window.removeEventListener("pointercancel", up, true);
+        this.persistReviewWindowGeometry();
+      };
+      window.addEventListener("pointermove", move, true);
+      window.addEventListener("pointerup", up, true);
+      window.addEventListener("pointercancel", up, true);
     });
   }
 
@@ -1066,41 +1199,251 @@ module.exports = class SelectionReviewToolbar extends Plugin {
       return;
     }
 
-    this.colorPanelEl.classList.remove("art-open");
-    this.commentPanelEl.classList.add("art-open");
-    this.positionToolbar(this.cachedRect);
-    window.requestAnimationFrame(() => this.commentInputEl.focus());
+    const cache = this.cachedSelection;
+    this.closePanels();
+    this.hideToolbar({ clearCache: false });
+    this.openReviewWindow({
+      draft: true,
+      filePath: cache.filePath,
+      selection: {
+        fromOffset: cache.fromOffset,
+        toOffset: cache.toOffset,
+        text: cache.text
+      }
+    }, "", this.cachedRect);
   }
 
 
-  addComment() {
-    if (!this.selectionIsStillValid()) {
-      this.hideToolbar({ clearCache: true });
-      return;
+  openReviewWindow(review, body, anchorRect = null) {
+    this.activeReview = review;
+    this.reviewInputEl.value = body || "";
+    this.reviewDeleteButton.classList.toggle("art-hidden", Boolean(review.draft));
+    this.reviewWindowEl.classList.add("art-open");
+    this.applyReviewWindowGeometry(anchorRect);
+    this.scheduleReviewPreview(true);
+    window.requestAnimationFrame(() => this.reviewInputEl.focus());
+  }
+
+
+  closeReviewWindow() {
+    this.reviewWindowEl?.classList.remove("art-open");
+    this.activeReview = null;
+    this.reviewPreviewComponent?.unload();
+    this.reviewPreviewComponent = null;
+  }
+
+
+  applyReviewWindowGeometry(anchorRect = null) {
+    const geometry = this.data.popup;
+    const width = Math.min(Math.max(360, Number(geometry.width) || 560), window.innerWidth - VIEWPORT_GAP * 2);
+    const height = Math.min(Math.max(260, Number(geometry.height) || 420), window.innerHeight - VIEWPORT_GAP * 2);
+    let left = Number.isFinite(geometry.left) ? geometry.left : null;
+    let top = Number.isFinite(geometry.top) ? geometry.top : null;
+    if (left === null) left = anchorRect ? anchorRect.right + 12 : (window.innerWidth - width) / 2;
+    if (top === null) top = anchorRect ? anchorRect.top : (window.innerHeight - height) / 2;
+    left = Math.max(VIEWPORT_GAP, Math.min(left, window.innerWidth - width - VIEWPORT_GAP));
+    top = Math.max(VIEWPORT_GAP, Math.min(top, window.innerHeight - height - VIEWPORT_GAP));
+    Object.assign(this.reviewWindowEl.style, {
+      left: `${Math.round(left)}px`,
+      top: `${Math.round(top)}px`,
+      width: `${Math.round(width)}px`,
+      height: `${Math.round(height)}px`
+    });
+  }
+
+
+  async persistReviewWindowGeometry() {
+    if (!this.reviewWindowEl?.classList.contains("art-open")) return;
+    const rect = this.reviewWindowEl.getBoundingClientRect();
+    this.data.popup = {
+      left: Math.round(rect.left),
+      top: Math.round(rect.top),
+      width: Math.round(rect.width),
+      height: Math.round(rect.height)
+    };
+    await this.saveData(this.data);
+  }
+
+
+  scheduleReviewPreview(immediate = false) {
+    if (this.reviewPreviewTimer !== null) window.clearTimeout(this.reviewPreviewTimer);
+    const render = () => {
+      this.reviewPreviewTimer = null;
+      this.renderReviewPreview();
+    };
+    this.reviewPreviewTimer = window.setTimeout(render, immediate ? 0 : 120);
+  }
+
+
+  async renderReviewPreview() {
+    if (!this.reviewPreviewEl || !this.reviewWindowEl.classList.contains("art-open")) return;
+    this.reviewPreviewComponent?.unload();
+    this.reviewPreviewComponent = new Component();
+    this.reviewPreviewComponent.load();
+    this.reviewPreviewEl.empty();
+    const markdown = this.reviewInputEl.value || "*暂无内容*";
+    try {
+      await MarkdownRenderer.render(
+        this.app,
+        markdown,
+        this.reviewPreviewEl,
+        this.activeReview?.filePath || "",
+        this.reviewPreviewComponent
+      );
+    } catch (error) {
+      this.reviewPreviewEl.setText(`预览失败：${error.message || error}`);
     }
+  }
 
-    const comment = this.commentInputEl.value
-      .replace(/%%/g, "% %")
-      .replace(/\s+/g, " ")
-      .trim();
 
-    if (!comment) {
+  async saveActiveReview() {
+    const body = this.reviewInputEl.value.trim();
+    if (!body) {
       new Notice("请输入评论内容");
       return;
     }
+    const review = this.activeReview;
+    if (!review) return;
 
-    const cache = this.cachedSelection;
-    const suffix = ` %% REVIEW: ${comment} %%`;
-    const replacement = `${cache.text}${suffix}`;
-    this.commentInputEl.value = "";
-    this.closePanels();
-    this.replaceCachedRange(
-      cache.fromOffset,
-      cache.toOffset,
-      replacement,
-      0,
-      cache.text.length
-    );
+    if (review.draft) {
+      if (!this.selectionIsStillValid()) {
+        new Notice("原选区已变化，请重新选择文字后添加评论");
+        this.closeReviewWindow();
+        return;
+      }
+      const id = createReviewId();
+      this.data.comments[id] = {
+        body,
+        filePath: review.filePath,
+        anchorText: review.selection.text,
+        createdAt: Date.now(),
+        updatedAt: Date.now()
+      };
+      await this.saveData(this.data);
+      const cache = this.cachedSelection;
+      const suffix = ` %% BYSAN-REVIEW:${id} %%`;
+      this.closeReviewWindow();
+      this.replaceCachedRange(
+        cache.fromOffset,
+        cache.toOffset,
+        `${cache.text}${suffix}`,
+        0,
+        cache.text.length
+      );
+      this.scheduleReviewBadgeRefresh();
+      return;
+    }
+
+    let id = review.id;
+    if (!id) {
+      id = createReviewId();
+      if (!this.replaceReviewMarker(review, `%% BYSAN-REVIEW:${id} %%`)) {
+        new Notice("未找到旧评论标记，未执行迁移");
+        return;
+      }
+    }
+    const previous = this.data.comments[id] || {};
+    this.data.comments[id] = {
+      ...previous,
+      body,
+      filePath: review.filePath,
+      createdAt: previous.createdAt || Date.now(),
+      updatedAt: Date.now()
+    };
+    await this.saveData(this.data);
+    this.closeReviewWindow();
+    this.scheduleReviewBadgeRefresh();
+    new Notice("评论已保存");
+  }
+
+
+  async deleteActiveReview() {
+    const review = this.activeReview;
+    if (!review || review.draft) return;
+    if (!this.replaceReviewMarker(review, "")) {
+      new Notice("未找到评论标记");
+      return;
+    }
+    if (review.id) delete this.data.comments[review.id];
+    await this.saveData(this.data);
+    this.closeReviewWindow();
+    this.scheduleReviewBadgeRefresh();
+    new Notice("评论已删除");
+  }
+
+
+  replaceReviewMarker(review, replacement) {
+    const view = this.getActiveEditingView();
+    if (!view || view.file?.path !== review.filePath) return false;
+    const text = view.editor.getValue();
+    let start = review.start;
+    let end = review.end;
+    if (text.slice(start, end) !== review.raw) {
+      start = text.indexOf(review.raw);
+      if (start < 0) return false;
+      end = start + review.raw.length;
+    }
+    view.editor.replaceRange(replacement, view.editor.offsetToPos(start), view.editor.offsetToPos(end));
+    return true;
+  }
+
+
+  scheduleReviewBadgeRefresh() {
+    if (this.reviewBadgeFrame !== null) return;
+    this.reviewBadgeFrame = window.requestAnimationFrame(() => {
+      this.reviewBadgeFrame = null;
+      this.refreshReviewBadges();
+    });
+  }
+
+
+  clearReviewBadges() {
+    for (const element of this.reviewBadgeEls || []) element.remove();
+    this.reviewBadgeEls = [];
+  }
+
+
+  refreshReviewBadges() {
+    this.clearReviewBadges();
+    const view = this.getActiveEditingView();
+    const cm = view?.editor?.cm;
+    if (!view || !cm?.coordsAtPos) return;
+    const markers = parseReviewMarkers(view.editor.getValue());
+    const scroller = view.containerEl.querySelector(".cm-scroller");
+    const viewport = scroller?.getBoundingClientRect() || view.containerEl.getBoundingClientRect();
+
+    markers.forEach((marker, index) => {
+      const coords = cm.coordsAtPos(marker.start, 1) || cm.coordsAtPos(marker.end, -1);
+      if (!coords || coords.bottom < viewport.top || coords.top > viewport.bottom) return;
+      const record = marker.id ? this.data.comments[marker.id] : null;
+      const body = record?.body || marker.legacyBody || "评论内容缺失";
+      const badge = document.body.createEl("button", {
+        cls: `art-review-badge${record || marker.legacyBody ? "" : " art-review-badge-missing"}`,
+        text: String(index + 1),
+        attr: {
+          type: "button",
+          title: body.replace(/\s+/g, " ").slice(0, 90),
+          "aria-label": `打开评论 ${index + 1}`
+        }
+      });
+      badge.style.left = `${Math.round(Math.min(coords.right + 2, viewport.right - 20))}px`;
+      badge.style.top = `${Math.round(Math.max(viewport.top, coords.top - 8))}px`;
+      badge.addEventListener("pointerdown", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+      });
+      badge.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        const rect = badge.getBoundingClientRect();
+        this.openReviewWindow({
+          ...marker,
+          filePath: view.file.path,
+          draft: false
+        }, body, rect);
+      });
+      this.reviewBadgeEls.push(badge);
+    });
   }
 
 

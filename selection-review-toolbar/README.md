@@ -10,7 +10,11 @@
 - Strikethrough：`~~text~~`
 - 8 色高亮：`<mark class="art-hl-red">text</mark>`
 - 8 色字体：`<span class="art-text-blue">text</span>`
-- 评论：`%% REVIEW: comment %%`
+- 评论角标：正文仅保留 `%% BYSAN-REVIEW:id %%` 定位标记，评论正文由插件按 ID 管理。
+- 点击角标打开独立评论窗；窗口支持拖拽位置、拖动右下角调整大小，并记忆尺寸与位置。
+- 评论窗左侧书写 Markdown/LaTeX，右侧即时预览；支持 `$...$`、`$$...$$` 及 Obsidian Markdown。
+- `Ctrl/⌘ + Enter` 保存，已有评论可继续编辑或删除。
+- 旧版 `%% REVIEW: comment %%` 会继续显示角标，保存时自动迁移到新版格式。
 - 快速切换 Live Preview / Source Mode
 - 加粗、斜体、下划线和删除线均为 Toggle 操作。
 - 更换颜色时替换现有同类 wrapper，不会无限嵌套。
@@ -22,7 +26,9 @@
 
 工具栏在选区变化时缓存 Obsidian Editor 的 `from`、`to` 和文本。按钮在 `pointerdown` / `mousedown` 阶段阻止抢焦点，格式化时不依赖已经可能消失的 DOM Selection。
 
-每次格式化使用一个 Editor transaction，因此一次 `Ctrl+Z` 可以撤销一次操作。
+每次格式化和角标插入使用一个 Editor transaction，因此一次 `Ctrl+Z` 可以撤销一次正文操作。评论正文不会展开写入笔记，避免 Markdown 和公式内容干扰正文结构。
+
+评论正文保存在插件的 `data.json` 中；笔记中的短 ID 标记负责定位。复制笔记到另一 Vault 时，如需保留评论正文，应同时复制本插件的 `data.json`。
 
 以下区域不会显示普通审阅工具栏：
 
@@ -69,7 +75,7 @@ YourVault/.obsidian/plugins/selection-review-toolbar/
 
 ## 当前版本
 
-0.1.1
+0.2.0
 
 ## 作者
 

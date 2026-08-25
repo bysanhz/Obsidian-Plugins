@@ -5,10 +5,9 @@
  * Deliberately excluded:
  * - h1-h6 counters, heading ::before rules, and outline/TOC counters
  * - MathJax/equation-number positioning
- * - Mermaid and media sizing
+ * - Mermaid and media sizing declarations (provided by the integrated module)
  *
- * This keeps Academic Heading Numbering, Equation Citator, and
- * Mermaid Inline Resizer as the only owners of those features.
+ * This keeps each integrated module as the only owner of its feature area.
  */
 
 body.theme-light {
@@ -44,8 +43,8 @@ body.theme-dark {
 }
 
 body {
-  --bysan-code-font: "Latin Modern Mono", "SFMono-Regular", Consolas,
-    "Liberation Mono", "Courier New", monospace;
+  --bysan-code-font: var(--font-family-inline-code, "Latin Modern Mono", "SFMono-Regular", Consolas,
+    "Liberation Mono", "Courier New", monospace);
   --bysan-quote-font: "Latin Modern Roman", "Times New Roman", "Noto Serif CJK SC",
     serif;
 }
@@ -73,13 +72,15 @@ body.bysan-style-controller-active .workspace {
   color: var(--bysan-inline-code-text) !important;
   background-color: var(--bysan-inline-code-bg) !important;
   border: 1px solid var(--bysan-code-border);
-  border-radius: 2px;
-  box-shadow: 0 0 1px 1px var(--bysan-inline-code-shadow);
+  border-radius: var(--bysan-inline-code-radius, 2px);
+  box-shadow: 0 0 var(--bysan-inline-code-shadow-size, 1px)
+    var(--bysan-inline-code-shadow-size, 1px) var(--bysan-inline-code-shadow);
   box-sizing: border-box;
   font-family: var(--bysan-code-font) !important;
-  font-size: 0.9em;
-  margin-inline: 2px;
-  padding: 1px 3px;
+  font-size: var(--bysan-inline-code-font-size, 0.9em);
+  margin-inline: var(--bysan-inline-code-margin, 2px);
+  padding: var(--bysan-inline-code-padding-y, 1px)
+    var(--bysan-inline-code-padding-x, 3px);
 }
 
 /* -------------------------- code blocks ------------------------ */
@@ -88,12 +89,13 @@ body.bysan-style-controller-active .workspace {
   color: var(--bysan-code-text) !important;
   background: var(--bysan-code-bg) !important;
   border: 1px solid var(--bysan-code-border) !important;
-  border-radius: 3px !important;
+  border-radius: var(--bysan-code-radius, 3px) !important;
   box-shadow: none !important;
   font-family: var(--bysan-code-font);
-  font-size: 0.95em;
-  line-height: 1.55;
-  padding: 0.8em 1em !important;
+  font-size: var(--bysan-code-font-size, 0.95em);
+  line-height: var(--bysan-code-line-height, 1.55);
+  padding: var(--bysan-code-padding-y, 0.8em)
+    var(--bysan-code-padding-x, 1em) !important;
 }
 
 :is(.markdown-preview-view, .markdown-rendered) pre:not(.frontmatter) > code {
@@ -111,7 +113,8 @@ body.bysan-style-controller-active .markdown-source-view.mod-cm6 .HyperMD-codebl
   background-color: var(--bysan-code-bg) !important;
   border-inline: 1px solid var(--bysan-code-border);
   font-family: var(--bysan-code-font);
-  line-height: 1.55;
+  font-size: var(--bysan-code-font-size, 0.95em);
+  line-height: var(--bysan-code-line-height, 1.55);
 }
 
 /* Blue Topaz gives the active code line a higher-specificity accent surface.
@@ -125,40 +128,40 @@ body.bysan-style-controller-active
 
 .markdown-source-view.mod-cm6 .HyperMD-codeblock-begin {
   border-top: 1px solid var(--bysan-code-border);
-  border-radius: 3px 3px 0 0;
-  padding-top: 0.45em;
+  border-radius: var(--bysan-code-radius, 3px) var(--bysan-code-radius, 3px) 0 0;
+  padding-top: calc(var(--bysan-code-padding-y, 0.8em) * 0.5625);
 }
 
 .markdown-source-view.mod-cm6 .HyperMD-codeblock-end {
   border-bottom: 1px solid var(--bysan-code-border);
-  border-radius: 0 0 3px 3px;
-  padding-bottom: 0.45em;
+  border-radius: 0 0 var(--bysan-code-radius, 3px) var(--bysan-code-radius, 3px);
+  padding-bottom: calc(var(--bysan-code-padding-y, 0.8em) * 0.5625);
 }
 
 /* Bysan dark syntax palette; Blue Topaz token structure is retained. */
-body.theme-dark .markdown-source-view.mod-cm6 .HyperMD-codeblock .cm-keyword,
-body.theme-dark :is(.markdown-preview-view, .markdown-rendered) pre .token.keyword {
+body.code-theme-bt-default.theme-dark .markdown-source-view.mod-cm6 .HyperMD-codeblock .cm-keyword,
+body.code-theme-bt-default.theme-dark :is(.markdown-preview-view, .markdown-rendered) pre .token.keyword {
   color: #c792ea !important;
 }
 
-body.theme-dark .markdown-source-view.mod-cm6 .HyperMD-codeblock .cm-string,
-body.theme-dark :is(.markdown-preview-view, .markdown-rendered) pre .token.string {
+body.code-theme-bt-default.theme-dark .markdown-source-view.mod-cm6 .HyperMD-codeblock .cm-string,
+body.code-theme-bt-default.theme-dark :is(.markdown-preview-view, .markdown-rendered) pre .token.string {
   color: #c3e88d !important;
 }
 
-body.theme-dark .markdown-source-view.mod-cm6 .HyperMD-codeblock .cm-number,
-body.theme-dark .markdown-source-view.mod-cm6 .HyperMD-codeblock .cm-atom,
-body.theme-dark :is(.markdown-preview-view, .markdown-rendered) pre :is(.token.number, .token.boolean) {
+body.code-theme-bt-default.theme-dark .markdown-source-view.mod-cm6 .HyperMD-codeblock .cm-number,
+body.code-theme-bt-default.theme-dark .markdown-source-view.mod-cm6 .HyperMD-codeblock .cm-atom,
+body.code-theme-bt-default.theme-dark :is(.markdown-preview-view, .markdown-rendered) pre :is(.token.number, .token.boolean) {
   color: #f77669 !important;
 }
 
-body.theme-dark .markdown-source-view.mod-cm6 .HyperMD-codeblock .cm-comment,
-body.theme-dark :is(.markdown-preview-view, .markdown-rendered) pre .token.comment {
+body.code-theme-bt-default.theme-dark .markdown-source-view.mod-cm6 .HyperMD-codeblock .cm-comment,
+body.code-theme-bt-default.theme-dark :is(.markdown-preview-view, .markdown-rendered) pre .token.comment {
   color: #718792 !important;
 }
 
-body.theme-dark .markdown-source-view.mod-cm6 .HyperMD-codeblock :is(.cm-property, .cm-variable-2),
-body.theme-dark :is(.markdown-preview-view, .markdown-rendered) pre :is(.token.property, .token.function) {
+body.code-theme-bt-default.theme-dark .markdown-source-view.mod-cm6 .HyperMD-codeblock :is(.cm-property, .cm-variable-2),
+body.code-theme-bt-default.theme-dark :is(.markdown-preview-view, .markdown-rendered) pre :is(.token.property, .token.function) {
   color: #80cbae !important;
 }
 
@@ -192,27 +195,38 @@ body :is(.markdown-preview-view, .markdown-rendered) .el-table > table:not(.data
 body :is(.markdown-preview-view, .markdown-rendered) table:not(.dataview),
 body .markdown-source-view.mod-cm6 :is(.cm-table-widget, .cm-embed-block) table {
   background: transparent;
-  border: 1.2pt solid var(--bysan-table-border) !important;
+  border: var(--bysan-table-border-width, 1.2pt) solid var(--bysan-table-border) !important;
   border-collapse: collapse !important;
   border-spacing: 0;
   display: table !important;
-  margin: 1em var(--bysan-table-inline-margin, auto) !important;
+  margin: var(--bysan-table-margin-y, 1em) var(--bysan-table-inline-margin, auto) !important;
   text-align: left;
   width: max-content !important;
   max-width: 100%;
 }
 
+body.table-width-100 :is(.markdown-preview-view, .markdown-rendered) table:not(.dataview),
+body.table-width-100 .markdown-source-view.mod-cm6 :is(.cm-table-widget, .cm-embed-block) table {
+  width: 100% !important;
+}
+
+body.table-width-auto :is(.markdown-preview-view, .markdown-rendered) table:not(.dataview),
+body.table-width-auto .markdown-source-view.mod-cm6 :is(.cm-table-widget, .cm-embed-block) table {
+  width: auto !important;
+}
+
 :is(.markdown-preview-view, .markdown-rendered) table:not(.dataview) :is(th, td),
 .markdown-source-view.mod-cm6 :is(.cm-table-widget, .cm-embed-block) table :is(th, td) {
-  border: 1px solid var(--bysan-table-border) !important;
-  padding: 6px 13px !important;
+  border: var(--bysan-table-border-width, 1.2pt) solid var(--bysan-table-border) !important;
+  padding: var(--bysan-table-cell-padding-y, 6px)
+    var(--bysan-table-cell-padding-x, 13px) !important;
 }
 
 :is(.markdown-preview-view, .markdown-rendered) table:not(.dataview) thead,
 .markdown-source-view.mod-cm6 :is(.cm-table-widget, .cm-embed-block) table thead {
   background-color: var(--bysan-table-head-bg) !important;
-  border-bottom: 1.2pt solid var(--bysan-table-border);
-  font-weight: 800;
+  border-bottom: var(--bysan-table-border-width, 1.2pt) solid var(--bysan-table-border);
+  font-weight: var(--bysan-table-header-weight, 800);
 }
 
 :is(.markdown-preview-view, .markdown-rendered) table:not(.dataview) thead > tr > th,
@@ -243,34 +257,35 @@ body .markdown-source-view.mod-cm6 :is(.cm-table-widget, .cm-embed-block) table 
 
 :is(.markdown-preview-view, .markdown-rendered) blockquote {
   background: var(--bysan-quote-bg) !important;
-  border-left: 4px solid var(--bysan-quote-border) !important;
-  border-radius: 0 3px 3px 0;
+  border-left: var(--bysan-quote-border-width, 4px) solid var(--bysan-quote-border) !important;
+  border-radius: 0 var(--bysan-quote-radius, 3px) var(--bysan-quote-radius, 3px) 0;
   font-family: var(--bysan-quote-font);
-  font-size: 1.05em;
+  font-size: var(--bysan-quote-font-size, 1.05em);
   font-style: normal;
   margin-left: 0;
-  padding: 0.55em 2em !important;
+  padding: var(--bysan-quote-padding-y, 0.55em)
+    var(--bysan-quote-padding-x, 2em) !important;
 }
 
 body.bysan-style-controller-active
   .markdown-source-view.mod-cm6.is-live-preview
   .HyperMD-quote {
   background: var(--bysan-quote-bg) !important;
-  border-left: 4px solid var(--bysan-quote-border) !important;
+  border-left: var(--bysan-quote-border-width, 4px) solid var(--bysan-quote-border) !important;
   font-family: var(--bysan-quote-font);
   font-style: normal;
-  padding-inline-start: calc(11px + 0.55em) !important;
+  padding-inline-start: calc(11px + var(--bysan-quote-padding-y, 0.55em)) !important;
 }
 
 .markdown-source-view.mod-cm6 .cm-blockquote-border {
   border-left-color: var(--bysan-quote-border) !important;
-  border-left-width: 4px !important;
+  border-left-width: var(--bysan-quote-border-width, 4px) !important;
 }
 
 /* ----------------------------- lists --------------------------- */
 
 :is(.markdown-preview-view, .markdown-rendered) :is(ol, ul) {
-  padding-inline-start: 2em;
+  padding-inline-start: var(--list-indent, 2em);
 }
 
 :is(.markdown-preview-view, .markdown-rendered) ol {
@@ -301,14 +316,14 @@ body.bysan-style-controller-active
 .markdown-source-view.mod-cm6 :is(.cm-formatting-list, .list-number) {
   color: var(--bysan-muted-marker) !important;
   font-variant-numeric: tabular-nums;
-  font-weight: 650;
+  font-weight: var(--bysan-list-marker-weight, 650);
 }
 
 :is(.markdown-preview-view, .markdown-rendered) .task-list-item-checkbox,
 .markdown-source-view.mod-cm6 .task-list-item-checkbox {
-  height: 1em;
-  margin-top: 0.42em;
-  width: 1em;
+  height: var(--bysan-task-checkbox-size, 1em);
+  margin-top: var(--bysan-task-checkbox-offset, 0.42em);
+  width: var(--bysan-task-checkbox-size, 1em);
 }
 
 /* ------------------------ small components --------------------- */
@@ -316,13 +331,13 @@ body.bysan-style-controller-active
 :is(.markdown-preview-view, .markdown-rendered) hr,
 .markdown-source-view.mod-cm6 .hr {
   border: 0;
-  border-top: 1px solid var(--bysan-table-border);
-  margin-block: 1.8em;
+  border-top: var(--bysan-hr-width, 1px) solid var(--bysan-table-border);
+  margin-block: var(--bysan-hr-margin, 1.8em);
 }
 
 :is(.markdown-preview-view, .markdown-rendered) strong,
 .markdown-source-view.mod-cm6 .cm-strong {
-  font-weight: 800;
+  font-weight: var(--bysan-strong-weight, 800);
 }
 
 /* Bysan utility colors used by HTML spans in notes. */
@@ -905,7 +920,7 @@ body.bysan-style-controller-active
 .bysan-settings-section-anchor,
 .bysan-style-settings [id^="bysan-section-"],
 .bysan-style-settings [id^="bysan-theme-heading-"] {
-  scroll-margin-top: 16rem;
+  scroll-margin-top: 18rem;
 }
 
 /* Make the hierarchy visible in the content itself, not only in navigation. */
@@ -956,29 +971,105 @@ body.bysan-style-controller-active
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   align-items: center;
-  gap: 0.75rem;
-  width: min(46rem, 72%);
+  gap: 0.5rem;
+  width: 100%;
+}
+
+.bysan-dual-mode-setting {
+  display: grid;
+  grid-template-columns: minmax(10.5rem, 32%) minmax(0, 1fr);
+  align-items: center;
+  column-gap: 1rem;
+}
+
+.bysan-dual-mode-setting > .setting-item-info,
+.bysan-dual-mode-setting > .setting-item-control {
+  min-width: 0;
+}
+
+.bysan-unified-control-setting,
+.bysan-theme-setting-item:not(.setting-item-heading):not(.bysan-theme-color-setting) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 14rem;
+  align-items: center;
+  column-gap: 1rem;
+}
+
+.bysan-unified-control-setting > .setting-item-info,
+.bysan-unified-control-setting > .setting-item-control,
+.bysan-theme-setting-item:not(.setting-item-heading):not(.bysan-theme-color-setting) > .setting-item-info,
+.bysan-theme-setting-item:not(.setting-item-heading):not(.bysan-theme-color-setting) > .setting-item-control {
+  min-width: 0;
+  width: 100%;
+}
+
+.bysan-unified-control-setting > .setting-item-control,
+.bysan-theme-setting-item:not(.setting-item-heading):not(.bysan-theme-color-setting) > .setting-item-control {
+  justify-content: flex-end;
+}
+
+.bysan-control-type-select .setting-item-control select,
+.bysan-control-type-class-select .setting-item-control select,
+.bysan-control-type-variable-select .setting-item-control select,
+.bysan-control-type-variable-text .setting-item-control input,
+.bysan-control-type-variable-number .setting-item-control input {
+  width: 100%;
+  max-width: none;
+}
+
+.bysan-control-type-slider .setting-item-control,
+.bysan-control-type-variable-number-slider .setting-item-control {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.bysan-resettable-slider .setting-item-control {
+  grid-template-columns: minmax(0, 1fr) 4.5rem 2rem;
+}
+
+.bysan-slider-value {
+  min-width: 0;
+  text-align: right;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.bysan-control-type-slider .setting-item-control .slider,
+.bysan-control-type-variable-number-slider .setting-item-control .slider {
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+  margin: 0;
+}
+
+.bysan-control-type-slider .setting-item-control input[type="range"],
+.bysan-control-type-variable-number-slider .setting-item-control input[type="range"] {
+  width: 100%;
+  max-width: none;
 }
 
 .bysan-mode-control {
   display: grid;
   grid-template-columns: max-content minmax(0, 1fr);
   align-items: center;
-  gap: 0.45rem;
+  gap: 0.25rem;
   min-width: 0;
-  padding: 0.35rem 0.45rem;
+  padding: 0.3rem 0.35rem;
   border: 1px solid var(--background-modifier-border);
   border-radius: 8px;
   background: color-mix(in srgb, var(--background-secondary) 72%, transparent);
 }
 
 .bysan-mode-control-color {
-  grid-template-columns: max-content 2rem minmax(5.8rem, 1fr) max-content;
+  grid-template-columns: max-content 1.7rem minmax(0, 1fr) 1.55rem;
 }
 
 .bysan-mode-control-color input[type="color"] {
-  width: 2rem;
-  min-width: 2rem;
+  width: 1.7rem;
+  min-width: 1.7rem;
 }
 
 .bysan-color-reset {
@@ -993,6 +1084,19 @@ body.bysan-style-controller-active
   color: var(--text-muted) !important;
   opacity: 1 !important;
   box-shadow: none !important;
+}
+
+.bysan-mode-control-color .bysan-color-reset {
+  width: 1.55rem !important;
+  min-width: 1.55rem !important;
+  height: 1.55rem !important;
+  font-size: 0.88em;
+}
+
+.bysan-mode-control-color .bysan-theme-color-value {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .bysan-color-reset:hover,
@@ -1150,11 +1254,20 @@ body.bysan-style-controller-active
   .bysan-dual-mode-setting {
     align-items: flex-start;
     flex-direction: column;
+    display: flex;
   }
 
   .bysan-dual-mode-setting .setting-item-control {
     width: 100%;
     grid-template-columns: 1fr;
+  }
+
+  .bysan-unified-control-setting,
+  .bysan-theme-setting-item:not(.setting-item-heading):not(.bysan-theme-color-setting) {
+    display: flex;
+    align-items: stretch;
+    flex-direction: column;
+    gap: 0.5rem;
   }
 
   .bysan-mode-control .slider,

@@ -1,9 +1,8 @@
 /**
  * Bysan Style Controller
- * Version: 0.11.0
+ * Version: 0.12.0
  *
- * Owns visual presentation only. Heading/equation numbering and media sizing
- * remain exclusively owned by their dedicated plugins.
+ * Owns visual presentation and provides switchable, integrated Bysan modules.
  */
 
 const {
@@ -41,6 +40,95 @@ const CODE_THEME_CLASSES = [
   "code-theme-monokai",
   "code-theme-sublime"
 ];
+
+const INTEGRATED_MODULES = [
+  {
+    key: "moduleHeadingNumbering",
+    id: "academic-heading-numbering",
+    nameZh: "学术标题编号",
+    nameEn: "Academic heading numbering",
+    descriptionZh: "统一处理编辑视图、阅读视图、Outline 与 PDF 标题编号。",
+    descriptionEn: "Unified heading numbering for editor, reading view, Outline and PDF."
+  },
+  {
+    key: "moduleMediaResizer",
+    id: "mermaid-inline-resizer",
+    nameZh: "Mermaid、图片与表格缩放",
+    nameEn: "Mermaid, image and table resizing",
+    descriptionZh: "提供持久化宽度、全屏 Mermaid 查看和无跳页缩放控件。",
+    descriptionEn: "Persistent widths, fullscreen Mermaid viewing and scroll-safe controls."
+  },
+  {
+    key: "moduleReviewToolbar",
+    id: "selection-review-toolbar",
+    nameZh: "选区审阅工具栏",
+    nameEn: "Selection review toolbar",
+    descriptionZh: "提供高亮、字体颜色、评论角标及 Markdown/LaTeX 评论窗。",
+    descriptionEn: "Highlights, text colours, review badges and Markdown/LaTeX comment windows."
+  }
+];
+
+const MODULE_SETTING_KEYS = new Set(INTEGRATED_MODULES.map((module) => module.key));
+
+const CONTENT_GEOMETRY_CONTROLS = [
+  ["inlineCodeRadius", "--bysan-inline-code-radius", "px", 0, 16, 1, "行内代码圆角", "Inline-code radius"],
+  ["inlineCodeFontSize", "--bysan-inline-code-font-size", "em", 0.6, 1.5, 0.05, "行内代码字号", "Inline-code font size"],
+  ["inlineCodePaddingY", "--bysan-inline-code-padding-y", "px", 0, 12, 1, "行内代码垂直内边距", "Inline-code vertical padding"],
+  ["inlineCodePaddingX", "--bysan-inline-code-padding-x", "px", 0, 20, 1, "行内代码水平内边距", "Inline-code horizontal padding"],
+  ["inlineCodeMargin", "--bysan-inline-code-margin", "px", 0, 12, 1, "行内代码水平外边距", "Inline-code horizontal margin"],
+  ["inlineCodeShadowSize", "--bysan-inline-code-shadow-size", "px", 0, 8, 1, "行内代码阴影尺寸", "Inline-code shadow size"],
+  ["codeBlockRadius", "--bysan-code-radius", "px", 0, 20, 1, "代码块圆角", "Code-block radius"],
+  ["codeBlockFontSize", "--bysan-code-font-size", "em", 0.6, 1.5, 0.05, "代码块字号", "Code-block font size"],
+  ["codeBlockLineHeight", "--bysan-code-line-height", "", 1, 2.5, 0.05, "代码块行高", "Code-block line height"],
+  ["codeBlockPaddingY", "--bysan-code-padding-y", "em", 0, 3, 0.1, "代码块垂直内边距", "Code-block vertical padding"],
+  ["codeBlockPaddingX", "--bysan-code-padding-x", "em", 0, 4, 0.1, "代码块水平内边距", "Code-block horizontal padding"],
+  ["tableBorderWidth", "--bysan-table-border-width", "pt", 0.5, 5, 0.1, "表格外边框宽度", "Table outer-border width"],
+  ["tableCellPaddingY", "--bysan-table-cell-padding-y", "px", 0, 20, 1, "单元格垂直内边距", "Table-cell vertical padding"],
+  ["tableCellPaddingX", "--bysan-table-cell-padding-x", "px", 0, 40, 1, "单元格水平内边距", "Table-cell horizontal padding"],
+  ["tableHeaderWeight", "--bysan-table-header-weight", "", 100, 900, 50, "表头字重", "Table-header weight"],
+  ["tableMarginY", "--bysan-table-margin-y", "em", 0, 4, 0.1, "表格上下外边距", "Table vertical margin"],
+  ["quoteBorderWidth", "--bysan-quote-border-width", "px", 0, 16, 1, "引用块边框宽度", "Blockquote border width"],
+  ["quoteRadius", "--bysan-quote-radius", "px", 0, 24, 1, "引用块圆角", "Blockquote radius"],
+  ["quoteFontSize", "--bysan-quote-font-size", "em", 0.7, 1.6, 0.05, "引用块字号", "Blockquote font size"],
+  ["quotePaddingY", "--bysan-quote-padding-y", "em", 0, 3, 0.05, "引用块垂直内边距", "Blockquote vertical padding"],
+  ["quotePaddingX", "--bysan-quote-padding-x", "em", 0, 5, 0.1, "引用块水平内边距", "Blockquote horizontal padding"],
+  ["listMarkerWeight", "--bysan-list-marker-weight", "", 100, 900, 50, "列表标记字重", "List-marker weight"],
+  ["taskCheckboxSize", "--bysan-task-checkbox-size", "em", 0.5, 2, 0.05, "任务框尺寸", "Task-checkbox size"],
+  ["taskCheckboxOffset", "--bysan-task-checkbox-offset", "em", 0, 1.5, 0.05, "任务框垂直位置", "Task-checkbox vertical offset"],
+  ["hrWidth", "--bysan-hr-width", "px", 0, 8, 1, "分隔线宽度", "Divider width"],
+  ["hrMargin", "--bysan-hr-margin", "em", 0, 5, 0.1, "分隔线上下间距", "Divider vertical margin"],
+  ["strongWeight", "--bysan-strong-weight", "", 100, 900, 50, "粗体字重", "Strong-text weight"]
+];
+
+const CONTENT_GEOMETRY_DEFAULTS = {
+  inlineCodeRadius: 2,
+  inlineCodeFontSize: 0.9,
+  inlineCodePaddingY: 1,
+  inlineCodePaddingX: 3,
+  inlineCodeMargin: 2,
+  inlineCodeShadowSize: 1,
+  codeBlockRadius: 3,
+  codeBlockFontSize: 0.95,
+  codeBlockLineHeight: 1.55,
+  codeBlockPaddingY: 0.8,
+  codeBlockPaddingX: 1,
+  tableBorderWidth: 1.2,
+  tableCellPaddingY: 6,
+  tableCellPaddingX: 13,
+  tableHeaderWeight: 800,
+  tableMarginY: 1,
+  quoteBorderWidth: 4,
+  quoteRadius: 3,
+  quoteFontSize: 1.05,
+  quotePaddingY: 0.55,
+  quotePaddingX: 2,
+  listMarkerWeight: 650,
+  taskCheckboxSize: 1,
+  taskCheckboxOffset: 0.42,
+  hrWidth: 1,
+  hrMargin: 1.8,
+  strongWeight: 800
+};
 
 const LIGHT_BACKGROUND_CLASSES = [
   "background-settings-workplace-theme-light-blue-mountain",
@@ -97,11 +185,12 @@ const CONTROLLED_PROPERTIES = [
   "--code-background",
   "--code-normal",
   "--blur-codebox-frosted-glass",
-  "--letter-space-code"
+  "--letter-space-code",
+  ...CONTENT_GEOMETRY_CONTROLS.map(([, property]) => property)
 ];
 
 const DEFAULT_SETTINGS = {
-  settingsVersion: 6,
+  settingsVersion: 7,
   uiLanguage: "auto",
   pdfPaperSize: "A4",
   pdfOrientation: "portrait",
@@ -126,6 +215,36 @@ const DEFAULT_SETTINGS = {
   tableZebra: true,
   tableCentered: true,
   quoteSerif: true,
+  moduleHeadingNumbering: true,
+  moduleMediaResizer: true,
+  moduleReviewToolbar: true,
+  inlineCodeRadius: 2,
+  inlineCodeFontSize: 0.9,
+  inlineCodePaddingY: 1,
+  inlineCodePaddingX: 3,
+  inlineCodeMargin: 2,
+  inlineCodeShadowSize: 1,
+  codeBlockRadius: 3,
+  codeBlockFontSize: 0.95,
+  codeBlockLineHeight: 1.55,
+  codeBlockPaddingY: 0.8,
+  codeBlockPaddingX: 1,
+  tableBorderWidth: 1.2,
+  tableCellPaddingY: 6,
+  tableCellPaddingX: 13,
+  tableHeaderWeight: 800,
+  tableMarginY: 1,
+  quoteBorderWidth: 4,
+  quoteRadius: 3,
+  quoteFontSize: 1.05,
+  quotePaddingY: 0.55,
+  quotePaddingX: 2,
+  listMarkerWeight: 650,
+  taskCheckboxSize: 1,
+  taskCheckboxOffset: 0.42,
+  hrWidth: 1,
+  hrMargin: 1.8,
+  strongWeight: 800,
 
   codeBgLight: "#c6efd2",
   codeBgOpacityLight: 0.42,
@@ -170,7 +289,8 @@ const PRESET_META_KEYS = new Set([
   "pdfOrientation",
   "pdfMarginMode",
   "pdfPreviewZoom",
-  "pdfActualScale"
+  "pdfActualScale",
+  ...MODULE_SETTING_KEYS
 ]);
 
 const PALETTE_SETTING_KEYS = new Set([
@@ -257,6 +377,17 @@ module.exports = class BysanStyleController extends Plugin {
       await this.saveData(this.settings);
     }
 
+    if ((savedSettings.settingsVersion || 0) < 7) {
+      for (const module of INTEGRATED_MODULES) {
+        if (typeof savedSettings[module.key] !== "boolean") this.settings[module.key] = true;
+      }
+      this.settings.settingsVersion = 7;
+      await this.saveData(this.settings);
+    }
+
+    this.integratedModules = new Map();
+    this.integratedModuleStyles = new Map();
+
     await this.loadThemeCatalog();
     this.themeControls = new ThemeControls(this, this.themeCatalog);
     this.themeControls.registerCommands();
@@ -297,6 +428,7 @@ module.exports = class BysanStyleController extends Plugin {
     });
     this.addRibbonIcon("file-down", this.t("pdf.command"), () => this.openPdfPreview());
     this.applySettings();
+    await this.syncIntegratedModules();
 
     this.themeObserver = new MutationObserver(() => {
       const darkMode = document.body.classList.contains("theme-dark");
@@ -326,7 +458,7 @@ module.exports = class BysanStyleController extends Plugin {
       this.register(() => window.clearTimeout(timer));
     }
 
-    console.log(`[Bysan Style Controller] v0.11.0 loaded with ${this.themeControls.count} theme controls`);
+    console.log(`[Bysan Style Controller] v0.12.0 loaded with ${this.themeControls.count} theme controls`);
   }
 
 
@@ -355,13 +487,14 @@ module.exports = class BysanStyleController extends Plugin {
   }
 
 
-  onunload() {
+  async onunload() {
     this.themeObserver?.disconnect();
     this.lineRangeObserver?.disconnect();
     this.themeControls?.destroy();
     if (this.lineRangeFrame) window.cancelAnimationFrame(this.lineRangeFrame);
     this.clearLineRangeLabels();
     this.baseThemeStyleEl?.remove();
+    for (const module of INTEGRATED_MODULES) await this.stopIntegratedModule(module.id);
 
     for (const [className, enabled] of this.originalClassState || []) {
       document.body.classList.toggle(className, enabled);
@@ -374,6 +507,83 @@ module.exports = class BysanStyleController extends Plugin {
         document.body.style.removeProperty(property);
       }
     }
+  }
+
+
+  integratedModuleDirectory(module) {
+    return `.obsidian/plugins/bysan-style-controller/modules/${module.id}`;
+  }
+
+
+  async migrateIntegratedModuleData(module) {
+    const adapter = this.app.vault.adapter;
+    const target = `${this.integratedModuleDirectory(module)}/data.json`;
+    const legacy = `.obsidian/plugins/${module.id}/data.json`;
+    if (await adapter.exists(target) || !(await adapter.exists(legacy))) return;
+    await adapter.write(target, await adapter.read(legacy));
+  }
+
+
+  async startIntegratedModule(module) {
+    if (this.integratedModules.has(module.id)) return;
+    if (this.app.plugins.enabledPlugins?.has(module.id)) {
+      if (typeof this.app.plugins.disablePluginAndSave === "function") {
+        await this.app.plugins.disablePluginAndSave(module.id);
+      } else {
+        await this.app.plugins.disablePlugin(module.id);
+      }
+    }
+    await this.migrateIntegratedModuleData(module);
+    const directory = this.integratedModuleDirectory(module);
+    const source = await this.app.vault.adapter.read(`${directory}/main.js`);
+    const moduleScope = { exports: {} };
+    const evaluateModule = new Function(
+      "require",
+      "module",
+      "exports",
+      `${source}\n//# sourceURL=plugin:bysan-style-controller/modules/${module.id}/main.js`
+    );
+    evaluateModule(require, moduleScope, moduleScope.exports);
+    const ModuleClass = moduleScope.exports;
+    const manifest = {
+      ...JSON.parse(await this.app.vault.adapter.read(`${directory}/manifest.json`)),
+      dir: directory
+    };
+    const instance = new ModuleClass(this.app, manifest);
+    await instance.load();
+
+    const style = document.createElement("style");
+    style.dataset.bysanIntegratedModule = module.id;
+    style.textContent = await this.app.vault.adapter.read(`${directory}/styles.css`);
+    document.head.appendChild(style);
+    this.integratedModules.set(module.id, instance);
+    this.integratedModuleStyles.set(module.id, style);
+  }
+
+
+  async stopIntegratedModule(id) {
+    const instance = this.integratedModules?.get(id);
+    if (instance) {
+      await instance.unload();
+      this.integratedModules.delete(id);
+    }
+    this.integratedModuleStyles?.get(id)?.remove();
+    this.integratedModuleStyles?.delete(id);
+  }
+
+
+  async syncIntegratedModules() {
+    for (const module of INTEGRATED_MODULES) {
+      if (this.settings[module.key]) await this.startIntegratedModule(module);
+      else await this.stopIntegratedModule(module.id);
+    }
+  }
+
+
+  async updateIntegratedModuleSetting(key, value) {
+    this.settings[key] = Boolean(value);
+    await this.saveData(this.settings);
+    await this.syncIntegratedModules();
   }
 
 
@@ -664,6 +874,13 @@ module.exports = class BysanStyleController extends Plugin {
         ? '"Latin Modern Roman", "Times New Roman", "Noto Serif CJK SC", serif'
         : "var(--font-text)"
     );
+    for (const [key, property, unit] of CONTENT_GEOMETRY_CONTROLS) {
+      const fallback = CONTENT_GEOMETRY_DEFAULTS[key];
+      const value = Number.isFinite(Number(this.settings[key]))
+        ? Number(this.settings[key])
+        : fallback;
+      body.style.setProperty(property, `${value}${unit}`);
+    }
 
     this.lastDarkMode = body.classList.contains("theme-dark");
     this.applyPalette();
@@ -943,6 +1160,7 @@ class BysanStyleSettingTab extends PluginSettingTab {
 
     this.renderLanguageSetting(containerEl);
     this.renderSectionNavigation(containerEl);
+    this.renderIntegratedModuleSettings(containerEl);
     this.renderStylePresetSettings(containerEl);
     this.renderWorkspaceSettings(containerEl);
     this.renderCodeSettings(containerEl);
@@ -984,6 +1202,7 @@ class BysanStyleSettingTab extends PluginSettingTab {
   renderSectionNavigation(containerEl) {
     const groups = [
       [this.plugin.t("nav.core"), [
+        ["modules", this.plugin.language === "zh" ? "功能模块" : "Feature modules"],
         ["preset", this.plugin.t("section.preset")],
         ["workspace", this.plugin.t("section.workspace")],
         ["code", this.plugin.t("section.code")],
@@ -1116,6 +1335,34 @@ class BysanStyleSettingTab extends PluginSettingTab {
     select.addEventListener("change", () => {
       if (select.value) this.jumpToSection(containerEl, select.value);
     });
+  }
+
+
+  renderIntegratedModuleSettings(containerEl) {
+    const heading = new Setting(containerEl)
+      .setName(this.plugin.language === "zh" ? "功能模块" : "Feature modules")
+      .setDesc(this.plugin.language === "zh"
+        ? "原独立 Bysan 插件已内置为可开关模块；启用内置模块时会自动停用对应旧插件，原数据会迁移后继续使用。"
+        : "Former standalone Bysan plugins are built-in modules. Enabling a module disables its legacy plugin and migrates its data.")
+      .setHeading();
+    heading.settingEl.id = "bysan-section-modules";
+
+    for (const module of INTEGRATED_MODULES) {
+      const setting = new Setting(containerEl)
+        .setName(this.plugin.language === "zh" ? module.nameZh : module.nameEn)
+        .setDesc(this.plugin.language === "zh" ? module.descriptionZh : module.descriptionEn)
+        .addToggle((toggle) => toggle
+          .setValue(Boolean(this.plugin.settings[module.key]))
+          .onChange(async (value) => {
+            toggle.setDisabled(true);
+            try {
+              await this.plugin.updateIntegratedModuleSetting(module.key, value);
+            } finally {
+              toggle.setDisabled(false);
+            }
+          }));
+      setting.settingEl.addClass("bysan-unified-control-setting", "bysan-control-type-toggle");
+    }
   }
 
 
@@ -1260,7 +1507,7 @@ class BysanStyleSettingTab extends PluginSettingTab {
     const heading = new Setting(containerEl).setName(this.plugin.t("section.code")).setHeading();
     heading.settingEl.id = "bysan-section-code";
 
-    new Setting(containerEl)
+    const themeSetting = new Setting(containerEl)
       .setName(this.plugin.t("code.theme"))
       .addDropdown((dropdown) => dropdown
         .addOption("code-theme-bt-default", "Bysan Default")
@@ -1272,6 +1519,7 @@ class BysanStyleSettingTab extends PluginSettingTab {
         .addOption("code-theme-sublime", "Sublime")
         .setValue(this.plugin.settings.codeTheme)
         .onChange((value) => this.plugin.updateSetting("codeTheme", value)));
+    themeSetting.settingEl.addClass("bysan-unified-control-setting", "bysan-control-type-select");
 
     this.addToggle(containerEl, this.plugin.t("code.lineNumbers"), this.plugin.t("code.lineNumbersDesc"), "codeLineNumbers");
     this.addToggle(containerEl, this.plugin.t("code.wrapReading"), this.plugin.t("code.wrapReadingDesc"), "codeWrapReading");
@@ -1413,21 +1661,42 @@ class BysanStyleSettingTab extends PluginSettingTab {
     this.addToggle(containerEl, this.plugin.t("components.zebra"), this.plugin.t("components.zebraDesc"), "tableZebra");
     this.addToggle(containerEl, this.plugin.t("components.center"), this.plugin.t("components.centerDesc"), "tableCentered");
     this.addToggle(containerEl, this.plugin.t("components.quoteSerif"), this.plugin.t("components.quoteSerifDesc"), "quoteSerif");
+
+    const geometryHeading = new Setting(containerEl)
+      .setName(this.plugin.language === "zh" ? "内容尺寸与间距" : "Content size and spacing")
+      .setDesc(this.plugin.language === "zh"
+        ? "这些值直接对应正文元素的实际 CSS 尺寸；每项均可单独恢复为 Bysan 默认值。"
+        : "These values map directly to the rendered CSS dimensions. Every item can be reset independently.")
+      .setHeading();
+    geometryHeading.settingEl.id = "bysan-section-content-geometry";
+    for (const [key, property, unit, minimum, maximum, step, nameZh, nameEn] of CONTENT_GEOMETRY_CONTROLS) {
+      this.addResettableSlider(
+        containerEl,
+        this.plugin.language === "zh" ? nameZh : nameEn,
+        `${property} · ${minimum}–${maximum}${unit}`,
+        key,
+        minimum,
+        maximum,
+        step,
+        unit
+      );
+    }
   }
 
 
   addToggle(containerEl, name, description, key) {
-    new Setting(containerEl)
+    const setting = new Setting(containerEl)
       .setName(name)
       .setDesc(description)
       .addToggle((toggle) => toggle
         .setValue(Boolean(this.plugin.settings[key]))
         .onChange((value) => this.plugin.updateSetting(key, value)));
+    setting.settingEl.addClass("bysan-unified-control-setting", "bysan-control-type-toggle");
   }
 
 
   addSlider(containerEl, name, description, key, minimum, maximum, step) {
-    new Setting(containerEl)
+    const setting = new Setting(containerEl)
       .setName(name)
       .setDesc(description)
       .addSlider((slider) => slider
@@ -1435,5 +1704,48 @@ class BysanStyleSettingTab extends PluginSettingTab {
         .setDynamicTooltip()
         .setValue(this.plugin.settings[key])
         .onChange((value) => this.plugin.updateSetting(key, value)));
+    setting.settingEl.addClass("bysan-unified-control-setting", "bysan-control-type-slider");
+  }
+
+
+  addResettableSlider(containerEl, name, description, key, minimum, maximum, step, unit = "") {
+    let sliderComponent;
+    let valueEl;
+    const formatValue = (value) => `${Number(value).toFixed(step < 0.1 ? 2 : step < 1 ? 1 : 0)}${unit}`;
+    const setting = new Setting(containerEl)
+      .setName(name)
+      .setDesc(description)
+      .addSlider((slider) => {
+        sliderComponent = slider;
+        slider.setLimits(minimum, maximum, step)
+          .setValue(this.plugin.settings[key])
+          .onChange((value) => {
+            valueEl?.setText(formatValue(value));
+            this.plugin.updateSetting(key, value);
+          });
+      });
+    valueEl = setting.controlEl.createSpan({
+      cls: "bysan-slider-value",
+      text: formatValue(this.plugin.settings[key])
+    });
+    const resetButton = setting.controlEl.createEl("button", {
+      cls: "clickable-icon bysan-color-reset",
+      text: "↺",
+      attr: {
+        type: "button",
+        title: this.plugin.language === "zh" ? "恢复初始默认值" : "Restore initial default",
+        "aria-label": this.plugin.language === "zh" ? "恢复初始默认值" : "Restore initial default"
+      }
+    });
+    resetButton.addEventListener("click", async () => {
+      if (!await this.plugin.resetSetting(key)) return;
+      sliderComponent.setValue(this.plugin.settings[key]);
+      valueEl.setText(formatValue(this.plugin.settings[key]));
+    });
+    setting.settingEl.addClass(
+      "bysan-unified-control-setting",
+      "bysan-control-type-slider",
+      "bysan-resettable-slider"
+    );
   }
 }

@@ -1,6 +1,6 @@
 const TEXT = {
   zh: {
-    "app.description": "独立提供 Bysan 内容样式与完整主题控件；不依赖外部主题，也不接管标题、公式或媒体缩放。",
+    "app.description": "统一提供 Bysan 内容样式、完整主题控件与可开关功能模块；不依赖外部主题，公式编号保持独立。",
     "language.name": "界面语言",
     "language.desc": "默认跟随 Obsidian；也可以仅为本插件固定中文或英文。",
     "language.auto": "跟随 Obsidian",
@@ -170,7 +170,7 @@ const TEXT = {
     ,"pdf.openNote": "请先打开一个 Markdown 笔记"
   },
   en: {
-    "app.description": "Provides standalone Bysan content styles and full theme controls without taking over heading numbering, equation numbering, or media resizing.",
+    "app.description": "Unified Bysan content styles, full theme controls and switchable feature modules without an external theme; equation numbering remains independent.",
     "language.name": "Interface language",
     "language.desc": "Follows Obsidian by default, or use a fixed language for this plugin.",
     "language.auto": "Follow Obsidian",

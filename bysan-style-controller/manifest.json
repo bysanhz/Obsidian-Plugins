@@ -1,9 +1,9 @@
 {
   "id": "bysan-style-controller",
   "name": "Bysan Style Controller",
-  "version": "0.11.0",
+  "version": "0.12.0",
   "minAppVersion": "1.13.0",
-  "description": "Standalone Bysan theme with complete native controls for workspace and content styling.",
+  "description": "Unified Bysan style system with native controls and switchable heading, media and review modules.",
   "author": "Bysan",
   "isDesktopOnly": true
 }

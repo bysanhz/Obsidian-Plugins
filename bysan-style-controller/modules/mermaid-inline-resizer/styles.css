@@ -1,0 +1,602 @@
+/**
+ * Mermaid Inline Resizer
+ *
+ * Version: 0.11.0
+ *
+ * Live Preview / Reading View / PDF compatible styles.
+ *
+ * Controls:
+ *
+ * [ − ] [ 3% ] [ 72% ] [ + ]
+ *
+ * 3%  = step
+ * 72% = current Mermaid width
+ */
+
+
+/* =========================================================
+   Mermaid container
+   ========================================================= */
+
+.mermaid.mir-managed {
+  position: relative !important;
+
+  width: 100% !important;
+  max-width: 100% !important;
+
+  box-sizing: border-box !important;
+}
+
+
+/* =========================================================
+   Mermaid SVG
+   ========================================================= */
+
+.mermaid.mir-managed svg {
+  display: block;
+
+  height: auto !important;
+
+  width: var(--mir-svg-width, 100%) !important;
+
+  max-width: var(--mir-svg-width, 100%) !important;
+
+  margin-left: auto !important;
+  margin-right: auto !important;
+
+  /*
+   * 不添加 width transition。
+   *
+   * 避免 CodeMirror / Mermaid reflow
+   * 与动画同时发生。
+   */
+}
+
+
+/* =========================================================
+   Four-button control group
+   ========================================================= */
+
+.mermaid.mir-managed
+> .mir-button-group {
+
+  position: absolute;
+
+
+  /*
+   * 跟随 SVG 左侧。
+   *
+   * 例如 SVG = 70%：
+   * 左右留白约各 15%。
+   */
+  left:
+    calc(
+      (100% - var(--mir-visible-width)) / 2
+      + 6px
+    );
+
+
+  top: 8px;
+
+
+  z-index: 50;
+
+
+  display: flex;
+  align-items: center;
+
+  gap: 2px;
+
+
+  padding: 3px;
+
+
+  border:
+    1px solid
+    var(--background-modifier-border);
+
+
+  border-radius: 6px;
+
+
+  background:
+    var(--background-primary);
+
+
+  box-shadow:
+    0 1px 5px
+    rgba(0, 0, 0, 0.10);
+
+
+  opacity: 0;
+
+  pointer-events: none;
+
+
+  transition:
+    opacity 100ms ease;
+}
+
+
+/* Hover Mermaid 时出现 */
+
+.mermaid.mir-managed:hover
+> .mir-button-group,
+
+.mermaid.mir-managed
+> .mir-button-group:hover,
+
+.mermaid.mir-managed
+> .mir-button-group:focus-within {
+
+  opacity: 1;
+
+  pointer-events: auto;
+}
+
+
+/* =========================================================
+   Standalone images and Markdown tables
+   ========================================================= */
+
+.mir-media-host {
+  position: relative !important;
+}
+
+.mir-media-button-group {
+  position: absolute;
+  left: 6px;
+  top: 8px;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 6px;
+  background: var(--background-primary);
+  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.10);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 100ms ease;
+}
+
+.mir-media-host:hover .mir-media-button-group,
+.mir-media-button-group:hover,
+.mir-media-button-group:focus-within {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.mir-resizable-image,
+.mir-resizable-table {
+  box-sizing: border-box !important;
+}
+
+
+/* =========================================================
+   Live Preview Markdown table source
+
+   Obsidian 1.13 does not create a <table> widget in Live Preview.
+   These classes are supplied by CM6 Decoration, so controls and
+   presentation remain stable even while the table source is active.
+   ========================================================= */
+
+.markdown-source-view.mod-cm6 .cm-line.mir-source-table-line {
+  box-sizing: border-box !important;
+  width: var(--mir-source-table-width, 100%) !important;
+  max-width: var(--mir-source-table-width, 100%) !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+  padding-left: 12px !important;
+  padding-right: 12px !important;
+  border-left: 1px solid var(--bysan-table-border, var(--background-modifier-border));
+  border-right: 1px solid var(--bysan-table-border, var(--background-modifier-border));
+  font-variant-numeric: tabular-nums;
+}
+
+.markdown-source-view.mod-cm6 .cm-line.mir-source-table-header,
+.markdown-source-view.mod-cm6 .cm-line.mir-source-table-separator {
+  background-color: var(--bysan-table-head-bg, rgba(116, 192, 230, 0.18)) !important;
+  font-weight: 700;
+}
+
+.markdown-source-view.mod-cm6 .cm-line.mir-source-table-header {
+  position: relative !important;
+  border-top: 1.5px solid var(--bysan-table-border, var(--background-modifier-border));
+  border-radius: 4px 4px 0 0;
+  padding-top: 4px !important;
+}
+
+.markdown-source-view.mod-cm6 .cm-line.mir-source-table-separator {
+  color: var(--text-muted);
+}
+
+.markdown-source-view.mod-cm6 .cm-line.mir-source-table-data-odd {
+  background-color: transparent !important;
+}
+
+.markdown-source-view.mod-cm6 .cm-line.mir-source-table-data-even {
+  background-color: var(--bysan-table-stripe-bg, rgba(116, 192, 230, 0.10)) !important;
+}
+
+.markdown-source-view.mod-cm6 .cm-line.mir-source-table-line.cm-active {
+  box-shadow: inset 3px 0 0 var(--interactive-accent);
+}
+
+.markdown-source-view.mod-cm6 .cm-line.mir-source-table-last {
+  border-bottom: 1.5px solid var(--bysan-table-border, var(--background-modifier-border));
+  border-radius: 0 0 4px 4px;
+  padding-bottom: 4px !important;
+}
+
+.mir-source-table-control-row {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  position: absolute;
+  left: 0;
+  top: -35px;
+  z-index: 60;
+  width: var(--mir-source-table-width, 100%);
+  max-width: var(--mir-source-table-width, 100%);
+  min-height: 34px;
+  pointer-events: none;
+}
+
+.mir-source-table-control-row > .mir-source-table-controls {
+  position: static !important;
+  display: flex !important;
+  opacity: 1 !important;
+  pointer-events: auto !important;
+}
+
+@media print {
+  .mir-media-button-group,
+  .mir-source-table-control-row {
+    display: none !important;
+  }
+}
+
+
+/* =========================================================
+   Integrated Mermaid fullscreen zoom
+   ========================================================= */
+
+body.mir-plugin-active .mermaid-zoom-fullscreen-btn {
+  display: none !important;
+}
+
+.mermaid.mir-managed {
+  position: relative;
+}
+
+.mir-fullscreen-button {
+  position: absolute;
+  z-index: 6;
+  top: 8px;
+  right: 8px;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+  background: var(--background-primary-alt);
+  color: var(--text-normal);
+  box-shadow: var(--shadow-s);
+  cursor: pointer;
+  font-size: 19px;
+  line-height: 1;
+}
+
+.mir-fullscreen-button:hover {
+  color: var(--text-accent);
+  background: var(--background-modifier-hover);
+}
+
+.mir-zoom-modal {
+  width: min(96vw, 1500px);
+  height: min(94vh, 1000px);
+}
+
+.mir-zoom-modal .modal-content {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.mir-zoom-toolbar {
+  display: flex;
+  flex: 0 0 auto;
+  justify-content: center;
+  gap: 6px;
+  padding: 2px 36px 10px;
+}
+
+.mir-zoom-toolbar button {
+  min-width: 40px;
+}
+
+.mir-zoom-toolbar .mir-zoom-reset {
+  min-width: 68px;
+  font-variant-numeric: tabular-nums;
+}
+
+.mir-zoom-toolbar .mir-zoom-close {
+  margin-left: 12px;
+}
+
+.mir-zoom-viewport {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-m);
+  background: var(--background-secondary);
+  cursor: grab;
+  touch-action: none;
+}
+
+.mir-zoom-viewport.is-dragging {
+  cursor: grabbing;
+}
+
+.mir-zoom-canvas {
+  transform-origin: center center;
+  will-change: transform;
+}
+
+.mir-zoom-canvas svg {
+  display: block;
+  max-width: none !important;
+  max-height: none !important;
+}
+
+@media print {
+  .mir-fullscreen-button {
+    display: none !important;
+  }
+}
+
+
+/* =========================================================
+   Common button
+   ========================================================= */
+
+.mir-button {
+
+  height: 24px;
+
+  min-width: 26px;
+
+
+  padding:
+    0 6px;
+
+
+  border: none;
+
+  border-radius: 4px;
+
+
+  background:
+    transparent;
+
+
+  color:
+    var(--text-muted);
+
+
+  font-size: 12px;
+
+  line-height: 24px;
+
+
+  text-align: center;
+
+
+  cursor: pointer;
+
+
+  user-select: none;
+}
+
+
+/* Hover */
+
+.mir-button:hover {
+
+  color:
+    var(--text-normal);
+
+
+  background:
+    var(--background-modifier-hover);
+}
+
+
+/* =========================================================
+   Minus / Plus
+   ========================================================= */
+
+.mir-minus,
+.mir-plus {
+
+  min-width: 27px;
+
+  font-size: 16px;
+
+  font-weight: 600;
+}
+
+
+/* =========================================================
+   Step
+   ========================================================= */
+
+.mir-step-value {
+
+  min-width: 39px;
+
+  font-size: 11px;
+
+  font-weight: 600;
+
+
+  font-variant-numeric:
+    tabular-nums;
+
+
+  color:
+    var(--interactive-accent);
+}
+
+
+.mir-step-value:hover {
+
+  color:
+    var(--interactive-accent-hover);
+
+
+  background:
+    var(--background-modifier-hover);
+}
+
+
+/* =========================================================
+   Current width
+   ========================================================= */
+
+.mir-width-value {
+
+  min-width: 43px;
+
+  font-size: 11px;
+
+
+  font-variant-numeric:
+    tabular-nums;
+}
+
+
+/* =========================================================
+   Reading View
+   ========================================================= */
+
+.markdown-reading-view
+.mermaid.mir-managed {
+
+  width: 100% !important;
+
+  max-width: 100% !important;
+}
+
+
+/*
+ * Reading View 不需要编辑按钮。
+ *
+ * 控件目前本来也只注入 Live Preview，
+ * 这里再做一道保险。
+ */
+
+.markdown-reading-view
+.mir-button-group {
+
+  display: none !important;
+}
+
+
+/* =========================================================
+   PDF / Print
+   ========================================================= */
+
+@media print {
+
+  /*
+   * 控件绝不进入 PDF。
+   */
+  .mir-button-group {
+
+    display:
+      none !important;
+  }
+
+
+  /*
+   * Mermaid 整体占满 PDF 正文布局区域。
+   *
+   * 真正图的大小仍由内部 SVG 的
+   * %% width: xx%
+   * 对应 inline style 控制。
+   */
+  .mermaid.mir-managed {
+
+    position:
+      relative !important;
+
+
+    width:
+      100% !important;
+
+
+    max-width:
+      100% !important;
+
+
+    box-sizing:
+      border-box !important;
+
+
+    break-inside:
+      avoid;
+
+
+    page-break-inside:
+      avoid;
+  }
+
+
+  /*
+   * 保持 SVG 居中和同比例缩放。
+   *
+   * 注意：
+   * 这里故意不覆盖 SVG 的 width，
+   * 因为 width 已经由插件根据：
+   *
+   * %% width: 72%
+   *
+   * 写入 inline style。
+   */
+  .mermaid.mir-managed svg {
+
+    display:
+      block !important;
+
+
+    height:
+      auto !important;
+
+
+    margin-left:
+      auto !important;
+
+
+    margin-right:
+      auto !important;
+
+
+    break-inside:
+      avoid;
+
+
+    page-break-inside:
+      avoid;
+  }
+}

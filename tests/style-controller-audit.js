@@ -106,10 +106,25 @@ assert(defaults.codeLetterSpacing >= 0 && defaults.codeLetterSpacing <= 2, "inva
 for (const key of ["workspaceBackground", "collapsedLineRanges", "codeLineNumbers", "codeWrapReading", "codeNoWrapLive", "muteCodeActiveLine", "tableZebra", "tableCentered", "quoteSerif"]) {
   assert.equal(typeof defaults[key], "boolean", `invalid toggle default: ${key}`);
 }
+for (const key of ["moduleHeadingNumbering", "moduleMediaResizer", "moduleReviewToolbar"]) {
+  assert.equal(typeof defaults[key], "boolean", `invalid integrated-module toggle: ${key}`);
+}
+for (const key of [
+  "inlineCodeRadius", "inlineCodeFontSize", "inlineCodePaddingY", "inlineCodePaddingX",
+  "inlineCodeMargin", "inlineCodeShadowSize", "codeBlockRadius", "codeBlockFontSize",
+  "codeBlockLineHeight", "codeBlockPaddingY", "codeBlockPaddingX", "tableBorderWidth",
+  "tableCellPaddingY", "tableCellPaddingX", "tableHeaderWeight", "tableMarginY",
+  "quoteBorderWidth", "quoteRadius", "quoteFontSize", "quotePaddingY", "quotePaddingX",
+  "listMarkerWeight", "taskCheckboxSize", "taskCheckboxOffset", "hrWidth", "hrMargin",
+  "strongWeight"
+]) {
+  assert(Number.isFinite(defaults[key]), `invalid content-geometry default: ${key}`);
+}
 for (const method of [
   "requestStylePresetSwitch", "saveStylePreset", "renameStylePreset", "deleteStylePreset",
   "renderSectionNavigation", "renderStylePresetSettings", "renderWorkspaceSettings",
-  "renderCodeSettings", "renderPaletteSettings", "renderComponentSettings", "openPdfPreview"
+  "renderCodeSettings", "renderPaletteSettings", "renderComponentSettings", "openPdfPreview",
+  "renderIntegratedModuleSettings", "syncIntegratedModules", "addResettableSlider"
 ]) {
   assert(mainSource.includes(`${method}(`), `missing plugin feature: ${method}`);
 }
@@ -133,6 +148,11 @@ for (const key of usedTranslations) {
 
 for (const file of ["main.js", "theme-controls.js", "pdf-preview.js", "styles.css", "manifest.json", "blue-topaz-base.css", "blue-topaz-settings.json"]) {
   assert(fs.existsSync(path.join(pluginRoot, file)), `missing plugin asset: ${file}`);
+}
+for (const moduleId of ["academic-heading-numbering", "mermaid-inline-resizer", "selection-review-toolbar"]) {
+  for (const file of ["main.js", "styles.css", "manifest.json"]) {
+    assert(fs.existsSync(path.join(pluginRoot, "modules", moduleId, file)), `missing integrated module asset: ${moduleId}/${file}`);
+  }
 }
 
 const counts = Object.fromEntries([...supportedTypes].map((type) => [

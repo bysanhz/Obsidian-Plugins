@@ -1,0 +1,131 @@
+/**
+ * Academic Heading Numbering
+ *
+ * Version: 0.4.1
+ *
+ * Live Preview:
+ *   真正的 CodeMirror Widget。
+ *
+ * Outline:
+ *   main.js 计算好编号后通过 data 属性显示。
+ *
+ * Reading View / PDF:
+ *   main.js 从同一 heading model 插入虚拟 span。
+ */
+
+
+/* =========================================================
+   Variables
+   ========================================================= */
+
+:root {
+  --ahn-number-color: cornflowerblue;
+  --ahn-number-gap: 0.55em;
+}
+
+
+/* =========================================================
+   Live Preview - CodeMirror Widget
+   ========================================================= */
+
+.ahn-cm-number {
+  display: inline-block;
+
+  color:
+    var(--ahn-number-color);
+
+  font-weight: 700;
+
+  font-variant-numeric:
+    tabular-nums;
+
+  margin-right:
+    var(--ahn-number-gap);
+
+  white-space: nowrap;
+
+  text-decoration: none;
+
+  pointer-events: none;
+
+  /*
+   * 编号是视觉装饰，不希望被鼠标选中。
+   */
+  user-select: none;
+
+  vertical-align: baseline;
+}
+
+
+/*
+ * H1 使用中文章号，
+ * 不需要 tabular numeral。
+ */
+.ahn-cm-number-h1 {
+  font-variant-numeric: normal;
+}
+
+
+/* =========================================================
+   Reading View / rendered Markdown / PDF
+   ========================================================= */
+
+.ahn-reading-number {
+  display: inline-block;
+  color: var(--ahn-number-color);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  margin-right: var(--ahn-number-gap);
+  white-space: nowrap;
+  text-decoration: none;
+  pointer-events: none;
+  user-select: none;
+}
+
+.ahn-reading-number-h1 {
+  font-variant-numeric: normal;
+}
+
+@media print {
+  .ahn-reading-number {
+    color: var(--ahn-number-color);
+  }
+}
+
+
+/* =========================================================
+   Outline
+   ========================================================= */
+
+.workspace-leaf-content[data-type="outline"]
+.ahn-outline-target::before {
+
+  content:
+    attr(data-ahn-number);
+
+  display:
+    inline-block;
+
+  color:
+    var(--ahn-number-color);
+
+  font-weight:
+    700;
+
+  font-variant-numeric:
+    tabular-nums;
+
+  margin-right:
+    0.4em;
+
+  text-decoration:
+    none;
+}
+
+
+.workspace-leaf-content[data-type="outline"]
+[data-ahn-number$="、"]::before {
+
+  font-variant-numeric:
+    normal;
+}

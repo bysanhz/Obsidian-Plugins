@@ -6,10 +6,10 @@
 
 | 插件 | 版本 | 用途 |
 | --- | --- | --- |
-| [Academic Heading Numbering](./academic-heading-numbering/) | 0.4.1 | 为 Live Preview、阅读视图、Outline 和 PDF 提供统一的学术标题编号 |
-| [Mermaid Inline Resizer](./mermaid-inline-resizer/) | 0.12.1 | 持久化调整 Mermaid、图片和表格宽度，内置 Mermaid 全屏缩放，并防止 macOS 点击控件后跳到页首 |
-| [Selection Review Toolbar](./selection-review-toolbar/) | 0.2.1 | 选中文字后显示浮动审阅工具栏，支持内置/自定义颜色、评论角标及可拖拽 Markdown/LaTeX 评论窗 |
-| [Bysan Style Controller](./bysan-style-controller/) | 0.11.0 | 独立提供 Bysan 基础主题、真实默认值与作用区域说明、双模式配色，以及所见即所得的 PDF 分页预览与直接导出 |
+| [Bysan Style Controller](./bysan-style-controller/) | 0.12.0 | 统一提供 Bysan 主题、真实默认值、双模式配色、PDF 预览，以及可开关的标题编号、媒体缩放和选区审阅模块 |
+| [Academic Heading Numbering](./academic-heading-numbering/) | 0.4.1 | 兼容回退版；功能已内置到 Style Controller |
+| [Mermaid Inline Resizer](./mermaid-inline-resizer/) | 0.12.1 | 兼容回退版；功能已内置到 Style Controller |
+| [Selection Review Toolbar](./selection-review-toolbar/) | 0.2.1 | 兼容回退版；功能已内置到 Style Controller |
 
 ## 安装
 
@@ -33,8 +33,7 @@ YourVault/
 ## 兼容性说明
 
 - 主要面向 Obsidian Desktop 1.13.x。
-- 插件之间已经在同一 Vault 中进行组合测试。
-- `Bysan Style Controller` 内置 MIT 许可的 Blue Topaz 基础 CSS，但不依赖外部主题或 Style Settings；仍不接管标题、公式或媒体宽度。
+- `Bysan Style Controller` 内置 MIT 许可的 Blue Topaz 基础 CSS，但不依赖外部主题或 Style Settings；标题编号、媒体宽度与选区审阅均由其可开关模块统一管理，公式编号保持独立。
 - `Selection Review Toolbar` 会避开 fenced code、Mermaid、块公式和行内代码/公式选区。
 - 所有持久化格式均写入 Markdown 或 HTML class，不依赖插件内存状态。
 

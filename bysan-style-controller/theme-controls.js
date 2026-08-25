@@ -885,6 +885,7 @@ class ThemeControls {
     const description = localised(item, "description", this.plugin.language);
     const setting = new Setting(containerEl).setName(title);
     setting.settingEl.addClass("bysan-theme-setting-item");
+    setting.settingEl.addClass(`bysan-control-type-${item.type}`);
     setting.settingEl.dataset.bysanSettingId = item.id;
 
     if (item.type === "heading") {

@@ -732,6 +732,258 @@ body.bysan-style-controller-active
   contain: paint;
 }
 
+.bysan-major-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.55rem;
+}
+
+.bysan-major-tab {
+  min-width: 0;
+  min-height: 2.8rem;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--bysan-settings-border) !important;
+  border-radius: 9px !important;
+  background: var(--bysan-settings-surface-secondary) !important;
+  color: var(--bysan-settings-text) !important;
+  font-weight: 700;
+  box-shadow: none !important;
+}
+
+.bysan-major-tab:hover,
+.bysan-major-tab:focus-visible {
+  border-color: var(--bysan-settings-cta) !important;
+}
+
+.bysan-major-tab.is-active {
+  border-color: color-mix(in srgb, var(--bysan-settings-cta) 70%, transparent) !important;
+  background: color-mix(in srgb, var(--bysan-settings-cta) 15%, var(--bysan-settings-surface)) !important;
+  color: var(--bysan-settings-cta) !important;
+  box-shadow: inset 0 -3px 0 var(--bysan-settings-cta) !important;
+}
+
+.bysan-major-areas {
+  scroll-margin-top: 8rem;
+}
+
+.bysan-major-area[hidden] {
+  display: none !important;
+}
+
+.bysan-major-area {
+  margin-top: 1rem;
+  padding: 0.85rem;
+  border: 1px solid color-mix(in srgb, var(--bysan-settings-cta) 36%, var(--bysan-settings-border));
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--bysan-settings-surface-secondary) 76%, transparent);
+}
+
+.bysan-major-area-header {
+  margin: -0.85rem -0.85rem 0.85rem;
+  padding: 1rem 1.1rem;
+  border-radius: 14px 14px 0 0;
+  background: linear-gradient(
+    100deg,
+    color-mix(in srgb, var(--bysan-settings-cta) 18%, var(--bysan-settings-surface)),
+    color-mix(in srgb, var(--bysan-settings-cta) 5%, var(--bysan-settings-surface))
+  );
+  border-bottom: 1px solid color-mix(in srgb, var(--bysan-settings-cta) 32%, var(--bysan-settings-border));
+}
+
+.bysan-major-area-header h2 {
+  margin: 0;
+  color: var(--bysan-settings-cta);
+  font-size: 1.2rem;
+}
+
+.bysan-major-area-header p {
+  margin: 0.25rem 0 0;
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+}
+
+.bysan-subarea,
+.bysan-theme-group {
+  margin: 0.7rem 0;
+  overflow: clip;
+  border: 1px solid var(--bysan-settings-border);
+  border-radius: 11px;
+  background: var(--bysan-settings-surface);
+}
+
+.bysan-subarea-summary,
+.bysan-theme-group-summary {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-height: 2.85rem;
+  padding: 0.6rem 0.8rem;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+
+.bysan-subarea-summary::-webkit-details-marker,
+.bysan-theme-group-summary::-webkit-details-marker {
+  display: none;
+}
+
+.bysan-subarea-summary:hover,
+.bysan-theme-group-summary:hover {
+  background: var(--background-modifier-hover);
+}
+
+.bysan-subarea[open] > .bysan-subarea-summary,
+.bysan-theme-group[open] > .bysan-theme-group-summary {
+  border-bottom: 1px solid var(--bysan-settings-border);
+  background: color-mix(in srgb, var(--bysan-settings-cta) 8%, var(--bysan-settings-surface));
+}
+
+.bysan-subarea-chevron,
+.bysan-theme-group-chevron {
+  display: inline-grid;
+  flex: 0 0 1.45rem;
+  width: 1.45rem;
+  height: 1.45rem;
+  place-items: center;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bysan-settings-cta) 13%, transparent);
+  color: var(--bysan-settings-cta);
+  font-size: 1.25rem;
+  line-height: 1;
+  transition: transform 120ms ease;
+}
+
+.bysan-subarea[open] > summary .bysan-subarea-chevron,
+.bysan-theme-group[open] > summary .bysan-theme-group-chevron {
+  transform: rotate(90deg);
+}
+
+.bysan-subarea-title,
+.bysan-theme-group-title {
+  font-weight: 750;
+}
+
+.bysan-subarea-body,
+.bysan-theme-group-body {
+  padding: 0.7rem;
+}
+
+.bysan-control-cluster {
+  margin: 0.55rem 0;
+  border: 1px solid var(--bysan-settings-border);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--bysan-settings-surface-secondary) 70%, transparent);
+}
+
+.bysan-control-cluster-summary {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-height: 2.45rem;
+  padding: 0.45rem 0.65rem;
+  cursor: pointer;
+  list-style: none;
+  font-weight: 700;
+}
+
+.bysan-control-cluster-summary::-webkit-details-marker {
+  display: none;
+}
+
+.bysan-control-cluster[open] > summary {
+  border-bottom: 1px solid var(--bysan-settings-border);
+}
+
+.bysan-control-cluster[open] > summary .bysan-subarea-chevron {
+  transform: rotate(90deg);
+}
+
+.bysan-control-cluster-body {
+  padding: 0.45rem 0.6rem;
+}
+
+.bysan-subarea-internal-heading {
+  display: none !important;
+}
+
+.bysan-major-area[data-bysan-major-area="theme"] > .bysan-theme-catalog-title {
+  display: none !important;
+}
+
+.bysan-theme-group-major {
+  border-color: color-mix(in srgb, var(--bysan-settings-cta) 30%, var(--bysan-settings-border));
+}
+
+.bysan-theme-group-major > .bysan-theme-group-summary {
+  min-height: 3.2rem;
+  color: var(--bysan-settings-cta);
+  font-size: 1.05rem;
+}
+
+.bysan-theme-group-minor {
+  margin: 0.55rem 0;
+  background: color-mix(in srgb, var(--bysan-settings-surface-secondary) 66%, var(--bysan-settings-surface));
+}
+
+.bysan-theme-group-minor > .bysan-theme-group-summary {
+  min-height: 2.65rem;
+}
+
+.bysan-theme-group-summary-text {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.bysan-theme-group-description {
+  margin-top: 0.08rem;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  font-weight: 400;
+}
+
+/* Compact related style, size and colour controls into a local two-column
+ * panel. Each setting remains independently editable and resettable. */
+.bysan-theme-group-minor > .bysan-theme-group-body {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.55rem;
+}
+
+.bysan-theme-group-minor > .bysan-theme-group-body > .setting-item {
+  min-width: 0;
+  margin: 0;
+  padding: 0.65rem;
+  border: 1px solid var(--bysan-settings-border);
+  border-radius: 8px;
+  background: var(--bysan-settings-surface);
+}
+
+.bysan-theme-group-minor > .bysan-theme-group-body > .setting-item:not(.setting-item-heading):not(.bysan-theme-color-setting) {
+  display: flex;
+  align-items: stretch;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.bysan-theme-group-minor > .bysan-theme-group-body > .setting-item > .setting-item-control {
+  width: 100%;
+  min-width: 0;
+}
+
+.bysan-theme-group-minor > .bysan-theme-group-body > .setting-item .setting-item-description {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+}
+
+.bysan-theme-group-minor > .bysan-theme-group-body > :is(.setting-item-heading, .bysan-theme-color-setting, .bysan-theme-group) {
+  grid-column: 1 / -1;
+}
+
 .bysan-settings-nav-header {
   display: grid;
   grid-template-columns: max-content minmax(12rem, 1fr);
@@ -920,7 +1172,7 @@ body.bysan-style-controller-active
 .bysan-settings-section-anchor,
 .bysan-style-settings [id^="bysan-section-"],
 .bysan-style-settings [id^="bysan-theme-heading-"] {
-  scroll-margin-top: 18rem;
+  scroll-margin-top: 8rem;
 }
 
 /* Make the hierarchy visible in the content itself, not only in navigation. */
@@ -987,6 +1239,17 @@ body.bysan-style-controller-active
   min-width: 0;
 }
 
+.bysan-combined-color-opacity-setting {
+  display: flex;
+  align-items: stretch;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.bysan-combined-color-opacity-setting > .setting-item-control {
+  width: 100%;
+}
+
 .bysan-unified-control-setting,
 .bysan-theme-setting-item:not(.setting-item-heading):not(.bysan-theme-color-setting) {
   display: grid;
@@ -1029,6 +1292,21 @@ body.bysan-style-controller-active
   grid-template-columns: minmax(0, 1fr) 4.5rem 2rem;
 }
 
+.bysan-resettable-slider .setting-item-control > .slider {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.bysan-resettable-slider .setting-item-control > .slider-value {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.bysan-resettable-slider .setting-item-control > .bysan-color-reset {
+  grid-column: 3;
+  grid-row: 1;
+}
+
 .bysan-slider-value {
   min-width: 0;
   text-align: right;
@@ -1067,6 +1345,35 @@ body.bysan-style-controller-active
   grid-template-columns: max-content 1.7rem minmax(0, 1fr) 1.55rem;
 }
 
+.bysan-mode-control-has-opacity,
+.bysan-theme-color-mode-has-opacity {
+  grid-template-rows: auto auto;
+  row-gap: 0.45rem;
+}
+
+.bysan-mode-control-has-opacity > .slider-value {
+  grid-column: 1 / 3;
+  grid-row: 2;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  text-align: left;
+}
+
+.bysan-mode-control-has-opacity > .bysan-color-reset,
+.bysan-theme-color-mode-has-opacity > .bysan-color-reset {
+  grid-column: 4;
+  grid-row: 1;
+}
+
+.bysan-mode-control-has-opacity > .slider {
+  grid-column: 3 / 5;
+  grid-row: 2;
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  margin: 0 !important;
+}
+
 .bysan-mode-control-color input[type="color"] {
   width: 1.7rem;
   min-width: 1.7rem;
@@ -1097,6 +1404,8 @@ body.bysan-style-controller-active
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: 0.72rem;
+  letter-spacing: -0.025em;
 }
 
 .bysan-color-reset:hover,
@@ -1134,6 +1443,22 @@ body.bysan-style-controller-active
 .bysan-theme-color-mode > .bysan-mode-label {
   grid-column: 1;
   grid-row: 1;
+}
+
+.bysan-theme-color-mode-has-opacity > .slider-value {
+  grid-column: 1 / 2;
+  grid-row: 2;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.bysan-theme-color-mode-has-opacity > .slider {
+  grid-column: 2 / 5;
+  grid-row: 2;
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  margin: 0 !important;
 }
 
 .bysan-theme-color-mode input[type="color"] {
@@ -1228,6 +1553,15 @@ body.bysan-style-controller-active
 }
 
 @media (max-width: 760px) {
+  .bysan-major-tabs,
+  .bysan-theme-group-minor > .bysan-theme-group-body {
+    grid-template-columns: 1fr;
+  }
+
+  .bysan-theme-group-minor > .bysan-theme-group-body > :is(.setting-item-heading, .bysan-theme-color-setting, .bysan-theme-group) {
+    grid-column: 1;
+  }
+
   .bysan-settings-nav-header {
     grid-template-columns: 1fr;
     gap: 0.4rem;

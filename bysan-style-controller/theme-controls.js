@@ -13,6 +13,7 @@ const MANUAL_SETTING_IDS = new Set([
  * from the bundled theme metadata are not plugin settings and must not leak
  * into Bysan Style Controller's settings page. */
 const HIDDEN_CATALOG_IDS = new Set([
+  "attension",
   "topaz-community",
   "bt-buyacoffe",
   "bt-github"
@@ -808,8 +809,48 @@ class ThemeControls {
       .setHeading();
     introduction.settingEl.addClass("bysan-theme-catalog-title");
     introduction.settingEl.id = "bysan-section-theme";
+    let majorBody = containerEl;
+    let minorBody = null;
+    let firstMajor = true;
+    for (const item of this.items) {
+      const level = Number(item.level || 2);
+      if (item.type === "heading" && level === 1) {
+        const group = this.createThemeGroup(containerEl, item, "major", firstMajor);
+        firstMajor = false;
+        majorBody = group.body;
+        minorBody = null;
+        continue;
+      }
+      if (item.type === "heading" && level === 2) {
+        const group = this.createThemeGroup(majorBody, item, "minor", false);
+        minorBody = group.body;
+        continue;
+      }
+      this.renderItem(minorBody || majorBody || containerEl, item);
+    }
+  }
 
-    for (const item of this.items) this.renderItem(containerEl, item);
+
+  createThemeGroup(containerEl, item, size, open) {
+    const title = localised(item, "title", this.plugin.language) || item.id;
+    const description = item.id === "build-in-style-folder"
+      ? (this.plugin.language === "zh"
+        ? "按需在笔记属性的 cssclasses 中启用文档样式类。"
+        : "Enable document style classes through the note's cssclasses property as needed.")
+      : localised(item, "description", this.plugin.language);
+    const details = containerEl.createEl("details", {
+      cls: `bysan-theme-group bysan-theme-group-${size}`
+    });
+    details.open = open;
+    details.id = this.headingAnchors.get(item);
+    details.dataset.bysanSearch = `${title} ${item.title || ""} ${description || ""} ${item.id}`.toLowerCase();
+    const summary = details.createEl("summary", { cls: "bysan-theme-group-summary" });
+    summary.createSpan({ cls: "bysan-theme-group-chevron", text: "›" });
+    const text = summary.createSpan({ cls: "bysan-theme-group-summary-text" });
+    text.createSpan({ cls: "bysan-theme-group-title", text: title });
+    if (description) text.createSpan({ cls: "bysan-theme-group-description", text: description });
+    const body = details.createDiv({ cls: "bysan-theme-group-body" });
+    return { details, body };
   }
 
 
@@ -904,6 +945,7 @@ class ThemeControls {
     if (item.type === "info-text") return;
     const controlDescription = this.controlDescription(item, description);
     setting.setDesc(controlDescription);
+    setting.descEl?.setAttribute("title", controlDescription);
     setting.settingEl.dataset.bysanSearch = `${title} ${item.title || ""} ${controlDescription} ${item.id}`.toLowerCase();
 
     if (item.type === "class-toggle") {
@@ -998,7 +1040,7 @@ class ThemeControls {
       const label = mode === "light" ? this.plugin.t("theme.light") : this.plugin.t("theme.dark");
       const parsed = parseColor(this.displayValueFor(item, mode));
       const group = setting.controlEl.createDiv({
-        cls: `bysan-theme-color-mode bysan-theme-color-mode-${mode}`
+        cls: `bysan-theme-color-mode bysan-theme-color-mode-${mode}${item.opacity ? " bysan-theme-color-mode-has-opacity" : ""}`
       });
       group.createSpan({
         cls: `bysan-mode-label bysan-mode-label-${mode}`,

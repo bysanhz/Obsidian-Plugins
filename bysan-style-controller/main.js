@@ -1,6 +1,6 @@
 /**
  * Bysan Style Controller
- * Version: 0.12.0
+ * Version: 0.13.0
  *
  * Owns visual presentation and provides switchable, integrated Bysan modules.
  */
@@ -333,6 +333,17 @@ function hexToRgba(hex, opacity) {
 }
 
 
+function hexWithAlpha(hex, opacity) {
+  const normalized = String(hex || "").trim().toUpperCase();
+  if (!/^#[0-9A-F]{6}$/.test(normalized)) return normalized;
+  const alpha = Math.round(clamp(opacity, 0, 1) * 255)
+    .toString(16)
+    .padStart(2, "0")
+    .toUpperCase();
+  return `${normalized}${alpha}`;
+}
+
+
 module.exports = class BysanStyleController extends Plugin {
 
   async onload() {
@@ -458,7 +469,7 @@ module.exports = class BysanStyleController extends Plugin {
       this.register(() => window.clearTimeout(timer));
     }
 
-    console.log(`[Bysan Style Controller] v0.12.0 loaded with ${this.themeControls.count} theme controls`);
+    console.log(`[Bysan Style Controller] v0.13.0 loaded with ${this.themeControls.count} theme controls`);
   }
 
 
@@ -1160,25 +1171,131 @@ class BysanStyleSettingTab extends PluginSettingTab {
 
     this.renderLanguageSetting(containerEl);
     this.renderSectionNavigation(containerEl);
-    this.renderIntegratedModuleSettings(containerEl);
-    this.renderStylePresetSettings(containerEl);
-    this.renderWorkspaceSettings(containerEl);
-    this.renderCodeSettings(containerEl);
-    this.renderPaletteSettings(containerEl);
-    this.renderComponentSettings(containerEl);
-    this.plugin.themeControls.render(containerEl);
+    const areas = containerEl.createDiv({ cls: "bysan-major-areas" });
 
-    const resetSetting = new Setting(containerEl)
-      .setName(this.plugin.t("section.reset"))
-      .setDesc(this.plugin.t("reset.desc"))
-      .addButton((button) => button
-        .setButtonText(this.plugin.t("reset.button"))
-        .setWarning()
-        .onClick(async () => {
-          await this.plugin.requestStylePresetSwitch("__default__");
-          this.display();
-        }));
-    resetSetting.settingEl.id = "bysan-section-reset";
+    const workflow = this.createMajorArea(
+      areas,
+      "workflow",
+      this.plugin.language === "zh" ? "功能与风格" : "Features and styles",
+      this.plugin.language === "zh"
+        ? "管理内置功能模块、完整风格预设和全局恢复。"
+        : "Manage built-in modules, complete style presets and global restore."
+    );
+    this.createSubarea(workflow, "modules", this.plugin.language === "zh" ? "功能模块" : "Feature modules", (body) => {
+      this.renderIntegratedModuleSettings(body);
+    }, true);
+    this.createSubarea(workflow, "preset", this.plugin.t("section.preset"), (body) => {
+      this.renderStylePresetSettings(body);
+    }, true);
+    this.createSubarea(workflow, "reset", this.plugin.t("section.reset"), (body) => {
+      const resetSetting = new Setting(body)
+        .setName(this.plugin.t("section.reset"))
+        .setDesc(this.plugin.t("reset.desc"))
+        .addButton((button) => button
+          .setButtonText(this.plugin.t("reset.button"))
+          .setWarning()
+          .onClick(async () => {
+            await this.plugin.requestStylePresetSwitch("__default__");
+            this.display();
+          }));
+      resetSetting.settingEl.id = "bysan-section-reset";
+    });
+
+    const content = this.createMajorArea(
+      areas,
+      "content",
+      this.plugin.language === "zh" ? "内容与阅读" : "Content and reading",
+      this.plugin.language === "zh"
+        ? "集中调整工作区、代码、颜色、表格、引用和正文几何。"
+        : "Workspace, code, colour, table, quote and content geometry controls."
+    );
+    this.createSubarea(content, "workspace", this.plugin.t("section.workspace"), (body) => {
+      this.renderWorkspaceSettings(body);
+    });
+    this.createSubarea(content, "code", this.plugin.t("section.code"), (body) => {
+      this.renderCodeSettings(body);
+    }, true);
+    this.createSubarea(content, "palette", this.plugin.t("section.palette"), (body) => {
+      this.renderPaletteSettings(body);
+    }, true);
+    this.createSubarea(content, "components", this.plugin.t("section.components"), (body) => {
+      this.renderComponentSettings(body);
+    });
+    this.createSubarea(
+      content,
+      "content-geometry",
+      this.plugin.language === "zh" ? "尺寸与间距" : "Size and spacing",
+      (body) => this.renderGeometrySettings(body)
+    );
+
+    const theme = this.createMajorArea(
+      areas,
+      "theme",
+      this.plugin.t("section.theme"),
+      this.plugin.language === "zh"
+        ? `按界面区域分组管理 ${this.plugin.themeControls.count} 项完整主题设置。`
+        : `Manage ${this.plugin.themeControls.count} full-theme controls grouped by interface area.`
+    );
+    this.plugin.themeControls.render(theme);
+
+    this.setActiveMajorArea(containerEl, this.activeMajorArea || "content", false);
+  }
+
+
+  createMajorArea(containerEl, id, title, description) {
+    const area = containerEl.createEl("section", {
+      cls: "bysan-major-area",
+      attr: { "data-bysan-major-area": id, "aria-label": title }
+    });
+    const header = area.createDiv({ cls: "bysan-major-area-header" });
+    header.createEl("h2", { text: title });
+    header.createEl("p", { text: description });
+    return area;
+  }
+
+
+  createSubarea(containerEl, id, title, render, open = false) {
+    const details = containerEl.createEl("details", {
+      cls: "bysan-subarea",
+      attr: { "data-bysan-subarea": id }
+    });
+    details.open = open;
+    const summary = details.createEl("summary", { cls: "bysan-subarea-summary" });
+    summary.createSpan({ cls: "bysan-subarea-chevron", text: "›" });
+    summary.createSpan({ cls: "bysan-subarea-title", text: title });
+    const body = details.createDiv({ cls: "bysan-subarea-body" });
+    render(body);
+    const internalHeading = body.querySelector(":scope > .setting-item-heading:first-child");
+    if (internalHeading) {
+      details.id = internalHeading.id || `bysan-section-${id}`;
+      internalHeading.removeAttribute("id");
+      internalHeading.addClass("bysan-subarea-internal-heading");
+    } else {
+      details.id = `bysan-section-${id}`;
+    }
+    return details;
+  }
+
+
+  setActiveMajorArea(containerEl, id, scroll = true) {
+    const available = [...containerEl.querySelectorAll("[data-bysan-major-area]")];
+    const selected = available.some((area) => area.dataset.bysanMajorArea === id)
+      ? id
+      : "content";
+    this.activeMajorArea = selected;
+    for (const area of available) {
+      const active = area.dataset.bysanMajorArea === selected;
+      area.classList.toggle("is-active", active);
+      area.hidden = !active;
+    }
+    for (const button of containerEl.querySelectorAll(".bysan-major-tab")) {
+      const active = button.dataset.area === selected;
+      button.classList.toggle("is-active", active);
+      button.setAttribute("aria-selected", String(active));
+    }
+    if (scroll) {
+      containerEl.querySelector(".bysan-major-areas")?.scrollIntoView({ behavior: "auto", block: "start" });
+    }
   }
 
 
@@ -1200,23 +1317,10 @@ class BysanStyleSettingTab extends PluginSettingTab {
 
 
   renderSectionNavigation(containerEl) {
-    const groups = [
-      [this.plugin.t("nav.core"), [
-        ["modules", this.plugin.language === "zh" ? "功能模块" : "Feature modules"],
-        ["preset", this.plugin.t("section.preset")],
-        ["workspace", this.plugin.t("section.workspace")],
-        ["code", this.plugin.t("section.code")],
-        ["palette", this.plugin.t("section.palette")],
-        ["components", this.plugin.t("section.components")]
-      ]],
-      [this.plugin.t("nav.theme"), [
-        ["theme", this.plugin.t("section.theme")],
-        ["theme-general", this.plugin.t("section.themeGeneral")],
-        ["theme-details", this.plugin.t("section.themeDetails")],
-        ["theme-plugins", this.plugin.t("section.themePlugins")],
-        ["theme-builtins", this.plugin.t("section.themeBuiltins")],
-        ["reset", this.plugin.t("section.reset")]
-      ]]
+    const areas = [
+      ["workflow", this.plugin.language === "zh" ? "功能与风格" : "Features and styles"],
+      ["content", this.plugin.language === "zh" ? "内容与阅读" : "Content and reading"],
+      ["theme", this.plugin.t("section.theme")]
     ];
     const navigation = containerEl.createEl("nav", {
       cls: "bysan-settings-nav",
@@ -1245,6 +1349,18 @@ class BysanStyleSettingTab extends PluginSettingTab {
     const jumpToResult = (row) => {
       if (!row?.isConnected) return;
       clearSearch();
+      const area = row.closest("[data-bysan-major-area]");
+      if (area) this.setActiveMajorArea(containerEl, area.dataset.bysanMajorArea, false);
+      for (const details of row.closest("details")
+        ? [row.closest("details"), ...row.closest("details").querySelectorAll(":scope details")]
+        : []) {
+        if (details.contains(row)) details.open = true;
+      }
+      let parent = row.parentElement;
+      while (parent) {
+        if (parent.matches?.("details")) parent.open = true;
+        parent = parent.parentElement;
+      }
       window.requestAnimationFrame(() => {
         row.scrollIntoView({ behavior: "auto", block: "center" });
         row.classList.add("bysan-search-target");
@@ -1306,35 +1422,15 @@ class BysanStyleSettingTab extends PluginSettingTab {
         jumpToResult(currentMatches[0]);
       }
     });
-    const groupGrid = navigation.createDiv({ cls: "bysan-settings-nav-groups" });
-
-    for (const [groupLabel, sections] of groups) {
-      const group = groupGrid.createDiv({ cls: "bysan-settings-nav-group" });
-      group.createDiv({ cls: "bysan-settings-nav-group-title", text: groupLabel });
-      const links = group.createDiv({ cls: "bysan-settings-nav-links" });
-      for (const [id, label] of sections) {
-        const button = links.createEl("button", {
-          cls: "bysan-settings-nav-link",
-          text: label,
-          attr: { type: "button", "data-target": id }
-        });
-        button.addEventListener("click", () => this.jumpToSection(containerEl, `bysan-section-${id}`));
-      }
+    const tabs = navigation.createDiv({ cls: "bysan-major-tabs", attr: { role: "tablist" } });
+    for (const [id, label] of areas) {
+      const button = tabs.createEl("button", {
+        cls: "bysan-major-tab",
+        text: label,
+        attr: { type: "button", role: "tab", "data-area": id }
+      });
+      button.addEventListener("click", () => this.setActiveMajorArea(containerEl, id));
     }
-
-    const detailRow = navigation.createDiv({ cls: "bysan-settings-nav-detail" });
-    detailRow.createEl("label", { text: this.plugin.t("nav.detail") });
-    const select = detailRow.createEl("select", { cls: "dropdown" });
-    select.createEl("option", { text: this.plugin.t("nav.detail.placeholder"), value: "" });
-    for (const group of this.plugin.themeControls.navigationGroups()) {
-      const optionGroup = select.createEl("optgroup", { attr: { label: group.label } });
-      for (const entry of group.entries) {
-        optionGroup.createEl("option", { text: entry.label, value: entry.anchor });
-      }
-    }
-    select.addEventListener("change", () => {
-      if (select.value) this.jumpToSection(containerEl, select.value);
-    });
   }
 
 
@@ -1535,8 +1631,14 @@ class BysanStyleSettingTab extends PluginSettingTab {
     const heading = new Setting(containerEl).setName(this.plugin.t("section.palette")).setHeading();
     heading.settingEl.id = "bysan-section-palette";
 
-    this.addDualColor(containerEl, this.plugin.t("palette.codeBg"), "codeBgLight", "codeBgDark");
-    this.addDualSlider(containerEl, this.plugin.t("palette.opacity"), this.plugin.t("palette.opacityDesc"), "codeBgOpacityLight", "codeBgOpacityDark", 0, 1, 0.01);
+    this.addDualColor(
+      containerEl,
+      this.plugin.t("palette.codeBg"),
+      "codeBgLight",
+      "codeBgDark",
+      "codeBgOpacityLight",
+      "codeBgOpacityDark"
+    );
     this.addDualColor(containerEl, this.plugin.t("palette.codeText"), "codeTextLight", "codeTextDark");
     this.addDualColor(containerEl, this.plugin.t("palette.codeBorder"), "codeBorderLight", "codeBorderDark");
     this.addDualColor(containerEl, this.plugin.t("palette.inlineBg"), "inlineBgLight", "inlineBgDark");
@@ -1545,8 +1647,14 @@ class BysanStyleSettingTab extends PluginSettingTab {
     this.addDualColor(containerEl, this.plugin.t("palette.tableStripe"), "tableStripeLight", "tableStripeDark");
     this.addDualColor(containerEl, this.plugin.t("palette.tableHover"), "tableHoverLight", "tableHoverDark");
     this.addDualColor(containerEl, this.plugin.t("palette.tableBorder"), "tableBorderLight", "tableBorderDark");
-    this.addDualColor(containerEl, this.plugin.t("palette.quoteBg"), "quoteBgLight", "quoteBgDark");
-    this.addDualSlider(containerEl, this.plugin.t("palette.quoteOpacity"), this.plugin.t("palette.opacityDesc"), "quoteBgOpacityLight", "quoteBgOpacityDark", 0, 1, 0.01);
+    this.addDualColor(
+      containerEl,
+      this.plugin.t("palette.quoteBg"),
+      "quoteBgLight",
+      "quoteBgDark",
+      "quoteBgOpacityLight",
+      "quoteBgOpacityDark"
+    );
     this.addDualColor(containerEl, this.plugin.t("palette.quoteBorder"), "quoteBorderLight", "quoteBorderDark");
     this.addDualColor(containerEl, this.plugin.t("palette.marker"), "markerLight", "markerDark");
   }
@@ -1578,54 +1686,60 @@ class BysanStyleSettingTab extends PluginSettingTab {
       });
       resetButton.addEventListener("click", resetControl);
     }
+    return group;
   }
 
 
-  addDualColor(containerEl, name, lightKey, darkKey) {
+  addDualColor(containerEl, name, lightKey, darkKey, lightOpacityKey = null, darkOpacityKey = null) {
     const setting = new Setting(containerEl).setName(name);
-    let lightPicker;
-    let lightValue;
-    this.addModeControl(setting, "light", "color", () => {
-      setting.addColorPicker((picker) => {
-        lightPicker = picker;
-        picker.setValue(this.plugin.settings[lightKey])
-          .onChange((value) => {
-            lightValue?.setText(value.toUpperCase());
-            this.plugin.updateSetting(lightKey, value);
+    const addMode = (mode, colorKey, opacityKey) => {
+      let pickerComponent;
+      let colorValue;
+      let opacitySlider;
+      const displayColor = () => opacityKey
+        ? hexWithAlpha(this.plugin.settings[colorKey], this.plugin.settings[opacityKey])
+        : String(this.plugin.settings[colorKey]).toUpperCase();
+      const group = this.addModeControl(setting, mode, "color", () => {
+        setting.addColorPicker((picker) => {
+          pickerComponent = picker;
+          picker.setValue(this.plugin.settings[colorKey])
+            .onChange((value) => {
+              this.plugin.settings[colorKey] = value;
+              colorValue?.setText(displayColor());
+              this.plugin.updateSetting(colorKey, value);
+            });
+        });
+        colorValue = setting.controlEl.createSpan({
+          cls: "bysan-theme-color-value",
+          text: displayColor()
+        });
+        if (opacityKey) {
+          setting.addSlider((slider) => {
+            opacitySlider = slider;
+            slider.setLimits(0, 1, 0.01)
+              .setValue(this.plugin.settings[opacityKey])
+              .onChange((value) => {
+                this.plugin.settings[opacityKey] = value;
+                colorValue?.setText(displayColor());
+                this.plugin.updateSetting(opacityKey, value);
+              });
           });
+        }
+      }, async () => {
+        await this.plugin.resetSetting(colorKey);
+        if (opacityKey) await this.plugin.resetSetting(opacityKey);
+        pickerComponent.setValue(this.plugin.settings[colorKey]);
+        opacitySlider?.setValue(this.plugin.settings[opacityKey]);
+        colorValue?.setText(displayColor());
       });
-      lightValue = setting.controlEl.createSpan({
-        cls: "bysan-theme-color-value",
-        text: String(this.plugin.settings[lightKey]).toUpperCase()
-      });
-    }, async () => {
-      if (await this.plugin.resetSetting(lightKey)) {
-        lightPicker.setValue(this.plugin.settings[lightKey]);
-        lightValue?.setText(String(this.plugin.settings[lightKey]).toUpperCase());
-      }
-    });
-    let darkPicker;
-    let darkValue;
-    this.addModeControl(setting, "dark", "color", () => {
-      setting.addColorPicker((picker) => {
-        darkPicker = picker;
-        picker.setValue(this.plugin.settings[darkKey])
-          .onChange((value) => {
-            darkValue?.setText(value.toUpperCase());
-            this.plugin.updateSetting(darkKey, value);
-          });
-      });
-      darkValue = setting.controlEl.createSpan({
-        cls: "bysan-theme-color-value",
-        text: String(this.plugin.settings[darkKey]).toUpperCase()
-      });
-    }, async () => {
-      if (await this.plugin.resetSetting(darkKey)) {
-        darkPicker.setValue(this.plugin.settings[darkKey]);
-        darkValue?.setText(String(this.plugin.settings[darkKey]).toUpperCase());
-      }
-    });
+      if (opacityKey) group.addClass("bysan-mode-control-has-opacity");
+    };
+    addMode("light", lightKey, lightOpacityKey);
+    addMode("dark", darkKey, darkOpacityKey);
     setting.settingEl.addClass("bysan-dual-mode-setting");
+    if (lightOpacityKey || darkOpacityKey) {
+      setting.settingEl.addClass("bysan-combined-color-opacity-setting");
+    }
   }
 
 
@@ -1661,7 +1775,10 @@ class BysanStyleSettingTab extends PluginSettingTab {
     this.addToggle(containerEl, this.plugin.t("components.zebra"), this.plugin.t("components.zebraDesc"), "tableZebra");
     this.addToggle(containerEl, this.plugin.t("components.center"), this.plugin.t("components.centerDesc"), "tableCentered");
     this.addToggle(containerEl, this.plugin.t("components.quoteSerif"), this.plugin.t("components.quoteSerifDesc"), "quoteSerif");
+  }
 
+
+  renderGeometrySettings(containerEl) {
     const geometryHeading = new Setting(containerEl)
       .setName(this.plugin.language === "zh" ? "内容尺寸与间距" : "Content size and spacing")
       .setDesc(this.plugin.language === "zh"
@@ -1669,17 +1786,36 @@ class BysanStyleSettingTab extends PluginSettingTab {
         : "These values map directly to the rendered CSS dimensions. Every item can be reset independently.")
       .setHeading();
     geometryHeading.settingEl.id = "bysan-section-content-geometry";
-    for (const [key, property, unit, minimum, maximum, step, nameZh, nameEn] of CONTENT_GEOMETRY_CONTROLS) {
-      this.addResettableSlider(
-        containerEl,
-        this.plugin.language === "zh" ? nameZh : nameEn,
-        `${property} · ${minimum}–${maximum}${unit}`,
-        key,
-        minimum,
-        maximum,
-        step,
-        unit
-      );
+    const groups = [
+      ["inlineCode", "行内代码", "Inline code"],
+      ["codeBlock", "代码块", "Code blocks"],
+      ["table", "表格", "Tables"],
+      ["quote", "引用块", "Blockquotes"],
+      ["other", "列表与正文细节", "Lists and text details"]
+    ];
+    for (const [groupId, nameZh, nameEn] of groups) {
+      const entries = CONTENT_GEOMETRY_CONTROLS.filter(([key]) => {
+        if (groupId === "other") return !/^(inlineCode|codeBlock|table|quote)/.test(key);
+        return key.startsWith(groupId);
+      });
+      const details = containerEl.createEl("details", { cls: "bysan-control-cluster" });
+      details.open = groupId === "inlineCode";
+      const summary = details.createEl("summary", { cls: "bysan-control-cluster-summary" });
+      summary.createSpan({ cls: "bysan-subarea-chevron", text: "›" });
+      summary.createSpan({ text: this.plugin.language === "zh" ? nameZh : nameEn });
+      const body = details.createDiv({ cls: "bysan-control-cluster-body" });
+      for (const [key, property, unit, minimum, maximum, step, controlZh, controlEn] of entries) {
+        this.addResettableSlider(
+          body,
+          this.plugin.language === "zh" ? controlZh : controlEn,
+          `${property} · ${minimum}–${maximum}${unit}`,
+          key,
+          minimum,
+          maximum,
+          step,
+          unit
+        );
+      }
     }
   }
 
@@ -1724,10 +1860,9 @@ class BysanStyleSettingTab extends PluginSettingTab {
             this.plugin.updateSetting(key, value);
           });
       });
-    valueEl = setting.controlEl.createSpan({
-      cls: "bysan-slider-value",
-      text: formatValue(this.plugin.settings[key])
-    });
+    valueEl = setting.controlEl.querySelector(".slider-value");
+    valueEl?.addClass("bysan-slider-value");
+    valueEl?.setText(formatValue(this.plugin.settings[key]));
     const resetButton = setting.controlEl.createEl("button", {
       cls: "clickable-icon bysan-color-reset",
       text: "↺",

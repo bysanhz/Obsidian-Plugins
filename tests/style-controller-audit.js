@@ -124,7 +124,8 @@ for (const method of [
   "requestStylePresetSwitch", "saveStylePreset", "renameStylePreset", "deleteStylePreset",
   "renderSectionNavigation", "renderStylePresetSettings", "renderWorkspaceSettings",
   "renderCodeSettings", "renderPaletteSettings", "renderComponentSettings", "openPdfPreview",
-  "renderIntegratedModuleSettings", "syncIntegratedModules", "addResettableSlider"
+  "renderIntegratedModuleSettings", "syncIntegratedModules", "addResettableSlider",
+  "createMajorArea", "createSubarea", "setActiveMajorArea", "renderGeometrySettings"
 ]) {
   assert(mainSource.includes(`${method}(`), `missing plugin feature: ${method}`);
 }

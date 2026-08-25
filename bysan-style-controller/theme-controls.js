@@ -40,6 +40,19 @@ const COLOR_FALLBACK_VARIABLES = new Map([
   ["checklist-done-color", "text-muted"]
 ]);
 
+/* print-hN-color is the user-facing override while --hN-color owns the
+ * concrete palette fallback. Asking for print-hN-color with hN-color as its
+ * fallback creates a circular var() expression, so resolve through hN-color
+ * directly when probing the actual default. */
+const INDIRECT_COLOR_VARIABLES = new Set([
+  "print-h1-color",
+  "print-h2-color",
+  "print-h3-color",
+  "print-h4-color",
+  "print-h5-color",
+  "print-h6-color"
+]);
+
 
 const ZH_TITLE = {
   "Light mode": "浅色模式",
@@ -429,9 +442,23 @@ class ThemeControls {
     this.controlItems = this.items.filter((item) => !["heading", "info-text"].includes(item.type));
     this.headingAnchors = new Map();
     this.displayDefaults = new Map();
+    this.baseDefaults = new Map();
+    this.scopeHeadings = new Map();
     this.probeFrame = null;
+    const hierarchy = new Map();
     this.items.forEach((item, index) => {
-      if (item.type === "heading") this.headingAnchors.set(item, `bysan-theme-heading-${index}`);
+      if (item.type === "heading") {
+        const level = Number(item.level || 2);
+        this.headingAnchors.set(item, `bysan-theme-heading-${index}`);
+        hierarchy.set(level, item);
+        for (const key of [...hierarchy.keys()]) {
+          if (key > level) hierarchy.delete(key);
+        }
+      } else {
+        this.scopeHeadings.set(item, [...hierarchy.entries()]
+          .sort(([left], [right]) => left - right)
+          .map(([, heading]) => heading));
+      }
     });
   }
 
@@ -484,7 +511,19 @@ class ThemeControls {
       return this.displayDefaults.get(`${item.id}:${mode}`) ?? item[`default-${mode}`];
     }
     if (isDefined(storedValue)) return storedValue;
-    return this.displayDefaults.get(item.id) ?? item.default;
+    // Non-colour controls already carry their canonical defaults in the
+    // catalogue.  A computed CSS value can be much less useful here (for
+    // example an inherited font expands to Obsidian's entire font stack),
+    // and made an untouched control look as if it had been customised.
+    return isDefined(item.default) ? item.default : this.displayDefaults.get(item.id);
+  }
+
+
+  defaultValueFor(item, mode) {
+    if (item.type === "variable-themed-color") {
+      return this.baseDefaults.get(`${item.id}:${mode}`) ?? item[`default-${mode}`];
+    }
+    return isDefined(item.default) ? item.default : this.baseDefaults.get(item.id);
   }
 
 
@@ -554,6 +593,8 @@ class ThemeControls {
     const fallbackVariable = COLOR_FALLBACK_VARIABLES.get(item.id);
     const expression = item.format === "hsl-split"
       ? `hsla(var(--${item.id}-h), var(--${item.id}-s), var(--${item.id}-l), var(--${item.id}-a, 1))`
+      : INDIRECT_COLOR_VARIABLES.has(item.id)
+        ? `var(--${fallbackVariable})`
       : fallbackVariable
         ? `var(--${item.id}, var(--${fallbackVariable}))`
         : `var(--${item.id})`;
@@ -581,31 +622,34 @@ class ThemeControls {
     const root = probeDocument.documentElement;
     const baseClasses = Array.from(document.body.classList)
       .filter((name) => name !== "theme-light" && name !== "theme-dark");
-    this.displayDefaults.clear();
-
-    for (const mode of ["light", "dark"]) {
-      body.removeAttribute("style");
-      body.className = [...baseClasses, `theme-${mode}`].join(" ");
-      root.className = `theme-${mode}`;
-      this.applyStoredVariablesToProbe(body, mode);
-      const bodyStyle = probeDocument.defaultView.getComputedStyle(body);
-      for (const item of this.controlItems) {
-        if (item.type === "variable-themed-color") {
-          const resolved = this.resolvedProbeColor(item, probeDocument, body);
-          if (resolved) this.displayDefaults.set(`${item.id}:${mode}`, resolved);
-          continue;
-        }
-        if (mode !== "light" || !String(item.type || "").startsWith("variable-")) continue;
-        const rawValue = bodyStyle.getPropertyValue(`--${item.id}`).trim();
-        if (!rawValue) continue;
-        if (["variable-number", "variable-number-slider"].includes(item.type)) {
-          const numeric = Number.parseFloat(rawValue);
-          if (Number.isFinite(numeric)) this.displayDefaults.set(item.id, numeric);
-        } else {
-          this.displayDefaults.set(item.id, rawValue);
+    const collect = (target, withStoredValues) => {
+      target.clear();
+      for (const mode of ["light", "dark"]) {
+        body.removeAttribute("style");
+        body.className = [...baseClasses, `theme-${mode}`].join(" ");
+        root.className = `theme-${mode}`;
+        if (withStoredValues) this.applyStoredVariablesToProbe(body, mode);
+        const bodyStyle = probeDocument.defaultView.getComputedStyle(body);
+        for (const item of this.controlItems) {
+          if (item.type === "variable-themed-color") {
+            const resolved = this.resolvedProbeColor(item, probeDocument, body);
+            if (resolved) target.set(`${item.id}:${mode}`, resolved);
+            continue;
+          }
+          if (mode !== "light" || !String(item.type || "").startsWith("variable-")) continue;
+          const rawValue = bodyStyle.getPropertyValue(`--${item.id}`).trim();
+          if (!rawValue) continue;
+          if (["variable-number", "variable-number-slider"].includes(item.type)) {
+            const numeric = Number.parseFloat(rawValue);
+            if (Number.isFinite(numeric)) target.set(item.id, numeric);
+          } else {
+            target.set(item.id, rawValue);
+          }
         }
       }
-    }
+    };
+    collect(this.baseDefaults, false);
+    collect(this.displayDefaults, true);
   }
 
 
@@ -613,6 +657,7 @@ class ThemeControls {
     this.probeFrame?.remove();
     this.probeFrame = null;
     this.displayDefaults.clear();
+    this.baseDefaults.clear();
   }
 
 
@@ -768,16 +813,83 @@ class ThemeControls {
   }
 
 
+  scopeFor(item) {
+    const headings = this.scopeHeadings.get(item) || [];
+    const meaningful = headings
+      .filter((heading) => Number(heading.level || 2) >= 2)
+      .slice(-2)
+      .map((heading) => (localised(heading, "title", this.plugin.language) || heading.id)
+        .replace(/^\s*\d+(?:\.\d+)*[.、]?\s*/, "")
+        .trim())
+      .filter(Boolean);
+    if (meaningful.length) return meaningful.join(" › ");
+    return this.plugin.language === "zh" ? "Obsidian 全局界面" : "Global Obsidian interface";
+  }
+
+
+  formattedDefault(item, mode) {
+    const value = this.defaultValueFor(item, mode);
+    if (item.type === "variable-themed-color") {
+      const color = parseColor(value);
+      if (!color.valid) return String(value || "");
+      return `${color.hex.toUpperCase()} · ${Math.round(color.alpha * 100)}%`;
+    }
+    if (item.type === "class-toggle") {
+      const enabled = Boolean(item.default);
+      return this.plugin.language === "zh"
+        ? (enabled ? "开启" : "关闭")
+        : (enabled ? "On" : "Off");
+    }
+    if (["class-select", "variable-select"].includes(item.type)) {
+      const selected = (item.options || []).find((option) => String(option?.value) === String(item.default));
+      return selected
+        ? optionLabel(selected.label || selected.value, this.plugin.language)
+        : String(item.default || (this.plugin.language === "zh" ? "默认 / 空" : "Default / empty"));
+    }
+    if (!isDefined(value) || String(value).trim() === "") {
+      return this.plugin.language === "zh" ? "继承 Obsidian / 当前主题" : "Inherited from Obsidian / current theme";
+    }
+    if (["variable-number", "variable-number-slider"].includes(item.type)
+      && item.format
+      && !String(value).trim().endsWith(item.format)) {
+      return `${value}${item.format}`;
+    }
+    return String(value);
+  }
+
+
+  controlDescription(item, original) {
+    const scope = this.scopeFor(item);
+    let defaults;
+    if (item.type === "variable-themed-color") {
+      const light = this.formattedDefault(item, "light");
+      const dark = this.formattedDefault(item, "dark");
+      defaults = this.plugin.language === "zh"
+        ? `浅色 ${light}；深色 ${dark}`
+        : `Light ${light}; dark ${dark}`;
+    } else {
+      defaults = this.formattedDefault(item);
+    }
+    const identifier = String(item.type || "").startsWith("variable-")
+      ? `--${item.id}`
+      : item.id;
+    const detail = this.plugin.language === "zh"
+      ? `作用区域：${scope}；默认值：${defaults}；标识：${identifier}`
+      : `Scope: ${scope}; default: ${defaults}; identifier: ${identifier}`;
+    return original ? `${original} · ${detail}` : detail;
+  }
+
+
   renderItem(containerEl, item) {
     const title = localised(item, "title", this.plugin.language) || item.id;
     const description = localised(item, "description", this.plugin.language);
     const setting = new Setting(containerEl).setName(title);
-    if (description) setting.setDesc(description);
     setting.settingEl.addClass("bysan-theme-setting-item");
     setting.settingEl.dataset.bysanSettingId = item.id;
-    setting.settingEl.dataset.bysanSearch = `${title} ${item.title || ""} ${description} ${item.id}`.toLowerCase();
 
     if (item.type === "heading") {
+      if (description) setting.setDesc(description);
+      setting.settingEl.dataset.bysanSearch = `${title} ${item.title || ""} ${description} ${item.id}`.toLowerCase();
       setting.setHeading();
       setting.settingEl.addClass(`bysan-theme-heading-${item.level || 2}`);
       setting.settingEl.id = this.headingAnchors.get(item);
@@ -789,6 +901,9 @@ class ThemeControls {
     }
 
     if (item.type === "info-text") return;
+    const controlDescription = this.controlDescription(item, description);
+    setting.setDesc(controlDescription);
+    setting.settingEl.dataset.bysanSearch = `${title} ${item.title || ""} ${controlDescription} ${item.id}`.toLowerCase();
 
     if (item.type === "class-toggle") {
       setting.addToggle((toggle) => toggle

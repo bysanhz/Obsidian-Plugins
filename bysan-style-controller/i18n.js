@@ -1,27 +1,18 @@
 const TEXT = {
   zh: {
-    "app.description": "统一提供 Bysan 内容样式、完整主题控件与可开关功能模块；不依赖外部主题，公式编号保持独立。",
+    "app.description": "统一提供按界面位置组织的 Bysan 样式与可开关功能模块；不依赖外部主题，公式编号保持独立。",
     "language.name": "界面语言",
     "language.desc": "默认跟随 Obsidian；也可以仅为本插件固定中文或英文。",
     "language.auto": "跟随 Obsidian",
     "language.zh": "中文",
     "language.en": "English",
     "nav.title": "功能导航",
-    "nav.core": "核心样式",
-    "nav.theme": "完整主题",
-    "nav.detail": "细分功能区域",
-    "nav.detail.placeholder": "选择二至四级区域…",
     "section.preset": "风格预设",
     "section.workspace": "工作区",
     "section.code": "代码块",
     "section.components": "表格与引用",
-    "section.theme": "完整主题",
-    "section.themeGeneral": "主题整体",
-    "section.themeDetails": "主题细节",
-    "section.themePlugins": "插件适配",
-    "section.themeBuiltins": "内置样式",
     "section.reset": "恢复默认",
-    "preset.desc": "一个预设同时保存浅色、深色及全部完整主题设置。",
+    "preset.desc": "一个预设同时保存浅色、深色及所有界面区域的样式设置。",
     "preset.current": "当前风格",
     "preset.currentUnsaved": "当前设置（尚未保存）",
     "preset.currentUnsavedLong": "当前设置（尚未保存为风格）",
@@ -92,10 +83,8 @@ const TEXT = {
     "components.centerDesc": "保持实时预览与阅读视图表格居中。",
     "components.quoteSerif": "引用块使用衬线字体",
     "components.quoteSerifDesc": "关闭后跟随正文界面字体。",
-    "theme.title": "完整主题设置（{count} 项）",
-    "theme.desc": "下列控件来自已打包主题的完整设置定义，均由本插件独立保存并即时应用。",
-    "theme.search": "搜索主题功能",
-    "theme.searchDesc": "可按中文名、说明或设置 ID 筛选。",
+    "theme.search": "搜索样式设置",
+    "theme.searchDesc": "可按中文名、说明或设置 ID 筛选全部区域。",
     "theme.searchPlaceholder": "例如：标签页、文件树、标题颜色",
     "theme.empty": "默认 / 空",
     "theme.cssValue": "CSS 值",
@@ -128,7 +117,7 @@ const TEXT = {
     ,"notice.duplicateName": "已有同名风格，请使用其他名称"
     ,"notice.renamed": "风格已重命名为：{name}"
     ,"notice.deleted": "已删除风格：{name}；当前画面设置仍保留"
-    ,"notice.catalogError": "Bysan 完整主题设置加载失败，请检查插件文件"
+    ,"notice.catalogError": "Bysan 样式设置目录加载失败，请检查插件文件"
     ,"notice.baseError": "Bysan 内置基础主题加载失败，请检查插件文件"
     ,"notice.reset": "Bysan 样式已恢复默认值"
     ,"pdf.command": "PDF 分页预览与导出"
@@ -167,28 +156,19 @@ const TEXT = {
     ,"pdf.openNote": "请先打开一个 Markdown 笔记"
   },
   en: {
-    "app.description": "Unified Bysan content styles, full theme controls and switchable feature modules without an external theme; equation numbering remains independent.",
+    "app.description": "Unified Bysan styles organised by interface location, plus switchable feature modules without an external theme; equation numbering remains independent.",
     "language.name": "Interface language",
     "language.desc": "Follows Obsidian by default, or use a fixed language for this plugin.",
     "language.auto": "Follow Obsidian",
     "language.zh": "中文",
     "language.en": "English",
     "nav.title": "Feature navigation",
-    "nav.core": "Core styles",
-    "nav.theme": "Full theme",
-    "nav.detail": "Detailed section",
-    "nav.detail.placeholder": "Choose a level 2–4 section…",
     "section.preset": "Style presets",
     "section.workspace": "Workspace",
     "section.code": "Code blocks",
     "section.components": "Tables & quotes",
-    "section.theme": "Full theme",
-    "section.themeGeneral": "Theme basics",
-    "section.themeDetails": "Theme details",
-    "section.themePlugins": "Plugin styles",
-    "section.themeBuiltins": "Built-in styles",
     "section.reset": "Reset",
-    "preset.desc": "A preset stores the light, dark, and complete theme settings together.",
+    "preset.desc": "A preset stores the light, dark and all interface-region settings together.",
     "preset.current": "Current style",
     "preset.currentUnsaved": "Current settings (not saved)",
     "preset.currentUnsavedLong": "Current settings (not saved as a style)",
@@ -259,10 +239,8 @@ const TEXT = {
     "components.centerDesc": "Keep tables centered in Live Preview and Reading view.",
     "components.quoteSerif": "Use serif font in quotes",
     "components.quoteSerifDesc": "When disabled, quotes follow the main interface font.",
-    "theme.title": "Full theme settings ({count})",
-    "theme.desc": "These controls come from the bundled theme definition and are stored and applied independently by this plugin.",
-    "theme.search": "Search theme features",
-    "theme.searchDesc": "Filter by English name, description, or setting ID.",
+    "theme.search": "Search style settings",
+    "theme.searchDesc": "Filter every region by English name, description, or setting ID.",
     "theme.searchPlaceholder": "For example: tabs, file tree, heading color",
     "theme.empty": "Default / empty",
     "theme.cssValue": "CSS value",
@@ -295,7 +273,7 @@ const TEXT = {
     ,"notice.duplicateName": "A style with this name already exists."
     ,"notice.renamed": "Style renamed to: {name}"
     ,"notice.deleted": "Style deleted: {name}; the current appearance is preserved."
-    ,"notice.catalogError": "Failed to load the Bysan full theme settings. Check the plugin files."
+    ,"notice.catalogError": "Failed to load the Bysan style settings catalogue. Check the plugin files."
     ,"notice.baseError": "Failed to load the bundled Bysan base theme. Check the plugin files."
     ,"notice.reset": "Bysan styles restored to defaults."
     ,"pdf.command": "PDF preview and export"

@@ -6,8 +6,23 @@ const Setting = globalThis.__bysanObsidianSetting;
 const MANUAL_SETTING_IDS = new Set([
   "background-settings-workplace-background-image",
   "background-settings-workplace-theme-light",
-  "background-settings-workplace-theme-dark"
+  "background-settings-workplace-theme-dark",
+  "font-size-code",
+  "font-weight-strong",
+  "resizable-mermaid"
 ]);
+
+const THEME_REGION_IDS = [
+  "workspace",
+  "top",
+  "left",
+  "right",
+  "system",
+  "editor",
+  "media",
+  "plugins",
+  "documents"
+];
 
 /* Attribution remains in THIRD_PARTY_NOTICES.md. Promotional footer entries
  * from the bundled theme metadata are not plugin settings and must not leak
@@ -801,33 +816,91 @@ class ThemeControls {
   }
 
 
-  render(containerEl) {
+  beginRegionRender() {
     this.refreshDisplayDefaults();
-    const introduction = new Setting(containerEl)
-      .setName(this.plugin.t("theme.title", { count: this.count }))
-      .setDesc(this.plugin.t("theme.desc"))
-      .setHeading();
-    introduction.settingEl.addClass("bysan-theme-catalog-title");
-    introduction.settingEl.id = "bysan-section-theme";
-    let majorBody = containerEl;
-    let minorBody = null;
-    let firstMajor = true;
-    for (const item of this.items) {
-      const level = Number(item.level || 2);
-      if (item.type === "heading" && level === 1) {
-        const group = this.createThemeGroup(containerEl, item, "major", firstMajor);
-        firstMajor = false;
-        majorBody = group.body;
-        minorBody = null;
-        continue;
-      }
-      if (item.type === "heading" && level === 2) {
-        const group = this.createThemeGroup(majorBody, item, "minor", false);
-        minorBody = group.body;
-        continue;
-      }
-      this.renderItem(minorBody || majorBody || containerEl, item);
+    this.cachedRegionBuckets = this.buildRegionBuckets();
+    return this.regionStats();
+  }
+
+
+  regionFor(item) {
+    const headings = this.scopeHeadings.get(item) || [];
+    const headingText = headings.map((heading) => [
+      heading.id,
+      heading.title,
+      heading.titleZh,
+      heading["title.zh"]
+    ].filter(Boolean).join(" ")).join(" ").toLowerCase();
+    const itemText = [item.id, item.title, item.titleZh, item["title.zh"], item.description]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+    const context = `${headingText} ${itemText}`;
+    const rootId = String(headings.find((heading) => Number(heading.level || 2) === 1)?.id || "");
+
+    if (/(outline|backlink|backlinks|right-sidebar|right sidebar|侧边栏大纲|反链)/i.test(context)) return "right";
+    if (rootId === "build-in-style-folder") return "documents";
+    if (rootId === "style-options-for-other-plugins") return "plugins";
+    if (/(pdf-style|export-pdf|ob-pdf|canvas|graph-view|graph view|白板|图谱|pdf)/i.test(context)) return "media";
+    if (/(titlebar|tabs-settings|stack-settings|tab-stack|workspace-tab|标题栏|堆叠标签页|\btabs?\b)/i.test(context)) return "top";
+    if (/(setting-etc|command-palette|prompt-settings|loading-page|loading-|settings-pane|menu-style|设置、菜单|命令面板|提示框|加载页面)/i.test(context)) return "system";
+    if (/(folder-style|folder-color|folder-file|file-browser|file-explorer|file-tree|file-bar|vault-name|font-family-vault|font-size-vault|文件栏|文件夹|左侧边栏|库名)/i.test(context)) return "left";
+    if (/(markdown-page|notebook|header-settings|h[1-6]-settings|inline-title|typography|font-settings|font-size-settings|fancy-hr|list-style|indentation|blockquote|embed-folder|table-styles|cloze-style|link-style|cursor-style|checkbox-style|image caption|icons-style-folder|tag-color|highlight|mermaid|正文|笔记背景|排版|文内标题|页面内标题|分割线|列表|引用框|嵌入|表格|挖空|链接|输入光标|勾选框|图片|标签|高亮)/i.test(context)) return "editor";
+    return "workspace";
+  }
+
+
+  groupHeadingFor(item) {
+    const headings = this.scopeHeadings.get(item) || [];
+    return [...headings]
+      .reverse()
+      .find((heading) => Number(heading.level || 2) >= 3)
+      || [...headings].reverse().find((heading) => Number(heading.level || 2) >= 2)
+      || headings[0]
+      || null;
+  }
+
+
+  buildRegionBuckets() {
+    const buckets = new Map(THEME_REGION_IDS.map((id) => [id, new Map()]));
+    for (const item of this.controlItems) {
+      const region = this.regionFor(item);
+      const heading = this.groupHeadingFor(item);
+      const key = heading || `__${region}`;
+      const groups = buckets.get(region);
+      if (!groups.has(key)) groups.set(key, { heading, items: [] });
+      groups.get(key).items.push(item);
     }
+    return buckets;
+  }
+
+
+  regionStats() {
+    const buckets = this.cachedRegionBuckets || this.buildRegionBuckets();
+    return Object.fromEntries(THEME_REGION_IDS.map((id) => [
+      id,
+      [...(buckets.get(id)?.values() || [])].reduce((count, group) => count + group.items.length, 0)
+    ]));
+  }
+
+
+  renderRegion(containerEl, regionId) {
+    if (!this.cachedRegionBuckets) this.beginRegionRender();
+    const groups = [...(this.cachedRegionBuckets.get(regionId)?.values() || [])];
+    let first = true;
+    for (const groupData of groups) {
+      if (!groupData.items.length) continue;
+      if (!groupData.heading) {
+        for (const item of groupData.items) this.renderItem(containerEl, item);
+        continue;
+      }
+      const group = this.createThemeGroup(containerEl, groupData.heading, "minor", first);
+      group.details.id = `${this.headingAnchors.get(groupData.heading) || groupData.heading.id}-${regionId}`;
+      group.details.dataset.bysanThemeRegion = regionId;
+      first = false;
+      for (const item of groupData.items) this.renderItem(group.body, item);
+    }
+    return groups.reduce((count, group) => count + group.items.length, 0);
   }
 
 
@@ -999,37 +1072,6 @@ class ThemeControls {
       .setPlaceholder(this.plugin.t("theme.cssValue"))
       .setValue(String(this.displayValueFor(item) ?? ""))
       .onChange((value) => this.plugin.updateThemeSetting(item.id, value)));
-  }
-
-
-  sectionIdForHeading(title) {
-    if (/^1[.、\s]/.test(title)) return "theme-general";
-    if (/^2[.、\s]/.test(title)) return "theme-details";
-    if (/^3[.、\s]/.test(title)) return "theme-plugins";
-    if (/^4[.、\s]/.test(title)) return "theme-builtins";
-    return null;
-  }
-
-
-  navigationGroups() {
-    const groups = [];
-    let current = null;
-    for (const item of this.items) {
-      if (item.type !== "heading") continue;
-      const title = localised(item, "title", this.plugin.language) || item.id;
-      if (item.level === 1) {
-        const majorId = this.sectionIdForHeading(title);
-        current = majorId ? { label: title, entries: [] } : null;
-        if (current) groups.push(current);
-        continue;
-      }
-      if (!current || item.level > 4) continue;
-      current.entries.push({
-        label: title,
-        anchor: this.headingAnchors.get(item)
-      });
-    }
-    return groups.filter((group) => group.entries.length);
   }
 
 

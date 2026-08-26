@@ -19,7 +19,10 @@ const controls = catalog.settings.filter((item) => !["heading", "info-text"].inc
 const manualIds = new Set([
   "background-settings-workplace-background-image",
   "background-settings-workplace-theme-light",
-  "background-settings-workplace-theme-dark"
+  "background-settings-workplace-theme-dark",
+  "font-size-code",
+  "font-weight-strong",
+  "resizable-mermaid"
 ]);
 const renderedControls = controls.filter((item) => !manualIds.has(item.id));
 
@@ -69,6 +72,11 @@ const { ThemeControls, parseColor, colorWithAlpha } = sandbox.module.exports;
 const plugin = { settings: { themeSettings: {} }, language: "zh", t: (key) => key, addCommand() {} };
 const themeControls = new ThemeControls(plugin, catalog);
 assert.equal(themeControls.controlItems.length, renderedControls.length, "every non-manual control must be owned");
+const regionStats = themeControls.regionStats();
+assert.equal(Object.values(regionStats).reduce((sum, count) => sum + count, 0), renderedControls.length, "every theme control must belong to exactly one interface region");
+for (const region of ["workspace", "top", "left", "right", "system", "editor", "media", "plugins", "documents"]) {
+  assert(regionStats[region] > 0, `empty interface region: ${region}`);
+}
 assert.equal(colorWithAlpha("#123456", 0.5), "#12345680");
 for (const [input, expectedHex, expectedAlpha] of [
   ["#11223380", "#112233", 128 / 255],
@@ -133,10 +141,12 @@ for (const method of [
 }
 
 assert(!mainSource.includes('createSubarea(content, "palette"'), "legacy standalone dual-mode palette area still rendered");
+assert(!mainSource.includes('createMajorArea(\n      areas,\n      "theme"'), "legacy full-theme major area still rendered");
 assert(mainSource.includes('createSubarea(content, "editor"'), "main editor region is not rendered as a content location");
 for (const objectId of ["code", "inline-code", "tables", "quotes", "text-details"]) {
   assert(mainSource.includes(`createEditorObject(containerEl, "${objectId}"`), `missing editor object group: ${objectId}`);
 }
+assert(mainSource.includes('"advanced-editor"'), "missing advanced editor region group");
 
 const usedTranslations = new Set();
 for (const file of ["main.js", "theme-controls.js", "pdf-preview.js"]) {

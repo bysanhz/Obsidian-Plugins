@@ -734,7 +734,7 @@ body.bysan-style-controller-active
 
 .bysan-major-tabs {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 0.55rem;
 }
 
@@ -1024,10 +1024,6 @@ body.bysan-style-controller-active
 }
 
 .bysan-subarea-internal-heading {
-  display: none !important;
-}
-
-.bysan-major-area[data-bysan-major-area="theme"] > .bysan-theme-catalog-title {
   display: none !important;
 }
 

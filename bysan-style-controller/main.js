@@ -1,6 +1,6 @@
 /**
  * Bysan Style Controller
- * Version: 0.14.0
+ * Version: 0.15.0
  *
  * Owns visual presentation and provides switchable, integrated Bysan modules.
  */
@@ -469,7 +469,7 @@ module.exports = class BysanStyleController extends Plugin {
       this.register(() => window.clearTimeout(timer));
     }
 
-    console.log(`[Bysan Style Controller] v0.14.0 loaded with ${this.themeControls.count} theme controls`);
+    console.log(`[Bysan Style Controller] v0.15.0 loaded with ${this.themeControls.count} regional theme controls`);
   }
 
 
@@ -1198,7 +1198,36 @@ class BysanStyleSettingTab extends PluginSettingTab {
             await this.plugin.requestStylePresetSwitch("__default__");
             this.display();
           }));
-      resetSetting.settingEl.id = "bysan-section-reset";
+      // Keep the action row addressable without duplicating the enclosing
+      // subarea anchor (`bysan-section-reset`). Duplicate ids made search and
+      // keyboard focus resolution browser-dependent.
+      resetSetting.settingEl.id = "bysan-reset-action";
+    });
+
+    const regionStats = this.plugin.themeControls.beginRegionRender();
+    const workspaceUi = this.createMajorArea(
+      areas,
+      "interface",
+      this.plugin.language === "zh" ? "工作区与界面" : "Workspace and interface",
+      this.plugin.language === "zh"
+        ? "按整体工作区、顶部区、左侧区、右侧区和设置系统界面组织。"
+        : "Organised by whole workspace, top, left, right and system/settings surfaces."
+    );
+    this.createSubarea(workspaceUi, "workspace", this.plugin.language === "zh" ? "整体工作区" : "Whole workspace", (body) => {
+      this.renderWorkspaceSettings(body);
+      this.plugin.themeControls.renderRegion(body, "workspace");
+    }, true);
+    this.createSubarea(workspaceUi, "top-area", this.plugin.language === "zh" ? "顶部区" : "Top area", (body) => {
+      this.plugin.themeControls.renderRegion(body, "top");
+    });
+    this.createSubarea(workspaceUi, "left-area", this.plugin.language === "zh" ? "左侧区" : "Left area", (body) => {
+      this.plugin.themeControls.renderRegion(body, "left");
+    });
+    this.createSubarea(workspaceUi, "right-area", this.plugin.language === "zh" ? "右侧区" : "Right area", (body) => {
+      this.plugin.themeControls.renderRegion(body, "right");
+    });
+    this.createSubarea(workspaceUi, "system-area", this.plugin.language === "zh" ? "设置、菜单与系统界面" : "Settings, menus and system UI", (body) => {
+      this.plugin.themeControls.renderRegion(body, "system");
     });
 
     const content = this.createMajorArea(
@@ -1209,22 +1238,27 @@ class BysanStyleSettingTab extends PluginSettingTab {
         ? "按工作区、代码块、行内代码、表格、引用和正文对象集中管理全部相关设置。"
         : "All related settings grouped by workspace, code blocks, inline code, tables, quotes and text objects."
     );
-    this.createSubarea(content, "workspace", this.plugin.language === "zh" ? "整体工作区" : "Whole workspace", (body) => {
-      this.renderWorkspaceSettings(body);
-    });
     this.createSubarea(content, "editor", this.plugin.language === "zh" ? "主编辑区" : "Main editor area", (body) => {
       this.renderEditorRegionSettings(body);
     }, true);
+    this.createSubarea(content, "media-area", this.plugin.language === "zh" ? "Canvas、图谱与 PDF" : "Canvas, graph and PDF", (body) => {
+      this.plugin.themeControls.renderRegion(body, "media");
+    });
 
-    const theme = this.createMajorArea(
+    const extensions = this.createMajorArea(
       areas,
-      "theme",
-      this.plugin.t("section.theme"),
+      "extensions",
+      this.plugin.language === "zh" ? "插件与文档样式" : "Plugins and document styles",
       this.plugin.language === "zh"
-        ? `按界面区域分组管理 ${this.plugin.themeControls.count} 项完整主题设置。`
-        : `Manage ${this.plugin.themeControls.count} full-theme controls grouped by interface area.`
+        ? `第三方插件适配与按 cssclasses 启用的文档样式；共 ${regionStats.plugins + regionStats.documents} 项。`
+        : `Third-party integrations and cssclasses-based document styles; ${regionStats.plugins + regionStats.documents} controls.`
     );
-    this.plugin.themeControls.render(theme);
+    this.createSubarea(extensions, "plugin-adapters", this.plugin.language === "zh" ? "第三方插件适配" : "Third-party plugin integrations", (body) => {
+      this.plugin.themeControls.renderRegion(body, "plugins");
+    }, true);
+    this.createSubarea(extensions, "document-styles", this.plugin.language === "zh" ? "文档样式类" : "Document style classes", (body) => {
+      this.plugin.themeControls.renderRegion(body, "documents");
+    });
 
     this.setActiveMajorArea(containerEl, this.activeMajorArea || "content", false);
   }
@@ -1307,8 +1341,9 @@ class BysanStyleSettingTab extends PluginSettingTab {
   renderSectionNavigation(containerEl) {
     const areas = [
       ["workflow", this.plugin.language === "zh" ? "功能与风格" : "Features and styles"],
+      ["interface", this.plugin.language === "zh" ? "工作区与界面" : "Workspace and interface"],
       ["content", this.plugin.language === "zh" ? "内容与阅读" : "Content and reading"],
-      ["theme", this.plugin.t("section.theme")]
+      ["extensions", this.plugin.language === "zh" ? "插件与文档样式" : "Plugins and document styles"]
     ];
     const navigation = containerEl.createEl("nav", {
       cls: "bysan-settings-nav",
@@ -1669,6 +1704,12 @@ class BysanStyleSettingTab extends PluginSettingTab {
     this.createEditorObject(containerEl, "text-details", this.plugin.language === "zh" ? "文字、列表与分隔线" : "Text, lists and dividers", (body) => {
       this.renderTextDetailSettings(body);
     });
+    this.createEditorObject(
+      containerEl,
+      "advanced-editor",
+      this.plugin.language === "zh" ? "标题、正文与其他编辑元素" : "Headings, body text and other editor elements",
+      (body) => this.plugin.themeControls.renderRegion(body, "editor")
+    );
   }
 
 

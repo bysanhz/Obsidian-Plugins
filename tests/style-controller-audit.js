@@ -123,11 +123,19 @@ for (const key of [
 for (const method of [
   "requestStylePresetSwitch", "saveStylePreset", "renameStylePreset", "deleteStylePreset",
   "renderSectionNavigation", "renderStylePresetSettings", "renderWorkspaceSettings",
-  "renderCodeSettings", "renderPaletteSettings", "renderComponentSettings", "openPdfPreview",
+  "renderCodeSettings", "renderEditorRegionSettings", "renderInlineCodeSettings",
+  "renderTableSettings", "renderQuoteSettings", "renderTextDetailSettings", "openPdfPreview",
   "renderIntegratedModuleSettings", "syncIntegratedModules", "addResettableSlider",
-  "createMajorArea", "createSubarea", "setActiveMajorArea", "renderGeometrySettings"
+  "createMajorArea", "createSubarea", "createEditorObject", "createFeatureGroup",
+  "setActiveMajorArea", "renderGeometryControls"
 ]) {
   assert(mainSource.includes(`${method}(`), `missing plugin feature: ${method}`);
+}
+
+assert(!mainSource.includes('createSubarea(content, "palette"'), "legacy standalone dual-mode palette area still rendered");
+assert(mainSource.includes('createSubarea(content, "editor"'), "main editor region is not rendered as a content location");
+for (const objectId of ["code", "inline-code", "tables", "quotes", "text-details"]) {
+  assert(mainSource.includes(`createEditorObject(containerEl, "${objectId}"`), `missing editor object group: ${objectId}`);
 }
 
 const usedTranslations = new Set();

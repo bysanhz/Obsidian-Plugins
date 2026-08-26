@@ -869,6 +869,126 @@ body.bysan-style-controller-active
   padding: 0.7rem;
 }
 
+.bysan-region-description {
+  margin: 0.1rem 0.2rem 0.8rem;
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+}
+
+.bysan-editor-object {
+  margin: 0.75rem 0;
+  overflow: clip;
+  border: 1px solid color-mix(in srgb, var(--bysan-settings-cta) 28%, var(--bysan-settings-border));
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--bysan-settings-surface-secondary) 62%, var(--bysan-settings-surface));
+}
+
+.bysan-editor-object-summary {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-height: 2.7rem;
+  padding: 0.55rem 0.75rem;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+
+.bysan-editor-object-summary::-webkit-details-marker {
+  display: none;
+}
+
+.bysan-editor-object-summary:hover {
+  background: var(--background-modifier-hover);
+}
+
+.bysan-editor-object[open] > .bysan-editor-object-summary {
+  border-bottom: 1px solid var(--bysan-settings-border);
+  background: color-mix(in srgb, var(--bysan-settings-cta) 11%, var(--bysan-settings-surface));
+}
+
+.bysan-editor-object[open] > summary .bysan-subarea-chevron {
+  transform: rotate(90deg);
+}
+
+.bysan-editor-object-title {
+  color: var(--bysan-settings-cta);
+  font-size: 1.02rem;
+  font-weight: 760;
+}
+
+.bysan-editor-object-body {
+  padding: 0.7rem;
+}
+
+.bysan-feature-group {
+  margin: 0.65rem 0;
+  overflow: hidden;
+  border: 1px solid var(--bysan-settings-border);
+  border-radius: 9px;
+  background: var(--bysan-settings-surface);
+}
+
+.bysan-feature-group-header {
+  padding: 0.6rem 0.7rem;
+  border-bottom: 1px solid var(--bysan-settings-border);
+  background: color-mix(in srgb, var(--bysan-settings-cta) 5%, var(--bysan-settings-surface-secondary));
+}
+
+.bysan-feature-group-header h4 {
+  margin: 0;
+  color: var(--bysan-settings-text);
+  font-size: var(--font-ui-medium);
+}
+
+.bysan-feature-group-header p {
+  margin: 0.16rem 0 0;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+}
+
+.bysan-feature-group-body {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.55rem;
+  padding: 0.6rem;
+}
+
+.bysan-feature-group-body > .setting-item {
+  min-width: 0;
+  margin: 0;
+  padding: 0.65rem;
+  border: 1px solid var(--bysan-settings-border);
+  border-radius: 8px;
+  background: var(--bysan-settings-surface-secondary);
+}
+
+.bysan-feature-group-body > .bysan-unified-control-setting {
+  display: flex;
+  align-items: stretch;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.bysan-feature-group-body > .bysan-unified-control-setting > .setting-item-control {
+  width: 100%;
+}
+
+.bysan-feature-group-body > :is(.bysan-dual-mode-setting, .bysan-combined-color-opacity-setting) {
+  grid-column: 1 / -1;
+}
+
+.bysan-feature-group-body > .bysan-dual-mode-setting {
+  display: flex;
+  align-items: stretch;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.bysan-feature-group-body > .bysan-dual-mode-setting > :is(.setting-item-info, .setting-item-control) {
+  width: 100%;
+}
+
 .bysan-control-cluster {
   margin: 0.55rem 0;
   border: 1px solid var(--bysan-settings-border);
@@ -1554,11 +1674,16 @@ body.bysan-style-controller-active
 
 @media (max-width: 760px) {
   .bysan-major-tabs,
-  .bysan-theme-group-minor > .bysan-theme-group-body {
+  .bysan-theme-group-minor > .bysan-theme-group-body,
+  .bysan-feature-group-body {
     grid-template-columns: 1fr;
   }
 
   .bysan-theme-group-minor > .bysan-theme-group-body > :is(.setting-item-heading, .bysan-theme-color-setting, .bysan-theme-group) {
+    grid-column: 1;
+  }
+
+  .bysan-feature-group-body > :is(.bysan-dual-mode-setting, .bysan-combined-color-opacity-setting) {
     grid-column: 1;
   }
 

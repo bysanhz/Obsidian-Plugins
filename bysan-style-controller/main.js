@@ -1,6 +1,6 @@
 /**
  * Bysan Style Controller
- * Version: 0.13.0
+ * Version: 0.14.0
  *
  * Owns visual presentation and provides switchable, integrated Bysan modules.
  */
@@ -469,7 +469,7 @@ module.exports = class BysanStyleController extends Plugin {
       this.register(() => window.clearTimeout(timer));
     }
 
-    console.log(`[Bysan Style Controller] v0.13.0 loaded with ${this.themeControls.count} theme controls`);
+    console.log(`[Bysan Style Controller] v0.14.0 loaded with ${this.themeControls.count} theme controls`);
   }
 
 
@@ -1206,27 +1206,15 @@ class BysanStyleSettingTab extends PluginSettingTab {
       "content",
       this.plugin.language === "zh" ? "内容与阅读" : "Content and reading",
       this.plugin.language === "zh"
-        ? "集中调整工作区、代码、颜色、表格、引用和正文几何。"
-        : "Workspace, code, colour, table, quote and content geometry controls."
+        ? "按工作区、代码块、行内代码、表格、引用和正文对象集中管理全部相关设置。"
+        : "All related settings grouped by workspace, code blocks, inline code, tables, quotes and text objects."
     );
-    this.createSubarea(content, "workspace", this.plugin.t("section.workspace"), (body) => {
+    this.createSubarea(content, "workspace", this.plugin.language === "zh" ? "整体工作区" : "Whole workspace", (body) => {
       this.renderWorkspaceSettings(body);
     });
-    this.createSubarea(content, "code", this.plugin.t("section.code"), (body) => {
-      this.renderCodeSettings(body);
+    this.createSubarea(content, "editor", this.plugin.language === "zh" ? "主编辑区" : "Main editor area", (body) => {
+      this.renderEditorRegionSettings(body);
     }, true);
-    this.createSubarea(content, "palette", this.plugin.t("section.palette"), (body) => {
-      this.renderPaletteSettings(body);
-    }, true);
-    this.createSubarea(content, "components", this.plugin.t("section.components"), (body) => {
-      this.renderComponentSettings(body);
-    });
-    this.createSubarea(
-      content,
-      "content-geometry",
-      this.plugin.language === "zh" ? "尺寸与间距" : "Size and spacing",
-      (body) => this.renderGeometrySettings(body)
-    );
 
     const theme = this.createMajorArea(
       areas,
@@ -1596,67 +1584,236 @@ class BysanStyleSettingTab extends PluginSettingTab {
         .setValue(this.plugin.settings.darkBackground)
         .onChange((value) => this.plugin.updateSetting("darkBackground", value))));
     backgrounds.settingEl.addClass("bysan-dual-mode-setting");
+    backgrounds.settingEl.dataset.bysanSettingKeys = "lightBackground darkBackground";
   }
 
 
   renderCodeSettings(containerEl) {
-    const heading = new Setting(containerEl).setName(this.plugin.t("section.code")).setHeading();
+    const heading = new Setting(containerEl)
+      .setName(this.plugin.language === "zh" ? "代码块" : "Code blocks")
+      .setHeading();
     heading.settingEl.id = "bysan-section-code";
 
-    const themeSetting = new Setting(containerEl)
-      .setName(this.plugin.t("code.theme"))
-      .addDropdown((dropdown) => dropdown
-        .addOption("code-theme-bt-default", "Bysan Default")
-        .addOption("code-theme-solarized-light", "Solarized Light")
-        .addOption("code-theme-material-palenight", "Material Palenight")
-        .addOption("code-theme-dracula", "Dracula")
-        .addOption("code-theme-Gruvbox-dark", "Gruvbox Dark")
-        .addOption("code-theme-monokai", "Monokai")
-        .addOption("code-theme-sublime", "Sublime")
-        .setValue(this.plugin.settings.codeTheme)
-        .onChange((value) => this.plugin.updateSetting("codeTheme", value)));
-    themeSetting.settingEl.addClass("bysan-unified-control-setting", "bysan-control-type-select");
-
-    this.addToggle(containerEl, this.plugin.t("code.lineNumbers"), this.plugin.t("code.lineNumbersDesc"), "codeLineNumbers");
-    this.addToggle(containerEl, this.plugin.t("code.wrapReading"), this.plugin.t("code.wrapReadingDesc"), "codeWrapReading");
-    this.addToggle(containerEl, this.plugin.t("code.noWrapLive"), this.plugin.t("code.noWrapLiveDesc"), "codeNoWrapLive");
-    this.addToggle(containerEl, this.plugin.t("code.muteActive"), this.plugin.t("code.muteActiveDesc"), "muteCodeActiveLine");
-
-    this.addSlider(containerEl, this.plugin.t("code.blur"), this.plugin.t("code.blurDesc"), "codeBlur", 0, 8, 1);
-    this.addSlider(containerEl, this.plugin.t("code.spacing"), this.plugin.t("code.spacingDesc"), "codeLetterSpacing", 0, 2, 0.1);
+    this.createFeatureGroup(
+      containerEl,
+      this.plugin.language === "zh" ? "功能与渲染" : "Behaviour and rendering",
+      this.plugin.language === "zh" ? "代码主题、行号、换行和活动行显示。" : "Theme, line numbers, wrapping and active-line display.",
+      (body) => {
+        const themeSetting = new Setting(body)
+          .setName(this.plugin.t("code.theme"))
+          .addDropdown((dropdown) => dropdown
+            .addOption("code-theme-bt-default", "Bysan Default")
+            .addOption("code-theme-solarized-light", "Solarized Light")
+            .addOption("code-theme-material-palenight", "Material Palenight")
+            .addOption("code-theme-dracula", "Dracula")
+            .addOption("code-theme-Gruvbox-dark", "Gruvbox Dark")
+            .addOption("code-theme-monokai", "Monokai")
+            .addOption("code-theme-sublime", "Sublime")
+            .setValue(this.plugin.settings.codeTheme)
+            .onChange((value) => this.plugin.updateSetting("codeTheme", value)));
+        themeSetting.settingEl.addClass("bysan-unified-control-setting", "bysan-control-type-select");
+        themeSetting.settingEl.dataset.bysanSettingKeys = "codeTheme";
+        this.addToggle(body, this.plugin.t("code.lineNumbers"), this.plugin.t("code.lineNumbersDesc"), "codeLineNumbers");
+        this.addToggle(body, this.plugin.t("code.wrapReading"), this.plugin.t("code.wrapReadingDesc"), "codeWrapReading");
+        this.addToggle(body, this.plugin.t("code.noWrapLive"), this.plugin.t("code.noWrapLiveDesc"), "codeNoWrapLive");
+        this.addToggle(body, this.plugin.t("code.muteActive"), this.plugin.t("code.muteActiveDesc"), "muteCodeActiveLine");
+      }
+    );
+    this.createFeatureGroup(
+      containerEl,
+      this.plugin.language === "zh" ? "明暗外观" : "Light and dark appearance",
+      this.plugin.language === "zh" ? "背景、透明度、文字和边框集中设置。" : "Background, opacity, text and border in one place.",
+      (body) => {
+        this.addDualColor(body, this.plugin.t("palette.codeBg"), "codeBgLight", "codeBgDark", "codeBgOpacityLight", "codeBgOpacityDark");
+        this.addDualColor(body, this.plugin.t("palette.codeText"), "codeTextLight", "codeTextDark");
+        this.addDualColor(body, this.plugin.t("palette.codeBorder"), "codeBorderLight", "codeBorderDark");
+      }
+    );
+    this.createFeatureGroup(
+      containerEl,
+      this.plugin.language === "zh" ? "文字、尺寸与间距" : "Typography, size and spacing",
+      this.plugin.language === "zh" ? "字号、行高、字距、圆角和内边距。" : "Font size, line height, letter spacing, radius and padding.",
+      (body) => {
+        this.addSlider(body, this.plugin.t("code.spacing"), this.plugin.t("code.spacingDesc"), "codeLetterSpacing", 0, 2, 0.1);
+        this.addSlider(body, this.plugin.t("code.blur"), this.plugin.t("code.blurDesc"), "codeBlur", 0, 8, 1);
+        this.renderGeometryControls(body, "codeBlock");
+      }
+    );
   }
 
 
-  renderPaletteSettings(containerEl) {
-    const heading = new Setting(containerEl).setName(this.plugin.t("section.palette")).setHeading();
-    heading.settingEl.id = "bysan-section-palette";
+  renderEditorRegionSettings(containerEl) {
+    const heading = new Setting(containerEl)
+      .setName(this.plugin.language === "zh" ? "主编辑区" : "Main editor area")
+      .setHeading();
+    heading.settingEl.id = "bysan-section-editor";
+    const description = containerEl.createEl("p", {
+      cls: "bysan-region-description",
+      text: this.plugin.language === "zh"
+        ? "这些对象都显示在笔记的编辑或阅读正文中；每个对象内部再集中设置功能、明暗外观和尺寸。"
+        : "These objects live in the note editor or reading content. Behaviour, light/dark appearance and size stay together for each object."
+    });
+    description.dataset.bysanSearch = description.textContent.toLowerCase();
+    this.createEditorObject(containerEl, "code", this.plugin.language === "zh" ? "代码块" : "Code blocks", (body) => {
+      this.renderCodeSettings(body);
+    }, true);
+    this.createEditorObject(containerEl, "inline-code", this.plugin.language === "zh" ? "行内代码" : "Inline code", (body) => {
+      this.renderInlineCodeSettings(body);
+    });
+    this.createEditorObject(containerEl, "tables", this.plugin.language === "zh" ? "表格" : "Tables", (body) => {
+      this.renderTableSettings(body);
+    });
+    this.createEditorObject(containerEl, "quotes", this.plugin.language === "zh" ? "引用块" : "Blockquotes", (body) => {
+      this.renderQuoteSettings(body);
+    });
+    this.createEditorObject(containerEl, "text-details", this.plugin.language === "zh" ? "文字、列表与分隔线" : "Text, lists and dividers", (body) => {
+      this.renderTextDetailSettings(body);
+    });
+  }
 
-    this.addDualColor(
+
+  createEditorObject(containerEl, id, title, render, open = false) {
+    const details = containerEl.createEl("details", {
+      cls: "bysan-editor-object",
+      attr: { "data-bysan-editor-object": id }
+    });
+    details.open = open;
+    const summary = details.createEl("summary", { cls: "bysan-editor-object-summary" });
+    summary.createSpan({ cls: "bysan-subarea-chevron", text: "›" });
+    summary.createSpan({ cls: "bysan-editor-object-title", text: title });
+    const body = details.createDiv({ cls: "bysan-editor-object-body" });
+    render(body);
+    const internalHeading = body.querySelector(":scope > .setting-item-heading:first-child");
+    if (internalHeading) {
+      details.id = internalHeading.id || `bysan-section-${id}`;
+      internalHeading.removeAttribute("id");
+      internalHeading.addClass("bysan-subarea-internal-heading");
+    }
+    return details;
+  }
+
+
+  createFeatureGroup(containerEl, title, description, render) {
+    const group = containerEl.createEl("section", { cls: "bysan-feature-group" });
+    const header = group.createDiv({ cls: "bysan-feature-group-header" });
+    header.createEl("h4", { text: title });
+    if (description) header.createEl("p", { text: description });
+    group.dataset.bysanSearch = `${title} ${description || ""}`.toLowerCase();
+    const body = group.createDiv({ cls: "bysan-feature-group-body" });
+    render(body);
+    return group;
+  }
+
+
+  renderInlineCodeSettings(containerEl) {
+    const heading = new Setting(containerEl)
+      .setName(this.plugin.language === "zh" ? "行内代码" : "Inline code")
+      .setHeading();
+    heading.settingEl.id = "bysan-section-inline-code";
+    this.createFeatureGroup(
       containerEl,
-      this.plugin.t("palette.codeBg"),
-      "codeBgLight",
-      "codeBgDark",
-      "codeBgOpacityLight",
-      "codeBgOpacityDark"
+      this.plugin.language === "zh" ? "明暗外观" : "Light and dark appearance",
+      this.plugin.language === "zh" ? "正文内短代码的背景、文字和阴影。" : "Background, text and shadow for short code inside text.",
+      (body) => {
+        this.addDualColor(body, this.plugin.t("palette.inlineBg"), "inlineBgLight", "inlineBgDark");
+        this.addDualColor(body, this.plugin.t("palette.inlineText"), "inlineTextLight", "inlineTextDark");
+        this.addDualColor(body, this.plugin.language === "zh" ? "行内代码阴影" : "Inline-code shadow", "inlineShadowLight", "inlineShadowDark");
+      }
     );
-    this.addDualColor(containerEl, this.plugin.t("palette.codeText"), "codeTextLight", "codeTextDark");
-    this.addDualColor(containerEl, this.plugin.t("palette.codeBorder"), "codeBorderLight", "codeBorderDark");
-    this.addDualColor(containerEl, this.plugin.t("palette.inlineBg"), "inlineBgLight", "inlineBgDark");
-    this.addDualColor(containerEl, this.plugin.t("palette.inlineText"), "inlineTextLight", "inlineTextDark");
-    this.addDualColor(containerEl, this.plugin.t("palette.tableHead"), "tableHeadLight", "tableHeadDark");
-    this.addDualColor(containerEl, this.plugin.t("palette.tableStripe"), "tableStripeLight", "tableStripeDark");
-    this.addDualColor(containerEl, this.plugin.t("palette.tableHover"), "tableHoverLight", "tableHoverDark");
-    this.addDualColor(containerEl, this.plugin.t("palette.tableBorder"), "tableBorderLight", "tableBorderDark");
-    this.addDualColor(
+    this.createFeatureGroup(
       containerEl,
-      this.plugin.t("palette.quoteBg"),
-      "quoteBgLight",
-      "quoteBgDark",
-      "quoteBgOpacityLight",
-      "quoteBgOpacityDark"
+      this.plugin.language === "zh" ? "文字、尺寸与间距" : "Typography, size and spacing",
+      this.plugin.language === "zh" ? "字号、圆角、内外边距和阴影尺寸。" : "Font size, radius, padding, margin and shadow size.",
+      (body) => this.renderGeometryControls(body, "inlineCode")
     );
-    this.addDualColor(containerEl, this.plugin.t("palette.quoteBorder"), "quoteBorderLight", "quoteBorderDark");
-    this.addDualColor(containerEl, this.plugin.t("palette.marker"), "markerLight", "markerDark");
+  }
+
+
+  renderTableSettings(containerEl) {
+    const heading = new Setting(containerEl)
+      .setName(this.plugin.language === "zh" ? "表格" : "Tables")
+      .setHeading();
+    heading.settingEl.id = "bysan-section-tables";
+    this.createFeatureGroup(
+      containerEl,
+      this.plugin.language === "zh" ? "功能" : "Behaviour",
+      this.plugin.language === "zh" ? "表格居中与斑马纹显示。" : "Table centring and zebra stripes.",
+      (body) => {
+        this.addToggle(
+          body,
+          this.plugin.language === "zh" ? "启用表格斑马纹" : "Enable table zebra stripes",
+          this.plugin.t("components.zebraDesc"),
+          "tableZebra"
+        );
+        this.addToggle(body, this.plugin.t("components.center"), this.plugin.t("components.centerDesc"), "tableCentered");
+      }
+    );
+    this.createFeatureGroup(
+      containerEl,
+      this.plugin.language === "zh" ? "明暗外观" : "Light and dark appearance",
+      this.plugin.language === "zh" ? "表头、斑马纹、悬停和边框颜色。" : "Header, stripe, hover and border colours.",
+      (body) => {
+        this.addDualColor(body, this.plugin.t("palette.tableHead"), "tableHeadLight", "tableHeadDark");
+        this.addDualColor(body, this.plugin.t("palette.tableStripe"), "tableStripeLight", "tableStripeDark");
+        this.addDualColor(body, this.plugin.t("palette.tableHover"), "tableHoverLight", "tableHoverDark");
+        this.addDualColor(body, this.plugin.t("palette.tableBorder"), "tableBorderLight", "tableBorderDark");
+      }
+    );
+    this.createFeatureGroup(
+      containerEl,
+      this.plugin.language === "zh" ? "文字、尺寸与间距" : "Typography, size and spacing",
+      this.plugin.language === "zh" ? "表头字重、单元格内边距、边框和外边距。" : "Header weight, cell padding, border and margin.",
+      (body) => this.renderGeometryControls(body, "table")
+    );
+  }
+
+
+  renderQuoteSettings(containerEl) {
+    const heading = new Setting(containerEl)
+      .setName(this.plugin.language === "zh" ? "引用块" : "Blockquotes")
+      .setHeading();
+    heading.settingEl.id = "bysan-section-quotes";
+    this.createFeatureGroup(
+      containerEl,
+      this.plugin.language === "zh" ? "文字功能" : "Text behaviour",
+      this.plugin.language === "zh" ? "控制引用块是否使用衬线字体。" : "Control whether blockquotes use a serif font.",
+      (body) => this.addToggle(body, this.plugin.t("components.quoteSerif"), this.plugin.t("components.quoteSerifDesc"), "quoteSerif")
+    );
+    this.createFeatureGroup(
+      containerEl,
+      this.plugin.language === "zh" ? "明暗外观" : "Light and dark appearance",
+      this.plugin.language === "zh" ? "背景与透明度、强调边框颜色。" : "Background and opacity plus accent border colour.",
+      (body) => {
+        this.addDualColor(body, this.plugin.t("palette.quoteBg"), "quoteBgLight", "quoteBgDark", "quoteBgOpacityLight", "quoteBgOpacityDark");
+        this.addDualColor(body, this.plugin.t("palette.quoteBorder"), "quoteBorderLight", "quoteBorderDark");
+      }
+    );
+    this.createFeatureGroup(
+      containerEl,
+      this.plugin.language === "zh" ? "文字、尺寸与间距" : "Typography, size and spacing",
+      this.plugin.language === "zh" ? "字号、边框宽度、圆角和内边距。" : "Font size, border width, radius and padding.",
+      (body) => this.renderGeometryControls(body, "quote")
+    );
+  }
+
+
+  renderTextDetailSettings(containerEl) {
+    const heading = new Setting(containerEl)
+      .setName(this.plugin.language === "zh" ? "文字、列表与分隔线" : "Text, lists and dividers")
+      .setHeading();
+    heading.settingEl.id = "bysan-section-text-details";
+    this.createFeatureGroup(
+      containerEl,
+      this.plugin.language === "zh" ? "列表外观" : "List appearance",
+      this.plugin.language === "zh" ? "浅色与深色模式的列表标记颜色。" : "List-marker colours in light and dark mode.",
+      (body) => this.addDualColor(body, this.plugin.t("palette.marker"), "markerLight", "markerDark")
+    );
+    this.createFeatureGroup(
+      containerEl,
+      this.plugin.language === "zh" ? "文字与结构尺寸" : "Text and structure size",
+      this.plugin.language === "zh" ? "列表标记、任务框、分隔线和粗体字重。" : "List markers, task boxes, dividers and strong-text weight.",
+      (body) => this.renderGeometryControls(body, "other")
+    );
   }
 
 
@@ -1737,6 +1894,9 @@ class BysanStyleSettingTab extends PluginSettingTab {
     addMode("light", lightKey, lightOpacityKey);
     addMode("dark", darkKey, darkOpacityKey);
     setting.settingEl.addClass("bysan-dual-mode-setting");
+    setting.settingEl.dataset.bysanSettingKeys = [lightKey, darkKey, lightOpacityKey, darkOpacityKey]
+      .filter(Boolean)
+      .join(" ");
     if (lightOpacityKey || darkOpacityKey) {
       setting.settingEl.addClass("bysan-combined-color-opacity-setting");
     }
@@ -1769,53 +1929,22 @@ class BysanStyleSettingTab extends PluginSettingTab {
   }
 
 
-  renderComponentSettings(containerEl) {
-    const heading = new Setting(containerEl).setName(this.plugin.t("section.components")).setHeading();
-    heading.settingEl.id = "bysan-section-components";
-    this.addToggle(containerEl, this.plugin.t("components.zebra"), this.plugin.t("components.zebraDesc"), "tableZebra");
-    this.addToggle(containerEl, this.plugin.t("components.center"), this.plugin.t("components.centerDesc"), "tableCentered");
-    this.addToggle(containerEl, this.plugin.t("components.quoteSerif"), this.plugin.t("components.quoteSerifDesc"), "quoteSerif");
-  }
-
-
-  renderGeometrySettings(containerEl) {
-    const geometryHeading = new Setting(containerEl)
-      .setName(this.plugin.language === "zh" ? "内容尺寸与间距" : "Content size and spacing")
-      .setDesc(this.plugin.language === "zh"
-        ? "这些值直接对应正文元素的实际 CSS 尺寸；每项均可单独恢复为 Bysan 默认值。"
-        : "These values map directly to the rendered CSS dimensions. Every item can be reset independently.")
-      .setHeading();
-    geometryHeading.settingEl.id = "bysan-section-content-geometry";
-    const groups = [
-      ["inlineCode", "行内代码", "Inline code"],
-      ["codeBlock", "代码块", "Code blocks"],
-      ["table", "表格", "Tables"],
-      ["quote", "引用块", "Blockquotes"],
-      ["other", "列表与正文细节", "Lists and text details"]
-    ];
-    for (const [groupId, nameZh, nameEn] of groups) {
-      const entries = CONTENT_GEOMETRY_CONTROLS.filter(([key]) => {
-        if (groupId === "other") return !/^(inlineCode|codeBlock|table|quote)/.test(key);
-        return key.startsWith(groupId);
-      });
-      const details = containerEl.createEl("details", { cls: "bysan-control-cluster" });
-      details.open = groupId === "inlineCode";
-      const summary = details.createEl("summary", { cls: "bysan-control-cluster-summary" });
-      summary.createSpan({ cls: "bysan-subarea-chevron", text: "›" });
-      summary.createSpan({ text: this.plugin.language === "zh" ? nameZh : nameEn });
-      const body = details.createDiv({ cls: "bysan-control-cluster-body" });
-      for (const [key, property, unit, minimum, maximum, step, controlZh, controlEn] of entries) {
-        this.addResettableSlider(
-          body,
-          this.plugin.language === "zh" ? controlZh : controlEn,
-          `${property} · ${minimum}–${maximum}${unit}`,
-          key,
-          minimum,
-          maximum,
-          step,
-          unit
-        );
-      }
+  renderGeometryControls(containerEl, groupId) {
+    const entries = CONTENT_GEOMETRY_CONTROLS.filter(([key]) => {
+      if (groupId === "other") return !/^(inlineCode|codeBlock|table|quote)/.test(key);
+      return key.startsWith(groupId);
+    });
+    for (const [key, property, unit, minimum, maximum, step, controlZh, controlEn] of entries) {
+      this.addResettableSlider(
+        containerEl,
+        this.plugin.language === "zh" ? controlZh : controlEn,
+        `${property} · ${minimum}–${maximum}${unit}`,
+        key,
+        minimum,
+        maximum,
+        step,
+        unit
+      );
     }
   }
 
@@ -1828,6 +1957,7 @@ class BysanStyleSettingTab extends PluginSettingTab {
         .setValue(Boolean(this.plugin.settings[key]))
         .onChange((value) => this.plugin.updateSetting(key, value)));
     setting.settingEl.addClass("bysan-unified-control-setting", "bysan-control-type-toggle");
+    setting.settingEl.dataset.bysanSettingKeys = key;
   }
 
 
@@ -1841,6 +1971,7 @@ class BysanStyleSettingTab extends PluginSettingTab {
         .setValue(this.plugin.settings[key])
         .onChange((value) => this.plugin.updateSetting(key, value)));
     setting.settingEl.addClass("bysan-unified-control-setting", "bysan-control-type-slider");
+    setting.settingEl.dataset.bysanSettingKeys = key;
   }
 
 
@@ -1882,5 +2013,6 @@ class BysanStyleSettingTab extends PluginSettingTab {
       "bysan-control-type-slider",
       "bysan-resettable-slider"
     );
+    setting.settingEl.dataset.bysanSettingKeys = key;
   }
 }

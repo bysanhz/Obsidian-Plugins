@@ -322,9 +322,9 @@ mark.art-hl-custom-4 { background-color: color-mix(in srgb, var(--art-custom-4) 
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 19px;
-  height: 19px;
-  min-width: 19px;
+  width: var(--art-review-badge-size, 17px);
+  height: var(--art-review-badge-size, 17px);
+  min-width: var(--art-review-badge-size, 17px);
   margin: 0;
   padding: 0;
   border: 1px solid color-mix(in srgb, var(--interactive-accent) 72%, var(--background-modifier-border));
@@ -333,7 +333,7 @@ mark.art-hl-custom-4 { background-color: color-mix(in srgb, var(--art-custom-4) 
   background: var(--interactive-accent);
   box-shadow: 0 2px 7px rgba(0, 0, 0, 0.2);
   cursor: pointer;
-  font-size: 10px;
+  font-size: clamp(9px, calc(var(--art-review-badge-size, 17px) * 0.56), 12px);
   font-weight: 800;
   line-height: 1;
   transform: translateY(-35%);

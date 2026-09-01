@@ -148,6 +148,7 @@ for (const key of ["workspaceBackground", "collapsedLineRanges", "codeLineNumber
 for (const key of ["moduleHeadingNumbering", "moduleMediaResizer", "moduleReviewToolbar"]) {
   assert.equal(typeof defaults[key], "boolean", `invalid integrated-module toggle: ${key}`);
 }
+assert(defaults.reviewBadgeSize >= 12 && defaults.reviewBadgeSize <= 24, "invalid review badge size default");
 for (const key of [
   "inlineCodeRadius", "inlineCodeFontSize", "inlineCodePaddingY", "inlineCodePaddingX",
   "inlineCodeMargin", "inlineCodeShadowSize", "codeBlockRadius", "codeBlockFontSize",
@@ -205,14 +206,16 @@ for (const moduleId of ["academic-heading-numbering", "mermaid-inline-resizer", 
   }
 }
 
-assert.equal(reviewModuleManifest.version, "0.2.2", "selection review module version mismatch");
+assert.equal(reviewModuleManifest.version, "0.2.3", "selection review module version mismatch");
 for (const method of [
   "registerReadingSectionMapping", "captureReadingSelection", "mapReadingSelectionToSource",
-  "refreshReadingReviewBadges", "findReadingSectionForLine", "replaceCachedFileRange"
+  "refreshReadingReviewBadges", "findReadingSectionForLine", "replaceCachedFileRange",
+  "getReviewBadgeSize"
 ]) {
   assert(reviewModuleSource.includes(`${method}(`), `missing reading review support: ${method}`);
 }
 assert(reviewModuleCss.includes(".art-toolbar.art-reading-selection"), "reading toolbar must hide source-only actions");
+assert(reviewModuleCss.includes("--art-review-badge-size"), "review badge size must be controlled by Style Controller");
 const sampleSource = "第一行\n## 标题文本\n普通段落里有一段需要评论的文字。\n下一行";
 const titleRange = sourceRangeForLines(sampleSource, 1, 1);
 assert.equal(sampleSource.slice(titleRange.start, titleRange.end).trim(), "## 标题文本");

@@ -1,6 +1,6 @@
 /**
  * Selection Review Toolbar
- * Version: 0.2.2
+ * Version: 0.2.3
  *
  * A selection-driven, fixed-position review toolbar for Obsidian 1.13.x.
  * Formatting edits Markdown through Obsidian's Editor API. Review bodies are
@@ -1900,6 +1900,14 @@ module.exports = class SelectionReviewToolbar extends Plugin {
   }
 
 
+  getReviewBadgeSize() {
+    const raw = getComputedStyle(document.body).getPropertyValue("--art-review-badge-size")
+      || getComputedStyle(document.documentElement).getPropertyValue("--art-review-badge-size");
+    const value = Number.parseFloat(raw);
+    return Number.isFinite(value) ? Math.min(24, Math.max(12, value)) : 17;
+  }
+
+
   async refreshReviewBadges() {
     this.clearReviewBadges();
     const markdownView = this.getActiveMarkdownView();
@@ -1916,6 +1924,7 @@ module.exports = class SelectionReviewToolbar extends Plugin {
     const markers = parseReviewMarkers(view.editor.getValue());
     const scroller = view.containerEl.querySelector(".cm-scroller");
     const viewport = scroller?.getBoundingClientRect() || view.containerEl.getBoundingClientRect();
+    const badgeSize = this.getReviewBadgeSize();
 
     markers.forEach((marker, index) => {
       const coords = cm.coordsAtPos(marker.start, 1) || cm.coordsAtPos(marker.end, -1);
@@ -1931,7 +1940,7 @@ module.exports = class SelectionReviewToolbar extends Plugin {
           "aria-label": `打开评论 ${index + 1}`
         }
       });
-      badge.style.left = `${Math.round(Math.min(coords.right + 2, viewport.right - 20))}px`;
+      badge.style.left = `${Math.round(Math.min(coords.right + 2, viewport.right - badgeSize - 2))}px`;
       badge.style.top = `${Math.round(Math.max(viewport.top, coords.top - 8))}px`;
       badge.addEventListener("pointerdown", (event) => {
         event.preventDefault();
@@ -1969,6 +1978,8 @@ module.exports = class SelectionReviewToolbar extends Plugin {
       view.containerEl
     ).getBoundingClientRect();
     const sectionBadgeCount = new WeakMap();
+    const badgeSize = this.getReviewBadgeSize();
+    const badgeGap = Math.max(3, Math.round(badgeSize * 0.16));
 
     markers.forEach((marker, index) => {
       const markerLine = lineForOffset(source, marker.start, lineOffsets);
@@ -1985,8 +1996,8 @@ module.exports = class SelectionReviewToolbar extends Plugin {
 
       const anchorRect = this.findAnchorTextRect(section, record?.anchorText) || sectionRect;
       const badge = this.createReviewBadge(index, record || marker.legacyBody, body);
-      badge.style.left = `${Math.round(Math.min(anchorRect.right + 4, viewport.right - 22))}px`;
-      badge.style.top = `${Math.round(Math.max(viewport.top, anchorRect.top + count * 22 - 8))}px`;
+      badge.style.left = `${Math.round(Math.min(anchorRect.right + 4, viewport.right - badgeSize - 2))}px`;
+      badge.style.top = `${Math.round(Math.max(viewport.top, anchorRect.top + count * (badgeSize + badgeGap) - 8))}px`;
       badge.addEventListener("click", (event) => {
         event.preventDefault();
         event.stopPropagation();

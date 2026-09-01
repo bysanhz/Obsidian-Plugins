@@ -1,6 +1,6 @@
 /**
  * Bysan Style Controller
- * Version: 0.15.1
+ * Version: 0.15.2
  *
  * Owns visual presentation and provides switchable, integrated Bysan modules.
  */
@@ -186,6 +186,7 @@ const CONTROLLED_PROPERTIES = [
   "--code-normal",
   "--blur-codebox-frosted-glass",
   "--letter-space-code",
+  "--art-review-badge-size",
   ...CONTENT_GEOMETRY_CONTROLS.map(([, property]) => property)
 ];
 
@@ -218,6 +219,7 @@ const DEFAULT_SETTINGS = {
   moduleHeadingNumbering: true,
   moduleMediaResizer: true,
   moduleReviewToolbar: true,
+  reviewBadgeSize: 17,
   inlineCodeRadius: 2,
   inlineCodeFontSize: 0.9,
   inlineCodePaddingY: 1,
@@ -469,7 +471,7 @@ module.exports = class BysanStyleController extends Plugin {
       this.register(() => window.clearTimeout(timer));
     }
 
-    console.log(`[Bysan Style Controller] v0.15.1 loaded with ${this.themeControls.count} regional theme controls`);
+    console.log(`[Bysan Style Controller] v0.15.2 loaded with ${this.themeControls.count} regional theme controls`);
   }
 
 
@@ -878,6 +880,10 @@ module.exports = class BysanStyleController extends Plugin {
     body.style.setProperty(
       "--bysan-table-inline-margin",
       this.settings.tableCentered ? "auto" : "0"
+    );
+    body.style.setProperty(
+      "--art-review-badge-size",
+      `${clamp(this.settings.reviewBadgeSize, 12, 24)}px`
     );
     body.style.setProperty(
       "--bysan-quote-font",
@@ -1479,8 +1485,20 @@ class BysanStyleSettingTab extends PluginSettingTab {
             } finally {
               toggle.setDisabled(false);
             }
-          }));
+      }));
       setting.settingEl.addClass("bysan-unified-control-setting", "bysan-control-type-toggle");
+      if (module.key === "moduleReviewToolbar") {
+        this.addResettableSlider(
+          containerEl,
+          this.plugin.t("review.badgeSize"),
+          this.plugin.t("review.badgeSizeDesc"),
+          "reviewBadgeSize",
+          12,
+          24,
+          1,
+          "px"
+        );
+      }
     }
   }
 

@@ -1,7 +1,7 @@
 {
   "id": "selection-review-toolbar",
   "name": "Selection Review Toolbar",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "minAppVersion": "1.13.0",
   "description": "A floating academic review toolbar with draggable Markdown and LaTeX comment windows.",
   "author": "Bysan",

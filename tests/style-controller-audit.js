@@ -10,6 +10,10 @@ const themeSource = fs.readFileSync(path.join(pluginRoot, "theme-controls.js"), 
 const baseCss = fs.readFileSync(path.join(pluginRoot, "blue-topaz-base.css"), "utf8");
 const i18nSource = fs.readFileSync(path.join(pluginRoot, "i18n.js"), "utf8");
 const mainSource = fs.readFileSync(path.join(pluginRoot, "main.js"), "utf8");
+const reviewModuleRoot = path.join(pluginRoot, "modules", "selection-review-toolbar");
+const reviewModuleSource = fs.readFileSync(path.join(reviewModuleRoot, "main.js"), "utf8");
+const reviewModuleCss = fs.readFileSync(path.join(reviewModuleRoot, "styles.css"), "utf8");
+const reviewModuleManifest = JSON.parse(fs.readFileSync(path.join(reviewModuleRoot, "manifest.json"), "utf8"));
 
 const supportedTypes = new Set([
   "class-toggle", "class-select", "variable-select", "variable-themed-color",
@@ -69,6 +73,33 @@ vm.runInNewContext(
   sandbox
 );
 const { ThemeControls, parseColor, colorWithAlpha } = sandbox.module.exports;
+const reviewSandbox = {
+  module: { exports: {} },
+  exports: {},
+  console,
+  globalThis: { crypto: { randomUUID: () => "12345678-1234-1234-1234-123456789abc" } },
+  require(id) {
+    if (id !== "obsidian") throw new Error(`unexpected dependency: ${id}`);
+    return {
+      Component: class Component {},
+      MarkdownRenderer: {},
+      MarkdownView: class MarkdownView {},
+      Notice: class Notice {},
+      Plugin: class Plugin {},
+      setIcon() {}
+    };
+  }
+};
+vm.runInNewContext(
+  `${reviewModuleSource}\n;globalThis.__reviewModuleTest = { findUniquePlainTextRange, sourceRangeForLines, lineForOffset, normalizeVisibleText };`,
+  reviewSandbox
+);
+const {
+  findUniquePlainTextRange,
+  sourceRangeForLines,
+  lineForOffset,
+  normalizeVisibleText
+} = reviewSandbox.globalThis.__reviewModuleTest;
 const plugin = { settings: { themeSettings: {} }, language: "zh", t: (key) => key, addCommand() {} };
 const themeControls = new ThemeControls(plugin, catalog);
 assert.equal(themeControls.controlItems.length, renderedControls.length, "every non-manual control must be owned");
@@ -173,6 +204,24 @@ for (const moduleId of ["academic-heading-numbering", "mermaid-inline-resizer", 
     assert(fs.existsSync(path.join(pluginRoot, "modules", moduleId, file)), `missing integrated module asset: ${moduleId}/${file}`);
   }
 }
+
+assert.equal(reviewModuleManifest.version, "0.2.2", "selection review module version mismatch");
+for (const method of [
+  "registerReadingSectionMapping", "captureReadingSelection", "mapReadingSelectionToSource",
+  "refreshReadingReviewBadges", "findReadingSectionForLine", "replaceCachedFileRange"
+]) {
+  assert(reviewModuleSource.includes(`${method}(`), `missing reading review support: ${method}`);
+}
+assert(reviewModuleCss.includes(".art-toolbar.art-reading-selection"), "reading toolbar must hide source-only actions");
+const sampleSource = "第一行\n## 标题文本\n普通段落里有一段需要评论的文字。\n下一行";
+const titleRange = sourceRangeForLines(sampleSource, 1, 1);
+assert.equal(sampleSource.slice(titleRange.start, titleRange.end).trim(), "## 标题文本");
+assert.equal(lineForOffset(sampleSource, sampleSource.indexOf("需要评论")), 2);
+const plainRange = findUniquePlainTextRange("普通段落里有一段需要评论的文字。", "需要评论");
+assert.equal(plainRange.start, 8);
+assert.equal(plainRange.end, 12);
+assert.equal(findUniquePlainTextRange("重复 重复", "重复"), null, "ambiguous reading selection must not map to source");
+assert.equal(normalizeVisibleText(" a\n\t b "), "a b");
 
 const counts = Object.fromEntries([...supportedTypes].map((type) => [
   type,

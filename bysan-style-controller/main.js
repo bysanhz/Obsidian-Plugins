@@ -1,6 +1,6 @@
 /**
  * Bysan Style Controller
- * Version: 0.15.0
+ * Version: 0.15.1
  *
  * Owns visual presentation and provides switchable, integrated Bysan modules.
  */
@@ -469,7 +469,7 @@ module.exports = class BysanStyleController extends Plugin {
       this.register(() => window.clearTimeout(timer));
     }
 
-    console.log(`[Bysan Style Controller] v0.15.0 loaded with ${this.themeControls.count} regional theme controls`);
+    console.log(`[Bysan Style Controller] v0.15.1 loaded with ${this.themeControls.count} regional theme controls`);
   }
 
 

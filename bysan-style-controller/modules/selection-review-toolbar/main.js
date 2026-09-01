@@ -1,6 +1,6 @@
 /**
  * Selection Review Toolbar
- * Version: 0.2.1
+ * Version: 0.2.2
  *
  * A selection-driven, fixed-position review toolbar for Obsidian 1.13.x.
  * Formatting edits Markdown through Obsidian's Editor API. Review bodies are
@@ -37,6 +37,27 @@ const SELECTION_DELAY = 55;
 const VIEWPORT_GAP = 8;
 const REVIEW_MARKER_PATTERN = /%%\s*BYSAN-REVIEW:([a-zA-Z0-9_-]+)\s*%%/g;
 const LEGACY_REVIEW_PATTERN = /%%\s*REVIEW:\s*([\s\S]*?)\s*%%/g;
+const READING_BLOCK_SELECTOR = [
+  "[data-art-line-start]",
+  "[data-line]",
+  ".el-p",
+  ".el-heading",
+  ".el-ul",
+  ".el-ol",
+  ".el-blockquote"
+].join(",");
+const READING_UNREVIEWABLE_SELECTOR = [
+  "pre",
+  "code",
+  "table",
+  ".mermaid",
+  ".math",
+  ".math-block",
+  ".block-language-mermaid",
+  ".internal-embed",
+  ".image-embed",
+  ".cm-embed-block"
+].join(",");
 const DEFAULT_DATA = {
   comments: {},
   popup: { left: null, top: null, width: 560, height: 420 },
@@ -114,6 +135,109 @@ function orderedPositions(anchor, head) {
 }
 
 
+function createLineStartOffsets(text) {
+  const offsets = [0];
+  for (let index = 0; index < text.length; index++) {
+    if (text[index] === "\n") offsets.push(index + 1);
+  }
+  return offsets;
+}
+
+
+function lineForOffset(text, offset, lineOffsets = createLineStartOffsets(text)) {
+  let low = 0;
+  let high = lineOffsets.length - 1;
+
+  while (low <= high) {
+    const middle = Math.floor((low + high) / 2);
+    if (lineOffsets[middle] <= offset) low = middle + 1;
+    else high = middle - 1;
+  }
+
+  return Math.max(0, high);
+}
+
+
+function sourceRangeForLines(text, lineStart, lineEnd) {
+  const offsets = createLineStartOffsets(text);
+  const start = offsets[Math.max(0, lineStart)] ?? text.length;
+  const endLine = Math.max(lineStart, lineEnd) + 1;
+  const end = offsets[endLine] ?? text.length;
+  return { start, end };
+}
+
+
+function findAllIndexes(text, needle) {
+  const results = [];
+  if (!needle) return results;
+  let index = text.indexOf(needle);
+  while (index !== -1) {
+    results.push(index);
+    index = text.indexOf(needle, index + needle.length);
+  }
+  return results;
+}
+
+
+function buildWhitespaceSearchMap(text) {
+  let searchable = "";
+  const map = [];
+  let inWhitespace = false;
+
+  for (let index = 0; index < text.length; index++) {
+    const character = text[index];
+    if (/\s/.test(character)) {
+      if (!inWhitespace) {
+        searchable += " ";
+        map.push(index);
+        inWhitespace = true;
+      }
+      continue;
+    }
+
+    searchable += character;
+    map.push(index);
+    inWhitespace = false;
+  }
+
+  return { searchable, map };
+}
+
+
+function normalizeVisibleText(text) {
+  return String(text || "").replace(/\u00a0/g, " ").replace(/\s+/g, " ").trim();
+}
+
+
+function findUniquePlainTextRange(sourceText, visibleText) {
+  const trimmed = String(visibleText || "").trim();
+  if (!trimmed) return null;
+
+  const exactNeedles = Array.from(new Set([
+    trimmed,
+    trimmed.replace(/\u00a0/g, " ")
+  ])).filter(Boolean);
+
+  for (const needle of exactNeedles) {
+    const matches = findAllIndexes(sourceText, needle);
+    if (matches.length === 1) {
+      return { start: matches[0], end: matches[0] + needle.length };
+    }
+  }
+
+  const normalizedNeedle = normalizeVisibleText(trimmed);
+  const { searchable, map } = buildWhitespaceSearchMap(sourceText);
+  const matches = findAllIndexes(searchable, normalizedNeedle);
+
+  if (matches.length !== 1) return null;
+
+  const start = map[matches[0]];
+  const endMapIndex = matches[0] + normalizedNeedle.length - 1;
+  const end = (map[endMapIndex] ?? start) + 1;
+  return { start, end };
+}
+
+
 /* =========================================================
  * Plugin lifecycle
  * ========================================================= */
@@ -153,19 +277,21 @@ module.exports = class SelectionReviewToolbar extends Plugin {
     this.reviewPreviewComponent = null;
     this.reviewPreviewTimer = null;
     this.activeReview = null;
+    this.readingSelectionNoticeKey = null;
 
     this.createToolbar();
     this.applyCustomColors();
     this.createReviewWindow();
     this.registerSelectionTracking();
     this.registerWorkspaceTracking();
+    this.registerReadingSectionMapping();
 
     this.app.workspace.onLayoutReady(() => {
       this.sourceModeCommandId = this.findSourceModeCommandId();
       this.scheduleReviewBadgeRefresh();
     });
 
-    console.log("[Selection Review Toolbar] v0.2.1 loaded");
+    console.log("[Selection Review Toolbar] v0.2.2 loaded");
   }
 
 
@@ -225,6 +351,9 @@ module.exports = class SelectionReviewToolbar extends Plugin {
       document,
       "selectionchange",
       () => {
+        if (this.reviewWindowEl?.classList.contains("art-open")) {
+          return;
+        }
         if (!this.selectingWithPointer) {
           this.scheduleSelectionCheck(SELECTION_DELAY);
         }
@@ -295,7 +424,7 @@ module.exports = class SelectionReviewToolbar extends Plugin {
     this.registerEvent(this.app.workspace.on("file-open", close));
     this.registerEvent(this.app.workspace.on("active-leaf-change", close));
     this.registerEvent(this.app.workspace.on("layout-change", () => {
-      const view = this.getActiveEditingView();
+      const view = this.getActiveMarkdownView();
       if (!view) {
         close();
       }
@@ -311,6 +440,29 @@ module.exports = class SelectionReviewToolbar extends Plugin {
   }
 
 
+  registerReadingSectionMapping() {
+    this.registerMarkdownPostProcessor((element, context) => {
+      if (element.closest?.(".art-review-window")) {
+        return;
+      }
+
+      const sectionInfo = context.getSectionInfo?.(element);
+      if (!sectionInfo || !Number.isInteger(sectionInfo.lineStart)) {
+        return;
+      }
+
+      element.dataset.artLineStart = String(sectionInfo.lineStart);
+      element.dataset.artLineEnd = String(
+        Number.isInteger(sectionInfo.lineEnd)
+          ? sectionInfo.lineEnd
+          : sectionInfo.lineStart
+      );
+      element.dataset.artSourcePath = context.sourcePath || "";
+      this.scheduleReviewBadgeRefresh();
+    });
+  }
+
+
   scheduleSelectionCheck(delay = SELECTION_DELAY) {
     if (this.selectionTimer !== null) {
       window.clearTimeout(this.selectionTimer);
@@ -318,7 +470,9 @@ module.exports = class SelectionReviewToolbar extends Plugin {
 
     this.selectionTimer = window.setTimeout(() => {
       this.selectionTimer = null;
-      this.captureAndShowSelection();
+      this.captureAndShowSelection().catch((error) => {
+        console.warn("[Selection Review Toolbar] Could not capture selection:", error);
+      });
     }, delay);
   }
 
@@ -334,10 +488,31 @@ module.exports = class SelectionReviewToolbar extends Plugin {
   }
 
 
-  captureAndShowSelection() {
+  getActiveMarkdownView() {
+    return this.app.workspace.getActiveViewOfType(MarkdownView);
+  }
+
+
+  async captureAndShowSelection() {
     const view = this.getActiveEditingView();
 
-    if (!view) {
+    if (view) {
+      this.captureEditingSelection(view);
+      return;
+    }
+
+    const readingView = this.getActiveMarkdownView();
+    if (readingView?.getMode?.() === "preview") {
+      await this.captureReadingSelection(readingView);
+      return;
+    }
+
+    this.hideToolbar({ clearCache: true });
+  }
+
+
+  captureEditingSelection(view) {
+    if (!view?.editor) {
       this.hideToolbar({ clearCache: true });
       return;
     }
@@ -384,6 +559,7 @@ module.exports = class SelectionReviewToolbar extends Plugin {
       fromOffset,
       toOffset,
       text,
+      mode: "source",
       key
     };
 
@@ -400,8 +576,86 @@ module.exports = class SelectionReviewToolbar extends Plugin {
   }
 
 
+  async captureReadingSelection(view) {
+    const domSelection = window.getSelection();
+    if (!domSelection || domSelection.rangeCount === 0 || domSelection.isCollapsed) {
+      this.hideToolbar({ clearCache: true });
+      return;
+    }
+
+    const range = domSelection.getRangeAt(0);
+    const ancestor = range.commonAncestorContainer instanceof Element
+      ? range.commonAncestorContainer
+      : range.commonAncestorContainer.parentElement;
+    const preview = view.containerEl.querySelector(".markdown-preview-view, .markdown-reading-view, .markdown-rendered");
+
+    if (!ancestor || !preview?.contains(ancestor)) {
+      this.hideToolbar({ clearCache: true });
+      return;
+    }
+
+    if (this.isPluginSurface(ancestor) || ancestor.closest(READING_UNREVIEWABLE_SELECTOR)) {
+      this.hideToolbar({ clearCache: true });
+      return;
+    }
+
+    const visibleText = domSelection.toString().trim();
+    if (!visibleText) {
+      this.hideToolbar({ clearCache: true });
+      return;
+    }
+
+    const block = this.getReadingSelectionBlock(view, range);
+    if (!block) {
+      this.hideToolbar({ clearCache: true });
+      return;
+    }
+
+    const sourceMatch = await this.mapReadingSelectionToSource(view, block, visibleText);
+    if (!sourceMatch) {
+      this.hideToolbar({ clearCache: true });
+      this.maybeNoticeReadingSelection(view.file?.path || "", visibleText);
+      return;
+    }
+
+    const rect = this.getDomRangeRect(range);
+    if (!rect || !this.isRectNearViewport(rect)) {
+      this.hideToolbar({ clearCache: false });
+      return;
+    }
+
+    const filePath = view.file?.path || "";
+    const key = `${filePath}:${sourceMatch.fromOffset}:${sourceMatch.toOffset}:${sourceMatch.sourceText}`;
+    if (key === this.suppressedSelectionKey) {
+      this.hideToolbar({ clearCache: false });
+      return;
+    }
+
+    this.suppressedSelectionKey = null;
+    this.cachedSelection = {
+      view,
+      editor: null,
+      filePath,
+      fromOffset: sourceMatch.fromOffset,
+      toOffset: sourceMatch.toOffset,
+      text: sourceMatch.sourceText,
+      visibleText,
+      mode: "reading",
+      key
+    };
+    this.cachedRect = rect;
+    this.closePanels();
+    this.showToolbar(rect);
+  }
+
+
   selectionIsStillValid() {
     const cache = this.cachedSelection;
+    if (cache?.mode === "reading") {
+      const view = this.getActiveMarkdownView();
+      return Boolean(view?.file?.path === cache.filePath && cache.text);
+    }
+
     const view = this.getActiveEditingView();
 
     if (
@@ -423,6 +677,12 @@ module.exports = class SelectionReviewToolbar extends Plugin {
 
 
   getSelectionRect(cache) {
+    if (cache?.mode === "reading") {
+      const domSelection = window.getSelection();
+      if (!domSelection?.rangeCount) return this.cachedRect;
+      return this.getDomRangeRect(domSelection.getRangeAt(0)) || this.cachedRect;
+    }
+
     const domSelection = window.getSelection();
 
     if (domSelection?.rangeCount) {
@@ -467,6 +727,109 @@ module.exports = class SelectionReviewToolbar extends Plugin {
       width: Math.max(start.right, end.right) - Math.min(start.left, end.left),
       height: Math.max(start.bottom, end.bottom) - Math.min(start.top, end.top)
     };
+  }
+
+
+  getDomRangeRect(range) {
+    if (!range) return null;
+    const rects = Array.from(range.getClientRects()).filter(
+      (rect) => rect.width > 0 || rect.height > 0
+    );
+    if (rects.length === 0) return null;
+
+    const first = rects[0];
+    const last = rects[rects.length - 1];
+    return {
+      left: Math.min(first.left, last.left),
+      right: Math.max(first.right, last.right),
+      top: Math.min(first.top, last.top),
+      bottom: Math.max(first.bottom, last.bottom),
+      width: Math.max(first.right, last.right) - Math.min(first.left, last.left),
+      height: Math.max(first.bottom, last.bottom) - Math.min(first.top, last.top)
+    };
+  }
+
+
+  getReadingSelectionBlock(view, range) {
+    const startElement = range.startContainer instanceof Element
+      ? range.startContainer
+      : range.startContainer.parentElement;
+    const endElement = range.endContainer instanceof Element
+      ? range.endContainer
+      : range.endContainer.parentElement;
+
+    if (
+      !startElement ||
+      !endElement ||
+      startElement.closest(READING_UNREVIEWABLE_SELECTOR) ||
+      endElement.closest(READING_UNREVIEWABLE_SELECTOR)
+    ) {
+      return null;
+    }
+
+    const startBlock = startElement.closest(READING_BLOCK_SELECTOR);
+    const endBlock = endElement.closest(READING_BLOCK_SELECTOR);
+    if (!startBlock || !endBlock || !view.containerEl.contains(startBlock)) {
+      return null;
+    }
+
+    if (startBlock === endBlock) return startBlock;
+
+    const commonElement = range.commonAncestorContainer instanceof Element
+      ? range.commonAncestorContainer
+      : range.commonAncestorContainer.parentElement;
+    const commonBlock = commonElement?.closest?.(READING_BLOCK_SELECTOR);
+    return commonBlock && view.containerEl.contains(commonBlock) ? commonBlock : null;
+  }
+
+
+  async mapReadingSelectionToSource(view, block, visibleText) {
+    const file = view.file;
+    if (!file) return null;
+
+    const lineStart = this.readDatasetInteger(block, "artLineStart")
+      ?? this.readDatasetInteger(block, "line");
+    const lineEnd = this.readDatasetInteger(block, "artLineEnd") ?? lineStart;
+    if (!Number.isInteger(lineStart) || !Number.isInteger(lineEnd)) {
+      return null;
+    }
+
+    const source = await this.app.vault.cachedRead(file);
+    const sectionRange = sourceRangeForLines(source, lineStart, lineEnd);
+    const sectionText = source.slice(sectionRange.start, sectionRange.end);
+    const match = findUniquePlainTextRange(sectionText, visibleText);
+    if (!match) return null;
+
+    const fromOffset = sectionRange.start + match.start;
+    const toOffset = sectionRange.start + match.end;
+    const sourceText = source.slice(fromOffset, toOffset);
+
+    if (!this.isReviewableSourceText(sourceText)) {
+      return null;
+    }
+
+    return { fromOffset, toOffset, sourceText };
+  }
+
+
+  readDatasetInteger(element, key) {
+    const value = element?.dataset?.[key];
+    if (value === undefined || value === null || value === "") return null;
+    const parsed = Number(value);
+    return Number.isInteger(parsed) ? parsed : null;
+  }
+
+
+  isReviewableSourceText(text) {
+    return !/[`]|(?:\$\$)|(?:^\s*\|)|(?:\n\s*\|)/m.test(String(text || ""));
+  }
+
+
+  maybeNoticeReadingSelection(filePath, visibleText) {
+    const key = `${filePath}:${normalizeVisibleText(visibleText)}`;
+    if (this.readingSelectionNoticeKey === key) return;
+    this.readingSelectionNoticeKey = key;
+    new Notice("阅读模式下无法唯一定位该选区，请切到编辑模式添加评论");
   }
 
 
@@ -597,8 +960,8 @@ module.exports = class SelectionReviewToolbar extends Plugin {
     this.addTextButton("H", "高亮颜色", "art-highlight-button", () => this.openColorPanel("highlight"));
     this.addTextButton("A", "字体颜色", "art-text-color-button", () => this.openColorPanel("text"));
     this.addDivider();
-    this.addIconButton("message-square", "添加审阅评论", () => this.openCommentPanel());
-    this.addIconButton("code-2", "切换 Live Preview / Source Mode", () => this.toggleSourceMode());
+    this.addIconButton("message-square", "添加审阅评论", "art-comment-button", () => this.openCommentPanel());
+    this.addIconButton("code-2", "切换 Live Preview / Source Mode", "art-source-mode-button", () => this.toggleSourceMode());
 
     this.createColorPanel();
 
@@ -638,9 +1001,9 @@ module.exports = class SelectionReviewToolbar extends Plugin {
   }
 
 
-  addIconButton(icon, title, action) {
+  addIconButton(icon, title, className, action) {
     const button = this.mainRowEl.createEl("button", {
-      cls: "art-toolbar-button",
+      cls: `art-toolbar-button ${className || ""}`,
       attr: {
         type: "button",
         "aria-label": title,
@@ -872,12 +1235,14 @@ module.exports = class SelectionReviewToolbar extends Plugin {
 
   showToolbar(rect) {
     this.toolbarEl.classList.add("art-visible");
+    this.toolbarEl.classList.toggle("art-reading-selection", this.cachedSelection?.mode === "reading");
     this.positionToolbar(rect);
   }
 
 
   hideToolbar({ clearCache = false } = {}) {
     this.toolbarEl?.classList.remove("art-visible");
+    this.toolbarEl?.classList.remove("art-reading-selection");
     this.closePanels();
 
     if (clearCache) {
@@ -1048,10 +1413,21 @@ module.exports = class SelectionReviewToolbar extends Plugin {
   }
 
 
-  replaceCachedRange(startOffset, endOffset, replacement, selectionStart, selectionEnd) {
+  async replaceCachedRange(startOffset, endOffset, replacement, selectionStart, selectionEnd) {
     const cache = this.cachedSelection;
     if (!cache) {
-      return;
+      return false;
+    }
+
+    if (cache.mode === "reading") {
+      return await this.replaceCachedFileRange(
+        cache,
+        startOffset,
+        endOffset,
+        replacement,
+        selectionStart,
+        selectionEnd
+      );
     }
 
     const editor = cache.editor;
@@ -1093,6 +1469,33 @@ module.exports = class SelectionReviewToolbar extends Plugin {
         }
       }
     });
+    return true;
+  }
+
+
+  async replaceCachedFileRange(cache, startOffset, endOffset, replacement, selectionStart, selectionEnd) {
+    const file = this.app.vault.getAbstractFileByPath(cache.filePath);
+    if (!file) return false;
+
+    const documentText = await this.app.vault.cachedRead(file);
+    if (documentText.slice(startOffset, endOffset) !== cache.text) {
+      return false;
+    }
+
+    await this.app.vault.modify(
+      file,
+      documentText.slice(0, startOffset) + replacement + documentText.slice(endOffset)
+    );
+
+    const selectedText = replacement.slice(selectionStart, selectionEnd);
+    cache.fromOffset = startOffset + selectionStart;
+    cache.toOffset = startOffset + selectionEnd;
+    cache.text = selectedText;
+    cache.key = this.selectionKey(cache);
+    this.suppressedSelectionKey = null;
+    this.hideToolbar({ clearCache: true });
+    this.scheduleReviewBadgeRefresh();
+    return true;
   }
 
 
@@ -1280,7 +1683,7 @@ module.exports = class SelectionReviewToolbar extends Plugin {
       selection: {
         fromOffset: cache.fromOffset,
         toOffset: cache.toOffset,
-        text: cache.text
+        text: cache.visibleText || cache.text
       }
     }, "", this.cachedRect);
   }
@@ -1391,17 +1794,23 @@ module.exports = class SelectionReviewToolbar extends Plugin {
         createdAt: Date.now(),
         updatedAt: Date.now()
       };
-      await this.saveData(this.data);
       const cache = this.cachedSelection;
       const suffix = ` %% BYSAN-REVIEW:${id} %%`;
       this.closeReviewWindow();
-      this.replaceCachedRange(
+      const inserted = await this.replaceCachedRange(
         cache.fromOffset,
         cache.toOffset,
         `${cache.text}${suffix}`,
         0,
         cache.text.length
       );
+      if (!inserted) {
+        delete this.data.comments[id];
+        await this.saveData(this.data);
+        new Notice("原选区已变化，未插入评论标记");
+        return;
+      }
+      await this.saveData(this.data);
       this.scheduleReviewBadgeRefresh();
       return;
     }
@@ -1409,7 +1818,7 @@ module.exports = class SelectionReviewToolbar extends Plugin {
     let id = review.id;
     if (!id) {
       id = createReviewId();
-      if (!this.replaceReviewMarker(review, `%% BYSAN-REVIEW:${id} %%`)) {
+      if (!(await this.replaceReviewMarker(review, `%% BYSAN-REVIEW:${id} %%`))) {
         new Notice("未找到旧评论标记，未执行迁移");
         return;
       }
@@ -1432,7 +1841,7 @@ module.exports = class SelectionReviewToolbar extends Plugin {
   async deleteActiveReview() {
     const review = this.activeReview;
     if (!review || review.draft) return;
-    if (!this.replaceReviewMarker(review, "")) {
+    if (!(await this.replaceReviewMarker(review, ""))) {
       new Notice("未找到评论标记");
       return;
     }
@@ -1444,10 +1853,24 @@ module.exports = class SelectionReviewToolbar extends Plugin {
   }
 
 
-  replaceReviewMarker(review, replacement) {
+  async replaceReviewMarker(review, replacement) {
     const view = this.getActiveEditingView();
-    if (!view || view.file?.path !== review.filePath) return false;
-    const text = view.editor.getValue();
+    if (view?.file?.path === review.filePath) {
+      const text = view.editor.getValue();
+      let start = review.start;
+      let end = review.end;
+      if (text.slice(start, end) !== review.raw) {
+        start = text.indexOf(review.raw);
+        if (start < 0) return false;
+        end = start + review.raw.length;
+      }
+      view.editor.replaceRange(replacement, view.editor.offsetToPos(start), view.editor.offsetToPos(end));
+      return true;
+    }
+
+    const file = this.app.vault.getAbstractFileByPath(review.filePath);
+    if (!file) return false;
+    const text = await this.app.vault.cachedRead(file);
     let start = review.start;
     let end = review.end;
     if (text.slice(start, end) !== review.raw) {
@@ -1455,7 +1878,7 @@ module.exports = class SelectionReviewToolbar extends Plugin {
       if (start < 0) return false;
       end = start + review.raw.length;
     }
-    view.editor.replaceRange(replacement, view.editor.offsetToPos(start), view.editor.offsetToPos(end));
+    await this.app.vault.modify(file, text.slice(0, start) + replacement + text.slice(end));
     return true;
   }
 
@@ -1464,7 +1887,9 @@ module.exports = class SelectionReviewToolbar extends Plugin {
     if (this.reviewBadgeFrame !== null) return;
     this.reviewBadgeFrame = window.requestAnimationFrame(() => {
       this.reviewBadgeFrame = null;
-      this.refreshReviewBadges();
+      this.refreshReviewBadges().catch((error) => {
+        console.warn("[Selection Review Toolbar] Could not refresh review badges:", error);
+      });
     });
   }
 
@@ -1475,8 +1900,16 @@ module.exports = class SelectionReviewToolbar extends Plugin {
   }
 
 
-  refreshReviewBadges() {
+  async refreshReviewBadges() {
     this.clearReviewBadges();
+    const markdownView = this.getActiveMarkdownView();
+    if (!markdownView?.file) return;
+
+    if (markdownView.getMode?.() === "preview") {
+      await this.refreshReadingReviewBadges(markdownView);
+      return;
+    }
+
     const view = this.getActiveEditingView();
     const cm = view?.editor?.cm;
     if (!view || !cm?.coordsAtPos) return;
@@ -1516,6 +1949,112 @@ module.exports = class SelectionReviewToolbar extends Plugin {
       });
       this.reviewBadgeEls.push(badge);
     });
+  }
+
+
+  async refreshReadingReviewBadges(view) {
+    const file = view.file;
+    const source = await this.app.vault.cachedRead(file);
+    const markers = parseReviewMarkers(source);
+    if (markers.length === 0) return;
+
+    const lineOffsets = createLineStartOffsets(source);
+    const sections = Array.from(
+      view.containerEl.querySelectorAll("[data-art-line-start], [data-line]")
+    ).filter((section) => section instanceof HTMLElement);
+    if (sections.length === 0) return;
+
+    const viewport = (
+      view.containerEl.querySelector(".markdown-preview-view") ||
+      view.containerEl
+    ).getBoundingClientRect();
+    const sectionBadgeCount = new WeakMap();
+
+    markers.forEach((marker, index) => {
+      const markerLine = lineForOffset(source, marker.start, lineOffsets);
+      const section = this.findReadingSectionForLine(sections, file.path, markerLine);
+      if (!section) return;
+
+      const sectionRect = section.getBoundingClientRect();
+      if (sectionRect.bottom < viewport.top || sectionRect.top > viewport.bottom) return;
+
+      const record = marker.id ? this.data.comments[marker.id] : null;
+      const body = record?.body || marker.legacyBody || "评论内容缺失";
+      const count = sectionBadgeCount.get(section) || 0;
+      sectionBadgeCount.set(section, count + 1);
+
+      const anchorRect = this.findAnchorTextRect(section, record?.anchorText) || sectionRect;
+      const badge = this.createReviewBadge(index, record || marker.legacyBody, body);
+      badge.style.left = `${Math.round(Math.min(anchorRect.right + 4, viewport.right - 22))}px`;
+      badge.style.top = `${Math.round(Math.max(viewport.top, anchorRect.top + count * 22 - 8))}px`;
+      badge.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        const rect = badge.getBoundingClientRect();
+        this.openReviewWindow({
+          ...marker,
+          filePath: file.path,
+          draft: false
+        }, body, rect);
+      });
+      this.reviewBadgeEls.push(badge);
+    });
+  }
+
+
+  findReadingSectionForLine(sections, filePath, line) {
+    return sections.find((section) => {
+      const sourcePath = section.dataset.artSourcePath || "";
+      if (sourcePath && sourcePath !== filePath) return false;
+      const start = this.readDatasetInteger(section, "artLineStart")
+        ?? this.readDatasetInteger(section, "line");
+      const end = this.readDatasetInteger(section, "artLineEnd") ?? start;
+      return Number.isInteger(start) && Number.isInteger(end) && start <= line && line <= end;
+    }) || null;
+  }
+
+
+  findAnchorTextRect(section, anchorText) {
+    const needle = normalizeVisibleText(anchorText);
+    if (!needle) return null;
+
+    const walker = document.createTreeWalker(section, NodeFilter.SHOW_TEXT);
+    let node;
+    while ((node = walker.nextNode()) !== null) {
+      const text = normalizeVisibleText(node.nodeValue);
+      const index = text.indexOf(needle);
+      if (index === -1) continue;
+
+      const rawIndex = node.nodeValue.indexOf(anchorText);
+      if (rawIndex < 0) continue;
+
+      const range = document.createRange();
+      range.setStart(node, rawIndex);
+      range.setEnd(node, rawIndex + anchorText.length);
+      const rect = this.getDomRangeRect(range);
+      range.detach?.();
+      if (rect) return rect;
+    }
+
+    return null;
+  }
+
+
+  createReviewBadge(index, hasBody, body) {
+    const badge = document.body.createEl("button", {
+      cls: `art-review-badge${hasBody ? "" : " art-review-badge-missing"}`,
+      text: String(index + 1),
+      attr: {
+        type: "button",
+        title: body.replace(/\s+/g, " ").slice(0, 90),
+        "aria-label": `打开评论 ${index + 1}`
+      }
+    });
+    badge.addEventListener("pointerdown", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+    });
+    return badge;
   }
 
 

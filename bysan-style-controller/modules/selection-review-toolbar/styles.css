@@ -1,5 +1,5 @@
 /**
- * Selection Review Toolbar v0.2.1
+ * Selection Review Toolbar v0.2.2
  * Built-in and user-defined review colors are centralized here.
  */
 
@@ -117,6 +117,18 @@ mark.art-hl-custom-4 { background-color: color-mix(in srgb, var(--art-custom-4) 
   height: 20px;
   margin: 0 2px;
   background: var(--background-modifier-border);
+}
+
+.art-toolbar.art-reading-selection :is(
+  .art-bold,
+  .art-italic,
+  .art-underline,
+  .art-strike,
+  .art-highlight-button,
+  .art-text-color-button,
+  .art-toolbar-divider
+) {
+  display: none;
 }
 
 .art-color-panel,

@@ -82,6 +82,7 @@ const reviewSandbox = {
     if (id !== "obsidian") throw new Error(`unexpected dependency: ${id}`);
     return {
       Component: class Component {},
+      ItemView: class ItemView {},
       MarkdownRenderer: {},
       MarkdownView: class MarkdownView {},
       Notice: class Notice {},
@@ -206,16 +207,19 @@ for (const moduleId of ["academic-heading-numbering", "mermaid-inline-resizer", 
   }
 }
 
-assert.equal(reviewModuleManifest.version, "0.2.3", "selection review module version mismatch");
+assert.equal(reviewModuleManifest.version, "0.2.4", "selection review module version mismatch");
 for (const method of [
   "registerReadingSectionMapping", "captureReadingSelection", "mapReadingSelectionToSource",
   "refreshReadingReviewBadges", "findReadingSectionForLine", "replaceCachedFileRange",
-  "getReviewBadgeSize"
+  "getReviewBadgeSize", "activateReviewNavigator", "getCurrentFileReviewItems",
+  "jumpToReviewItem", "scrollEditingViewToReview", "scrollReadingViewToReview"
 ]) {
   assert(reviewModuleSource.includes(`${method}(`), `missing reading review support: ${method}`);
 }
 assert(reviewModuleCss.includes(".art-toolbar.art-reading-selection"), "reading toolbar must hide source-only actions");
 assert(reviewModuleCss.includes("--art-review-badge-size"), "review badge size must be controlled by Style Controller");
+assert(reviewModuleSource.includes("REVIEW_NAVIGATOR_VIEW_TYPE"), "review navigator view must be registered");
+assert(reviewModuleCss.includes(".art-review-sidebar-card"), "review navigator cards must be styled");
 const sampleSource = "第一行\n## 标题文本\n普通段落里有一段需要评论的文字。\n下一行";
 const titleRange = sourceRangeForLines(sampleSource, 1, 1);
 assert.equal(sampleSource.slice(titleRange.start, titleRange.end).trim(), "## 标题文本");

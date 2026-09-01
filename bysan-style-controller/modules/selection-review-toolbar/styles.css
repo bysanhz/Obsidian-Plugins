@@ -355,6 +355,151 @@ mark.art-hl-custom-4 { background-color: color-mix(in srgb, var(--art-custom-4) 
   background: var(--background-modifier-error);
 }
 
+.art-review-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  height: 100%;
+  padding: 12px;
+  overflow: auto;
+  background: color-mix(in srgb, var(--background-primary) 88%, var(--interactive-accent) 12%);
+}
+
+.art-review-sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.art-review-sidebar-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--text-accent);
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.art-review-sidebar-title-icon,
+.art-review-sidebar-title-icon svg {
+  width: 17px;
+  height: 17px;
+}
+
+.art-review-sidebar-refresh {
+  width: 28px;
+  height: 28px;
+  color: var(--text-muted);
+}
+
+.art-review-sidebar-subtitle {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.35;
+  word-break: break-word;
+}
+
+.art-review-sidebar-empty {
+  padding: 14px;
+  border: 1px dashed var(--background-modifier-border);
+  border-radius: 10px;
+  color: var(--text-muted);
+  background: color-mix(in srgb, var(--background-primary) 76%, transparent);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.art-review-sidebar-list {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.art-review-sidebar-card {
+  display: block;
+  padding: 10px 11px;
+  border: 1px solid color-mix(in srgb, var(--interactive-accent) 24%, var(--background-modifier-border));
+  border-radius: 10px;
+  color: var(--text-normal);
+  background: color-mix(in srgb, var(--background-primary) 90%, var(--interactive-accent) 10%);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+  cursor: pointer;
+  outline: none;
+}
+
+.art-review-sidebar-card:hover,
+.art-review-sidebar-card:focus-visible {
+  border-color: color-mix(in srgb, var(--interactive-accent) 58%, var(--background-modifier-border));
+  background: color-mix(in srgb, var(--background-primary) 82%, var(--interactive-accent) 18%);
+}
+
+.art-review-sidebar-card:focus-visible {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--interactive-accent) 28%, transparent);
+}
+
+.art-review-sidebar-card-missing {
+  border-color: color-mix(in srgb, var(--background-modifier-error) 55%, var(--background-modifier-border));
+}
+
+.art-review-sidebar-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 7px;
+}
+
+.art-review-sidebar-number,
+.art-review-sidebar-line,
+.art-review-sidebar-missing {
+  display: inline-flex;
+  align-items: center;
+  min-height: 20px;
+  padding: 2px 7px;
+  border-radius: 7px;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.art-review-sidebar-number {
+  color: var(--text-on-accent);
+  background: var(--interactive-accent);
+}
+
+.art-review-sidebar-line {
+  color: var(--text-accent);
+  background: color-mix(in srgb, var(--interactive-accent) 14%, var(--background-primary));
+}
+
+.art-review-sidebar-missing {
+  color: var(--text-error);
+  background: color-mix(in srgb, var(--background-modifier-error) 18%, var(--background-primary));
+}
+
+.art-review-sidebar-anchor {
+  margin-bottom: 8px;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.45;
+  word-break: break-word;
+}
+
+.art-review-sidebar-preview {
+  max-height: 120px;
+  overflow: hidden;
+  color: var(--text-normal);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.art-review-sidebar-preview :is(p, ul, ol, blockquote) {
+  margin: 0.25em 0;
+}
+
+.art-review-sidebar-preview > :first-child { margin-top: 0; }
+.art-review-sidebar-preview > :last-child { margin-bottom: 0; }
+
 .art-review-window {
   position: fixed;
   z-index: 10020;

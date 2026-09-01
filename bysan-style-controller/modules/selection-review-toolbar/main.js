@@ -1,6 +1,6 @@
 /**
  * Selection Review Toolbar
- * Version: 0.2.3
+ * Version: 0.2.4
  *
  * A selection-driven, fixed-position review toolbar for Obsidian 1.13.x.
  * Formatting edits Markdown through Obsidian's Editor API. Review bodies are
@@ -9,6 +9,7 @@
 
 const {
   Component,
+  ItemView,
   MarkdownRenderer,
   MarkdownView,
   Notice,
@@ -35,6 +36,7 @@ const CUSTOM_COLOR_DEFAULTS = ["#1E88E5", "#8E24AA", "#00897B", "#E64A19"];
 
 const SELECTION_DELAY = 55;
 const VIEWPORT_GAP = 8;
+const REVIEW_NAVIGATOR_VIEW_TYPE = "bysan-review-comments-view";
 const REVIEW_MARKER_PATTERN = /%%\s*BYSAN-REVIEW:([a-zA-Z0-9_-]+)\s*%%/g;
 const LEGACY_REVIEW_PATTERN = /%%\s*REVIEW:\s*([\s\S]*?)\s*%%/g;
 const READING_BLOCK_SELECTOR = [
@@ -94,6 +96,141 @@ function createReviewId() {
     return globalThis.crypto.randomUUID().replace(/-/g, "").slice(0, 12);
   }
   return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+}
+
+
+function plainPreview(text, limit = 120) {
+  const normalized = String(text || "")
+    .replace(/\$\$[\s\S]*?\$\$/g, " 公式 ")
+    .replace(/\$([^$]+)\$/g, "$1")
+    .replace(/[`*_~>#\[\]()!]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!normalized) return "暂无评论内容";
+  return normalized.length > limit ? `${normalized.slice(0, limit - 1)}…` : normalized;
+}
+
+
+class ReviewCommentsView extends ItemView {
+
+  constructor(leaf, reviewPlugin) {
+    super(leaf);
+    this.reviewPlugin = reviewPlugin;
+    this.previewComponent = null;
+    this.renderToken = 0;
+  }
+
+
+  getViewType() {
+    return REVIEW_NAVIGATOR_VIEW_TYPE;
+  }
+
+
+  getDisplayText() {
+    return "文档评论";
+  }
+
+
+  getIcon() {
+    return "message-square";
+  }
+
+
+  async onOpen() {
+    await this.refresh();
+  }
+
+
+  async onClose() {
+    this.previewComponent?.unload();
+    this.previewComponent = null;
+  }
+
+
+  async refresh() {
+    const token = ++this.renderToken;
+    const container = this.contentEl || this.containerEl.querySelector(".view-content") || this.containerEl;
+    container.empty();
+    container.addClass("art-review-sidebar");
+
+    this.previewComponent?.unload();
+    this.previewComponent = new Component();
+    this.previewComponent.load();
+
+    const header = container.createDiv({ cls: "art-review-sidebar-header" });
+    const title = header.createDiv({ cls: "art-review-sidebar-title" });
+    setIcon(title.createSpan({ cls: "art-review-sidebar-title-icon" }), "message-square");
+    title.createSpan({ text: "文档评论" });
+    const refreshButton = header.createEl("button", {
+      cls: "clickable-icon art-review-sidebar-refresh",
+      attr: { type: "button", title: "刷新评论列表", "aria-label": "刷新评论列表" }
+    });
+    setIcon(refreshButton, "refresh-cw");
+    refreshButton.addEventListener("click", () => this.refresh());
+
+    const items = await this.reviewPlugin.getCurrentFileReviewItems();
+    if (token !== this.renderToken) return;
+
+    const subtitle = container.createDiv({
+      cls: "art-review-sidebar-subtitle",
+      text: items.file ? `${items.file.basename} · ${items.comments.length} 条评论` : "当前没有活动 Markdown 文档"
+    });
+    subtitle.setAttribute("title", items.file?.path || "");
+
+    if (!items.file) return;
+
+    if (items.comments.length === 0) {
+      container.createDiv({
+        cls: "art-review-sidebar-empty",
+        text: "当前文档还没有评论。选择正文后点击工具栏评论按钮即可添加。"
+      });
+      return;
+    }
+
+    const list = container.createDiv({ cls: "art-review-sidebar-list" });
+    for (const item of items.comments) {
+      const card = list.createDiv({
+        cls: `art-review-sidebar-card${item.hasBody ? "" : " art-review-sidebar-card-missing"}`,
+        attr: { role: "button", tabindex: "0" }
+      });
+      card.dataset.reviewId = item.id || "";
+      card.dataset.reviewIndex = String(item.index);
+      card.setAttribute("aria-label", `跳转到评论 ${item.index + 1}`);
+
+      const meta = card.createDiv({ cls: "art-review-sidebar-meta" });
+      meta.createSpan({ cls: "art-review-sidebar-number", text: String(item.index + 1) });
+      meta.createSpan({ cls: "art-review-sidebar-line", text: `L${item.lineNumber}` });
+      if (!item.hasBody) {
+        meta.createSpan({ cls: "art-review-sidebar-missing", text: "内容缺失" });
+      }
+
+      card.createDiv({
+        cls: "art-review-sidebar-anchor",
+        text: item.anchorText || item.lineText || "未记录锚点"
+      });
+
+      const preview = card.createDiv({ cls: "art-review-sidebar-preview markdown-rendered" });
+      await MarkdownRenderer.render(
+        this.reviewPlugin.app,
+        item.body || "*暂无评论内容*",
+        preview,
+        item.file.path,
+        this.previewComponent
+      );
+      preview.setAttribute("title", plainPreview(item.body));
+
+      const open = () => this.reviewPlugin.jumpToReviewItem(item).catch((error) => {
+        console.warn("[Selection Review Toolbar] Could not jump to review:", error);
+        new Notice("跳转评论失败");
+      });
+      card.addEventListener("click", open);
+      card.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault();
+        open();
+      });
+    }
+  }
 }
 
 
@@ -276,8 +413,23 @@ module.exports = class SelectionReviewToolbar extends Plugin {
     this.reviewPreviewEl = null;
     this.reviewPreviewComponent = null;
     this.reviewPreviewTimer = null;
+    this.reviewSidebarFrame = null;
+    this.lastMarkdownLeaf = null;
+    this.lastMarkdownFilePath = null;
+    this.reviewNavigatorJumping = false;
     this.activeReview = null;
     this.readingSelectionNoticeKey = null;
+
+    this.registerView(
+      REVIEW_NAVIGATOR_VIEW_TYPE,
+      (leaf) => new ReviewCommentsView(leaf, this)
+    );
+    this.addRibbonIcon("message-square", "打开文档评论导航", () => this.activateReviewNavigator());
+    this.addCommand({
+      id: "open-review-comments-navigator",
+      name: "打开当前文档评论导航",
+      callback: () => this.activateReviewNavigator()
+    });
 
     this.createToolbar();
     this.applyCustomColors();
@@ -288,10 +440,12 @@ module.exports = class SelectionReviewToolbar extends Plugin {
 
     this.app.workspace.onLayoutReady(() => {
       this.sourceModeCommandId = this.findSourceModeCommandId();
+      this.rememberMarkdownLeaf();
       this.scheduleReviewBadgeRefresh();
+      this.scheduleReviewSidebarRefresh();
     });
 
-    console.log("[Selection Review Toolbar] v0.2.2 loaded");
+    console.log("[Selection Review Toolbar] v0.2.4 loaded");
   }
 
 
@@ -308,6 +462,8 @@ module.exports = class SelectionReviewToolbar extends Plugin {
     this.clearCustomColorProperties();
     if (this.reviewBadgeFrame !== null) window.cancelAnimationFrame(this.reviewBadgeFrame);
     if (this.reviewPreviewTimer !== null) window.clearTimeout(this.reviewPreviewTimer);
+    if (this.reviewSidebarFrame !== null) window.cancelAnimationFrame(this.reviewSidebarFrame);
+    this.app.workspace.detachLeavesOfType?.(REVIEW_NAVIGATOR_VIEW_TYPE);
     this.toolbarEl = null;
     this.cachedSelection = null;
     this.cachedRect = null;
@@ -407,6 +563,7 @@ module.exports = class SelectionReviewToolbar extends Plugin {
       target instanceof Node && (
         this.toolbarEl?.contains(target) ||
         this.reviewWindowEl?.contains(target) ||
+        target.closest?.(".art-review-sidebar") ||
         this.reviewBadgeEls.some((element) => element.contains(target))
       )
     );
@@ -415,10 +572,14 @@ module.exports = class SelectionReviewToolbar extends Plugin {
 
   registerWorkspaceTracking() {
     const close = () => {
+      this.rememberMarkdownLeaf();
       this.suppressedSelectionKey = null;
       this.hideToolbar({ clearCache: true });
-      this.closeReviewWindow();
+      if (!this.reviewNavigatorJumping) {
+        this.closeReviewWindow();
+      }
       this.scheduleReviewBadgeRefresh();
+      this.scheduleReviewSidebarRefresh();
     };
 
     this.registerEvent(this.app.workspace.on("file-open", close));
@@ -429,13 +590,23 @@ module.exports = class SelectionReviewToolbar extends Plugin {
         close();
       }
       this.scheduleReviewBadgeRefresh();
+      this.scheduleReviewSidebarRefresh();
     }));
 
     this.registerEvent(this.app.workspace.on("editor-change", () => {
+      this.rememberMarkdownLeaf();
       if (!this.toolbarEl?.contains(document.activeElement)) {
         this.scheduleSelectionCheck(70);
       }
       this.scheduleReviewBadgeRefresh();
+      this.scheduleReviewSidebarRefresh();
+    }));
+
+    this.registerEvent(this.app.vault.on("modify", (file) => {
+      const currentPath = this.getCurrentMarkdownFile()?.path;
+      if (file?.path === currentPath) {
+        this.scheduleReviewSidebarRefresh();
+      }
     }));
   }
 
@@ -489,7 +660,50 @@ module.exports = class SelectionReviewToolbar extends Plugin {
 
 
   getActiveMarkdownView() {
-    return this.app.workspace.getActiveViewOfType(MarkdownView);
+    const active = this.app.workspace.getActiveViewOfType(MarkdownView);
+    if (active?.file) {
+      this.lastMarkdownLeaf = this.app.workspace.activeLeaf || this.lastMarkdownLeaf;
+      this.lastMarkdownFilePath = active.file.path;
+      return active;
+    }
+
+    const markdownLeaves = this.app.workspace.getLeavesOfType?.("markdown") || [];
+    const remembered = markdownLeaves
+      .map((leaf) => leaf.view)
+      .find((view) => view instanceof MarkdownView && view.file?.path === this.lastMarkdownFilePath);
+    if (remembered) return remembered;
+
+    const fallback = markdownLeaves
+      .map((leaf) => leaf.view)
+      .find((view) => view instanceof MarkdownView && view.file);
+    return fallback || null;
+  }
+
+
+  rememberMarkdownLeaf() {
+    const leaf = this.app.workspace.activeLeaf;
+    const view = leaf?.view;
+    if (view instanceof MarkdownView && view.file) {
+      this.lastMarkdownLeaf = leaf;
+      this.lastMarkdownFilePath = view.file.path;
+      return;
+    }
+
+    const viewFromSearch = this.getActiveMarkdownView();
+    if (viewFromSearch?.file) {
+      const leafFromSearch = (this.app.workspace.getLeavesOfType?.("markdown") || [])
+        .find((candidate) => candidate.view === viewFromSearch);
+      this.lastMarkdownLeaf = leafFromSearch || this.lastMarkdownLeaf;
+      this.lastMarkdownFilePath = viewFromSearch.file.path;
+    }
+  }
+
+
+  getCurrentMarkdownFile() {
+    const view = this.getActiveMarkdownView();
+    if (view?.file) return view.file;
+    if (!this.lastMarkdownFilePath) return null;
+    return this.app.vault.getAbstractFileByPath(this.lastMarkdownFilePath) || null;
   }
 
 
@@ -1812,6 +2026,7 @@ module.exports = class SelectionReviewToolbar extends Plugin {
       }
       await this.saveData(this.data);
       this.scheduleReviewBadgeRefresh();
+      this.scheduleReviewSidebarRefresh();
       return;
     }
 
@@ -1834,6 +2049,7 @@ module.exports = class SelectionReviewToolbar extends Plugin {
     await this.saveData(this.data);
     this.closeReviewWindow();
     this.scheduleReviewBadgeRefresh();
+    this.scheduleReviewSidebarRefresh();
     new Notice("评论已保存");
   }
 
@@ -1849,6 +2065,7 @@ module.exports = class SelectionReviewToolbar extends Plugin {
     await this.saveData(this.data);
     this.closeReviewWindow();
     this.scheduleReviewBadgeRefresh();
+    this.scheduleReviewSidebarRefresh();
     new Notice("评论已删除");
   }
 
@@ -1880,6 +2097,196 @@ module.exports = class SelectionReviewToolbar extends Plugin {
     }
     await this.app.vault.modify(file, text.slice(0, start) + replacement + text.slice(end));
     return true;
+  }
+
+
+  async activateReviewNavigator() {
+    let leaf = this.app.workspace.getLeavesOfType(REVIEW_NAVIGATOR_VIEW_TYPE)[0];
+    if (!leaf) {
+      leaf = this.app.workspace.getRightLeaf(false);
+      await leaf.setViewState({ type: REVIEW_NAVIGATOR_VIEW_TYPE, active: true });
+    }
+    this.app.workspace.revealLeaf(leaf);
+    this.scheduleReviewSidebarRefresh();
+  }
+
+
+  scheduleReviewSidebarRefresh() {
+    if (this.reviewSidebarFrame !== null) return;
+    this.reviewSidebarFrame = window.requestAnimationFrame(() => {
+      this.reviewSidebarFrame = null;
+      this.refreshReviewSidebars();
+    });
+  }
+
+
+  refreshReviewSidebars() {
+    for (const leaf of this.app.workspace.getLeavesOfType?.(REVIEW_NAVIGATOR_VIEW_TYPE) || []) {
+      leaf.view?.refresh?.();
+    }
+  }
+
+
+  async getCurrentFileReviewItems() {
+    const file = this.getCurrentMarkdownFile();
+    if (!file) return { file: null, comments: [] };
+
+    const source = await this.app.vault.cachedRead(file);
+    const markers = parseReviewMarkers(source);
+    const lineOffsets = createLineStartOffsets(source);
+    const comments = markers.map((marker, index) => {
+      const record = marker.id ? this.data.comments[marker.id] : null;
+      const line = lineForOffset(source, marker.start, lineOffsets);
+      const lineStart = lineOffsets[line] ?? marker.start;
+      const lineEnd = line + 1 < lineOffsets.length
+        ? Math.max(lineStart, lineOffsets[line + 1] - 1)
+        : source.length;
+      const lineText = source.slice(lineStart, lineEnd)
+        .replace(REVIEW_MARKER_PATTERN, "")
+        .replace(LEGACY_REVIEW_PATTERN, "")
+        .replace(/\s+/g, " ")
+        .trim();
+      const body = record?.body || marker.legacyBody || "";
+      return {
+        ...marker,
+        index,
+        file,
+        filePath: file.path,
+        lineNumber: line + 1,
+        lineText,
+        anchorText: record?.anchorText || "",
+        body,
+        hasBody: Boolean(body)
+      };
+    });
+
+    return { file, comments };
+  }
+
+
+  async findFreshReviewItem(item) {
+    const file = this.app.vault.getAbstractFileByPath(item.filePath);
+    if (!file) return null;
+    const source = await this.app.vault.cachedRead(file);
+    const markers = parseReviewMarkers(source);
+    const marker = item.id
+      ? markers.find((candidate) => candidate.id === item.id)
+      : markers[item.index];
+    if (!marker) return null;
+
+    const record = marker.id ? this.data.comments[marker.id] : null;
+    const lineOffsets = createLineStartOffsets(source);
+    return {
+      ...marker,
+      index: markers.indexOf(marker),
+      file,
+      filePath: file.path,
+      lineNumber: lineForOffset(source, marker.start, lineOffsets) + 1,
+      anchorText: record?.anchorText || item.anchorText || "",
+      body: record?.body || marker.legacyBody || "",
+      hasBody: Boolean(record?.body || marker.legacyBody),
+      source
+    };
+  }
+
+
+  async jumpToReviewItem(item) {
+    const fresh = await this.findFreshReviewItem(item);
+    if (!fresh) {
+      new Notice("未找到该评论标记，可能已被删除");
+      this.scheduleReviewSidebarRefresh();
+      return;
+    }
+
+    this.reviewNavigatorJumping = true;
+    try {
+      const view = await this.openReviewFileInEditorLeaf(fresh.file);
+      if (!view) {
+        new Notice("无法打开评论所在文档");
+        return;
+      }
+
+      let anchorRect = null;
+      if (view.getMode?.() === "preview") {
+        anchorRect = await this.scrollReadingViewToReview(view, fresh);
+      } else {
+        anchorRect = this.scrollEditingViewToReview(view, fresh);
+      }
+
+      await new Promise((resolve) => window.requestAnimationFrame(resolve));
+      this.scheduleReviewBadgeRefresh();
+      this.openReviewWindow({
+        ...fresh,
+        draft: false
+      }, fresh.body || "评论内容缺失", anchorRect);
+    } finally {
+      window.setTimeout(() => {
+        this.reviewNavigatorJumping = false;
+      }, 180);
+    }
+  }
+
+
+  async openReviewFileInEditorLeaf(file) {
+    const leaves = this.app.workspace.getLeavesOfType?.("markdown") || [];
+    let leaf = leaves.find((candidate) => candidate.view?.file?.path === file.path)
+      || this.lastMarkdownLeaf
+      || leaves[0]
+      || this.app.workspace.getLeaf("tab");
+    if (!leaf) return null;
+
+    if (leaf.view?.file?.path !== file.path) {
+      await leaf.openFile(file);
+    }
+    this.app.workspace.setActiveLeaf(leaf, { focus: true });
+    this.lastMarkdownLeaf = leaf;
+    this.lastMarkdownFilePath = file.path;
+    return this.waitForMarkdownView(file.path);
+  }
+
+
+  async waitForMarkdownView(filePath) {
+    for (let attempt = 0; attempt < 12; attempt += 1) {
+      const view = this.getActiveMarkdownView();
+      if (view?.file?.path === filePath) return view;
+      await new Promise((resolve) => window.requestAnimationFrame(resolve));
+    }
+    return null;
+  }
+
+
+  scrollEditingViewToReview(view, item) {
+    const editor = view.editor;
+    if (!editor?.offsetToPos) return null;
+    const position = editor.offsetToPos(item.start);
+    const endPosition = editor.offsetToPos(item.end);
+    editor.setSelection(position, endPosition);
+    editor.scrollIntoView({ from: position, to: endPosition }, true);
+
+    const cm = editor.cm;
+    const coords = cm?.coordsAtPos?.(item.start, 1) || cm?.coordsAtPos?.(item.end, -1);
+    return coords
+      ? { left: coords.left, right: coords.right, top: coords.top, bottom: coords.bottom, width: 0, height: coords.bottom - coords.top }
+      : null;
+  }
+
+
+  async scrollReadingViewToReview(view, item) {
+    const lineOffsets = createLineStartOffsets(item.source);
+    const line = lineForOffset(item.source, item.start, lineOffsets);
+    for (let attempt = 0; attempt < 6; attempt += 1) {
+      const sections = Array.from(
+        view.containerEl.querySelectorAll("[data-art-line-start], [data-line]")
+      ).filter((section) => section instanceof HTMLElement);
+      const section = this.findReadingSectionForLine(sections, item.filePath, line);
+      if (section) {
+        section.scrollIntoView({ behavior: "auto", block: "center" });
+        await new Promise((resolve) => window.requestAnimationFrame(resolve));
+        return this.findAnchorTextRect(section, item.anchorText) || section.getBoundingClientRect();
+      }
+      await new Promise((resolve) => window.requestAnimationFrame(resolve));
+    }
+    return null;
   }
 
 

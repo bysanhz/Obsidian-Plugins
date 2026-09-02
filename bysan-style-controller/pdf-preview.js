@@ -566,6 +566,27 @@ class BysanPdfPreviewModal extends Modal {
     return rules.join("\n");
   }
 
+  computedStyleSnapshot(element, selector) {
+    if (!element) return "";
+    const computed = getComputedStyle(element);
+    const declarations = [];
+    /* Theme rules in a new BrowserWindow can resolve differently because the
+     * document has a different root/window context. Freeze every resolved
+     * custom property used by the preview page so nested Markdown styles keep
+     * the same palette. */
+    for (const name of computed) {
+      if (!name.startsWith("--")) continue;
+      const value = computed.getPropertyValue(name).trim();
+      if (value) declarations.push(`${name}:${value} !important`);
+    }
+    ["background-color", "background-image", "color", "font-family", "font-size", "font-weight", "line-height"]
+      .forEach((name) => {
+        const value = computed.getPropertyValue(name).trim();
+        if (value) declarations.push(`${name}:${value} !important`);
+      });
+    return declarations.length ? `${selector}{${declarations.join(";")}}` : "";
+  }
+
   renderedLabelLines(label) {
     const lineMap = new Map();
     const walker = document.createTreeWalker(label, NodeFilter.SHOW_TEXT);
@@ -692,9 +713,17 @@ class BysanPdfPreviewModal extends Modal {
     const { width, height } = this.dimensions();
     const pages = await this.buildExportPages();
     const bodyClasses = Array.from(document.body.classList).join(" ");
+    const previewPage = this.previewPagesEl.querySelector(".bysan-pdf-preview-page");
+    const previewContent = previewPage?.querySelector(".bysan-pdf-preview-page-content");
+    const resolvedPreviewCss = [
+      this.computedStyleSnapshot(document.body, "html, body"),
+      this.computedStyleSnapshot(previewPage, ".bysan-pdf-preview-page"),
+      this.computedStyleSnapshot(previewContent, ".bysan-pdf-preview-page-content")
+    ].join("\n");
     const exportCss = `
       @page { size: ${width}mm ${height}mm; margin: 0; }
-      html, body { margin: 0 !important; padding: 0 !important; background: #fff !important; }
+      html, body { margin: 0 !important; padding: 0 !important; background: #fff !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+      .bysan-pdf-preview-page, .bysan-pdf-preview-page * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
       .bysan-pdf-preview-pages { display: block !important; zoom: 1 !important; }
       .bysan-pdf-preview-page { margin: 0 !important; box-shadow: none !important; break-after: page; page-break-after: always; }
       .bysan-pdf-preview-page:last-child { break-after: auto; page-break-after: auto; }
@@ -702,7 +731,7 @@ class BysanPdfPreviewModal extends Modal {
       .bysan-pdf-preview-page.is-excluded-from-export { display: block !important; }
       .mir-button-group, .mir-fullscreen-button { display: none !important; }
     `;
-    return `<!doctype html><html><head><meta charset="utf-8"><style>${this.collectCss()}\n${exportCss}</style></head><body class="${bodyClasses}"><div class="print">${pages.outerHTML}</div></body></html>`;
+    return `<!doctype html><html><head><meta charset="utf-8"><style>${this.collectCss()}\n${resolvedPreviewCss}\n${exportCss}</style></head><body class="${bodyClasses}"><div class="print">${pages.outerHTML}</div></body></html>`;
   }
 
   async exportPdf() {

@@ -44,6 +44,7 @@ class BysanPdfPreviewModal extends Modal {
     this.grayscale = Boolean(plugin.settings.pdfGrayscale);
     this.currentPage = 1;
     this.pageCount = 1;
+    this.renderTimer = null;
   }
 
   onOpen() {
@@ -86,6 +87,12 @@ class BysanPdfPreviewModal extends Modal {
       childList: true,
       subtree: true
     });
+    /* The source editor remains live while the modal is open. Rebuild from the
+     * latest Markdown after a short debounce so Mermaid width directives are
+     * never applied to one pagination pass and missed by the next one. */
+    this.sourceEditor = this.view.editor;
+    this.sourceChangeHandler = () => this.schedulePreviewRender(220);
+    this.sourceEditor?.on?.("change", this.sourceChangeHandler);
 
     this.applyLayoutSettings(false);
     void this.renderPreview();
@@ -336,7 +343,7 @@ class BysanPdfPreviewModal extends Modal {
       this.view.file?.path || "",
       this
     );
-    this.applyMediaWidths(markdown, this.previewStagingContentEl);
+    await this.settleMediaWidths(markdown, this.previewStagingContentEl);
     this.previewStagingContentEl.querySelectorAll("img").forEach((image) => {
       if (!image.complete) image.addEventListener("load", () => this.schedulePagination(50), { once: true });
     });
@@ -345,13 +352,33 @@ class BysanPdfPreviewModal extends Modal {
   }
 
   applyMediaWidths(markdown, root = this.previewStagingContentEl) {
-    const resizer = this.app.plugins.plugins["mermaid-inline-resizer"];
+    /* Media Resizer is normally an integrated Style Controller module, not a
+     * separately enabled Obsidian plugin. Falling back keeps older vaults
+     * compatible, but the integrated instance must win to avoid two writers
+     * alternately setting an SVG back to its original width. */
+    const resizer = this.plugin.integratedModules?.get("mermaid-inline-resizer")
+      || this.app.plugins.plugins["mermaid-inline-resizer"];
     resizer?.applyWidthsToRenderedRoot?.(root, markdown);
+  }
+
+  schedulePreviewRender(delay = 180) {
+    window.clearTimeout(this.renderTimer);
+    this.renderTimer = window.setTimeout(() => void this.renderPreview(), delay);
+  }
+
+  async settleMediaWidths(markdown, root) {
+    /* Mermaid SVG nodes are appended asynchronously by Obsidian's renderer.
+     * Apply directives over two animation frames so a just-created SVG cannot
+     * be copied at its default 100% width into a PDF page. */
+    for (let frame = 0; frame < 2; frame += 1) {
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      this.applyMediaWidths(markdown, root);
+    }
   }
 
   schedulePagination(delay = 100) {
     window.clearTimeout(this.previewTimer);
-    this.previewTimer = window.setTimeout(() => this.paginatePreview(), delay);
+    this.previewTimer = window.setTimeout(() => void this.paginatePreview(), delay);
   }
 
   createPreviewPage(pageNumber) {
@@ -390,11 +417,12 @@ class BysanPdfPreviewModal extends Modal {
     }
   }
 
-  paginatePreview() {
+  async paginatePreview() {
     if (!this.previewStagingContentEl?.isConnected) return;
     const markdown = this.view.editor?.getValue() || "";
     const previousScroll = { top: this.previewScrollEl.scrollTop, left: this.previewScrollEl.scrollLeft };
-    this.applyMediaWidths(markdown, this.previewStagingContentEl);
+    await this.settleMediaWidths(markdown, this.previewStagingContentEl);
+    if (!this.previewStagingContentEl?.isConnected) return;
     this.previewPagesEl.empty();
     let pageNumber = 1;
     let { content } = this.createPreviewPage(pageNumber);
@@ -690,7 +718,9 @@ class BysanPdfPreviewModal extends Modal {
 
   onClose() {
     window.clearTimeout(this.previewTimer);
+    window.clearTimeout(this.renderTimer);
     this.previewObserver?.disconnect();
+    this.sourceEditor?.off?.("change", this.sourceChangeHandler);
     this.contentEl.empty();
   }
 }

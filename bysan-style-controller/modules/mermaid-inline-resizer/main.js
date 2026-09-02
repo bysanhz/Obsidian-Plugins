@@ -2784,7 +2784,13 @@ module.exports = class MermaidInlineResizer extends Plugin {
     const mermaidEntries = this.extractWidthEntriesFromMarkdown(markdown);
     root.querySelectorAll(".mermaid").forEach((mermaid, index) => {
       const entry = mermaidEntries[index];
-      if (entry) this.applyWidth(mermaid, entry.width);
+      if (entry) {
+        /* PDF preview owns this detached render root. Mark it as precisely
+         * mapped before applying its width so the global rendered-view
+         * fallback cannot subsequently overwrite it with DEFAULT_WIDTH. */
+        mermaid.dataset.mirSourceMapped = "true";
+        this.applyWidth(mermaid, entry.width);
+      }
     });
 
     const mediaEntries = this.extractMediaEntriesFromMarkdown(markdown);

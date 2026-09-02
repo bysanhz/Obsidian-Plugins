@@ -28,8 +28,20 @@ class BysanPdfPreviewModal extends Modal {
     this.paperSize = plugin.settings.pdfPaperSize || "A4";
     this.orientation = plugin.settings.pdfOrientation || "portrait";
     this.marginMode = plugin.settings.pdfMarginMode || "normal";
+    const [defaultMarginY, defaultMarginX] = MARGINS[this.marginMode] || MARGINS.normal;
+    this.margins = {
+      top: clamp(plugin.settings.pdfMarginTop ?? defaultMarginY, 0, 60),
+      right: clamp(plugin.settings.pdfMarginRight ?? defaultMarginX, 0, 60),
+      bottom: clamp(plugin.settings.pdfMarginBottom ?? defaultMarginY, 0, 60),
+      left: clamp(plugin.settings.pdfMarginLeft ?? defaultMarginX, 0, 60)
+    };
     this.previewZoom = Number(plugin.settings.pdfPreviewZoom || 75);
     this.actualScale = Number(plugin.settings.pdfActualScale || 100);
+    this.headerText = String(plugin.settings.pdfHeaderText || "");
+    this.footerText = String(plugin.settings.pdfFooterText || "");
+    this.showPageNumbers = plugin.settings.pdfShowPageNumbers !== false;
+    this.pageRange = String(plugin.settings.pdfPageRange || "all");
+    this.grayscale = Boolean(plugin.settings.pdfGrayscale);
     this.currentPage = 1;
     this.pageCount = 1;
   }
@@ -64,10 +76,13 @@ class BysanPdfPreviewModal extends Modal {
     this.buildSidebar(workspace);
 
     this.previewStagingEl = this.contentEl.createDiv({
-      cls: "bysan-pdf-preview-staging markdown-rendered"
+      cls: "bysan-pdf-preview-staging"
+    });
+    this.previewStagingContentEl = this.previewStagingEl.createDiv({
+      cls: "bysan-pdf-preview-page-content markdown-rendered"
     });
     this.previewObserver = new MutationObserver(() => this.schedulePagination(140));
-    this.previewObserver.observe(this.previewStagingEl, {
+    this.previewObserver.observe(this.previewStagingContentEl, {
       childList: true,
       subtree: true
     });
@@ -92,9 +107,9 @@ class BysanPdfPreviewModal extends Modal {
       text: "→",
       attr: { type: "button", title: this.plugin.t("pdf.next") }
     });
-    this.previousPageButton.addEventListener("click", () => this.showPage(this.currentPage - 1));
-    this.nextPageButton.addEventListener("click", () => this.showPage(this.currentPage + 1));
-    this.pageInput.addEventListener("change", () => this.showPage(Number(this.pageInput.value)));
+    this.previousPageButton.addEventListener("click", () => this.showPage(this.currentPage - 1, true));
+    this.nextPageButton.addEventListener("click", () => this.showPage(this.currentPage + 1, true));
+    this.pageInput.addEventListener("change", () => this.showPage(Number(this.pageInput.value), true));
   }
 
   buildSidebar(workspace) {
@@ -128,6 +143,46 @@ class BysanPdfPreviewModal extends Modal {
         option.value = value;
         option.selected = value === this.marginMode;
       });
+    const customMarginOption = marginSelect.createEl("option", { text: this.plugin.t("pdf.customMargins") });
+    customMarginOption.value = "custom";
+    customMarginOption.selected = this.marginMode === "custom";
+
+    const customMargins = makeField(this.plugin.t("pdf.customMargins"));
+    const marginGrid = customMargins.createDiv({ cls: "bysan-pdf-preview-margin-grid" });
+    const marginInputs = {};
+    [["top", "pdf.marginTop"], ["right", "pdf.marginRight"], ["bottom", "pdf.marginBottom"], ["left", "pdf.marginLeft"]]
+      .forEach(([side, key]) => {
+        const cell = marginGrid.createDiv({ cls: "bysan-pdf-preview-margin-cell" });
+        cell.createEl("label", { text: this.plugin.t(key) });
+        marginInputs[side] = cell.createEl("input", {
+          attr: { type: "number", min: "0", max: "60", step: "0.5", value: String(this.margins[side]) }
+        });
+      });
+
+    const headerInput = makeField(this.plugin.t("pdf.header")).createEl("input", {
+      attr: { type: "text", placeholder: this.plugin.t("pdf.headerPlaceholder"), value: this.headerText }
+    });
+    const footerInput = makeField(this.plugin.t("pdf.footer")).createEl("input", {
+      attr: { type: "text", placeholder: this.plugin.t("pdf.footerPlaceholder"), value: this.footerText }
+    });
+    const pageNumberField = makeField(this.plugin.t("pdf.pageNumbers"));
+    const pageNumberInput = pageNumberField.createEl("input", {
+      attr: { type: "checkbox", "aria-label": this.plugin.t("pdf.pageNumbers") }
+    });
+    pageNumberInput.checked = this.showPageNumbers;
+
+    const rangeField = makeField(this.plugin.t("pdf.pageRange"));
+    const rangeInput = rangeField.createEl("input", {
+      attr: { type: "text", placeholder: "all", value: this.pageRange }
+    });
+    rangeField.createDiv({ cls: "bysan-pdf-preview-field-hint", text: this.plugin.t("pdf.pageRangeHint") });
+
+    const grayscaleField = makeField(this.plugin.t("pdf.grayscale"));
+    const grayscaleInput = grayscaleField.createEl("input", {
+      attr: { type: "checkbox", "aria-label": this.plugin.t("pdf.grayscale") }
+    });
+    grayscaleInput.checked = this.grayscale;
+    grayscaleField.createDiv({ cls: "bysan-pdf-preview-field-hint", text: this.plugin.t("pdf.grayscaleHint") });
 
     const previewField = makeField(this.plugin.t("pdf.previewZoom"));
     const previewRow = previewField.createDiv({ cls: "bysan-pdf-preview-zoom-row" });
@@ -171,8 +226,23 @@ class BysanPdfPreviewModal extends Modal {
     });
     marginSelect.addEventListener("change", () => {
       this.marginMode = marginSelect.value;
+      const [vertical, horizontal] = MARGINS[this.marginMode] || MARGINS.normal;
+      this.margins = { top: vertical, right: horizontal, bottom: vertical, left: horizontal };
+      Object.entries(this.margins).forEach(([side, value]) => { marginInputs[side].value = String(value); });
       void this.savePreference("pdfMarginMode", this.marginMode);
+      void this.saveMargins();
       this.applyLayoutSettings();
+    });
+    Object.entries(marginInputs).forEach(([side, input]) => {
+      input.addEventListener("change", () => {
+        this.margins[side] = clamp(input.value, 0, 60);
+        input.value = String(this.margins[side]);
+        this.marginMode = "custom";
+        marginSelect.value = "custom";
+        void this.savePreference("pdfMarginMode", "custom");
+        void this.saveMargins();
+        this.applyLayoutSettings();
+      });
     });
     previewInput.addEventListener("input", () => {
       this.previewZoom = Number(previewInput.value);
@@ -186,6 +256,32 @@ class BysanPdfPreviewModal extends Modal {
       void this.savePreference("pdfActualScale", this.actualScale);
       this.applyLayoutSettings();
     });
+    headerInput.addEventListener("change", () => {
+      this.headerText = headerInput.value;
+      void this.savePreference("pdfHeaderText", this.headerText);
+      this.applyLayoutSettings();
+    });
+    footerInput.addEventListener("change", () => {
+      this.footerText = footerInput.value;
+      void this.savePreference("pdfFooterText", this.footerText);
+      this.applyLayoutSettings();
+    });
+    pageNumberInput.addEventListener("change", () => {
+      this.showPageNumbers = pageNumberInput.checked;
+      void this.savePreference("pdfShowPageNumbers", this.showPageNumbers);
+      this.applyLayoutSettings();
+    });
+    rangeInput.addEventListener("change", () => {
+      this.pageRange = rangeInput.value.trim() || "all";
+      rangeInput.value = this.pageRange;
+      void this.savePreference("pdfPageRange", this.pageRange);
+      this.updateOutputRangeLabels();
+    });
+    grayscaleInput.addEventListener("change", () => {
+      this.grayscale = grayscaleInput.checked;
+      void this.savePreference("pdfGrayscale", this.grayscale);
+      this.previewPagesEl.classList.toggle("is-grayscale", this.grayscale);
+    });
     refresh.addEventListener("click", () => void this.renderPreview());
     this.exportButton.addEventListener("click", () => void this.exportPdf());
   }
@@ -195,22 +291,32 @@ class BysanPdfPreviewModal extends Modal {
     await this.plugin.saveData(this.plugin.settings);
   }
 
+  async saveMargins() {
+    await Promise.all(Object.entries(this.margins).map(([side, value]) =>
+      this.savePreference(`pdfMargin${side[0].toUpperCase()}${side.slice(1)}`, value)
+    ));
+  }
+
   dimensions() {
     let [width, height] = PAPER_SIZES[this.paperSize] || PAPER_SIZES.A4;
     if (this.orientation === "landscape") [width, height] = [height, width];
-    const [marginY, marginX] = MARGINS[this.marginMode] || MARGINS.normal;
-    return { width, height, marginY, marginX };
+    const { top, right, bottom, left } = this.margins;
+    return { width, height, marginTop: top, marginRight: right, marginBottom: bottom, marginLeft: left };
   }
 
   applyLayoutSettings(repaginate = true) {
-    const { width, height, marginY, marginX } = this.dimensions();
+    const { width, height, marginTop, marginRight, marginBottom, marginLeft } = this.dimensions();
     [this.previewPagesEl, this.previewStagingEl].forEach((element) => {
       element.style.setProperty("--bysan-pdf-page-width", `${width}mm`);
       element.style.setProperty("--bysan-pdf-page-height", `${height}mm`);
-      element.style.setProperty("--bysan-pdf-margin-y", `${marginY}mm`);
-      element.style.setProperty("--bysan-pdf-margin-x", `${marginX}mm`);
+      element.style.setProperty("--bysan-pdf-margin-top", `${marginTop}mm`);
+      element.style.setProperty("--bysan-pdf-margin-right", `${marginRight}mm`);
+      element.style.setProperty("--bysan-pdf-margin-bottom", `${marginBottom}mm`);
+      element.style.setProperty("--bysan-pdf-margin-left", `${marginLeft}mm`);
     });
     this.previewPagesEl.style.zoom = String(this.previewZoom / 100);
+    this.previewPagesEl.classList.toggle("is-grayscale", this.grayscale);
+    this.applyActualScale(this.previewStagingContentEl);
     if (repaginate) this.schedulePagination(60);
   }
 
@@ -221,26 +327,26 @@ class BysanPdfPreviewModal extends Modal {
       return;
     }
     this.previewPagesEl.empty();
-    this.previewStagingEl.empty();
+    this.previewStagingContentEl.empty();
     this.pageCountEl.setText(this.plugin.t("pdf.paginating"));
     await MarkdownRenderer.render(
       this.app,
       markdown,
-      this.previewStagingEl,
+      this.previewStagingContentEl,
       this.view.file?.path || "",
       this
     );
-    this.applyMediaWidths(markdown);
-    this.previewStagingEl.querySelectorAll("img").forEach((image) => {
+    this.applyMediaWidths(markdown, this.previewStagingContentEl);
+    this.previewStagingContentEl.querySelectorAll("img").forEach((image) => {
       if (!image.complete) image.addEventListener("load", () => this.schedulePagination(50), { once: true });
     });
     this.schedulePagination(60);
     this.schedulePagination(600);
   }
 
-  applyMediaWidths(markdown) {
+  applyMediaWidths(markdown, root = this.previewStagingContentEl) {
     const resizer = this.app.plugins.plugins["mermaid-inline-resizer"];
-    resizer?.applyWidthsToRenderedRoot?.(this.previewStagingEl, markdown);
+    resizer?.applyWidthsToRenderedRoot?.(root, markdown);
   }
 
   schedulePagination(delay = 100) {
@@ -251,24 +357,50 @@ class BysanPdfPreviewModal extends Modal {
   createPreviewPage(pageNumber) {
     const page = this.previewPagesEl.createDiv({ cls: "bysan-pdf-preview-page" });
     page.dataset.pageNumber = String(pageNumber);
+    this.renderPageChrome(page, pageNumber);
     const content = page.createDiv({ cls: "bysan-pdf-preview-page-content markdown-rendered" });
-    const scale = clamp(this.actualScale, 40, 160) / 100;
-    content.style.zoom = String(scale);
-    content.style.width = `${100 / scale}%`;
-    content.style.height = `${100 / scale}%`;
+    this.applyActualScale(content);
     return { page, content };
   }
 
+  applyActualScale(content) {
+    if (!content) return;
+    const scale = clamp(this.actualScale, 40, 160) / 100;
+    content.style.zoom = String(scale);
+    /* CSS zoom already participates in Chromium's layout size. Counter-scaling
+     * the width here made a 130% document narrower than a 100% document and
+     * disconnected preview pagination from the printed page. Keeping the
+     * natural content box lets zoom enlarge text while Chromium reflows it
+     * within the printable area. */
+    content.style.width = "100%";
+    content.style.height = "100%";
+  }
+
+  renderPageChrome(page, pageNumber) {
+    const renderText = (text) => String(text || "").replace(/\{page\}/gi, String(pageNumber));
+    const hasHeader = Boolean(this.headerText.trim());
+    const hasFooter = Boolean(this.footerText.trim()) || this.showPageNumbers;
+    page.classList.toggle("has-header", hasHeader);
+    page.classList.toggle("has-footer", hasFooter);
+    if (hasHeader) page.createDiv({ cls: "bysan-pdf-preview-page-header", text: renderText(this.headerText) });
+    if (hasFooter) {
+      const footer = page.createDiv({ cls: "bysan-pdf-preview-page-footer" });
+      if (this.footerText.trim()) footer.createSpan({ text: renderText(this.footerText) });
+      if (this.showPageNumbers) footer.createSpan({ cls: "bysan-pdf-preview-page-number", text: String(pageNumber) });
+    }
+  }
+
   paginatePreview() {
-    if (!this.previewStagingEl?.isConnected) return;
+    if (!this.previewStagingContentEl?.isConnected) return;
     const markdown = this.view.editor?.getValue() || "";
-    this.applyMediaWidths(markdown);
+    const previousScroll = { top: this.previewScrollEl.scrollTop, left: this.previewScrollEl.scrollLeft };
+    this.applyMediaWidths(markdown, this.previewStagingContentEl);
     this.previewPagesEl.empty();
     let pageNumber = 1;
     let { content } = this.createPreviewPage(pageNumber);
     let hasContent = false;
 
-    Array.from(this.previewStagingEl.childNodes).forEach((sourceNode) => {
+    Array.from(this.previewStagingContentEl.childNodes).forEach((sourceNode) => {
       const clone = sourceNode.cloneNode(true);
       content.appendChild(clone);
       const whitespace = clone.nodeType === Node.TEXT_NODE && !clone.textContent.trim();
@@ -288,10 +420,11 @@ class BysanPdfPreviewModal extends Modal {
 
     this.pageCount = pageNumber;
     this.pageCountEl.setText(this.plugin.t("pdf.pageCount", { count: pageNumber }));
-    this.showPage(Math.min(this.currentPage, pageNumber));
+    this.showPage(Math.min(this.currentPage, pageNumber), false, previousScroll);
+    this.updateOutputRangeLabels();
   }
 
-  showPage(pageNumber) {
+  showPage(pageNumber, resetScroll = false, preservedScroll = null) {
     const target = Math.min(this.pageCount, Math.max(1, Number.isFinite(pageNumber) ? Math.round(pageNumber) : 1));
     this.currentPage = target;
     this.previewPagesEl.querySelectorAll(".bysan-pdf-preview-page").forEach(
@@ -302,7 +435,31 @@ class BysanPdfPreviewModal extends Modal {
     this.pageTotalEl.setText(this.plugin.t("pdf.pageTotal", { count: this.pageCount }));
     this.previousPageButton.disabled = target <= 1;
     this.nextPageButton.disabled = target >= this.pageCount;
-    this.previewScrollEl.scrollTo({ top: 0, left: 0 });
+    if (resetScroll) this.previewScrollEl.scrollTo({ top: 0, left: 0 });
+    else if (preservedScroll) this.previewScrollEl.scrollTo(preservedScroll);
+  }
+
+  selectedPageNumbers() {
+    const range = this.pageRange.trim().toLowerCase();
+    if (!range || range === "all" || range === "*" || range === "全部") {
+      return new Set(Array.from({ length: this.pageCount }, (_, index) => index + 1));
+    }
+    const pages = new Set();
+    range.split(",").forEach((part) => {
+      const match = part.trim().match(/^(\d+)(?:\s*-\s*(\d+))?$/);
+      if (!match) return;
+      const first = clamp(match[1], 1, this.pageCount);
+      const last = clamp(match[2] || match[1], 1, this.pageCount);
+      for (let page = Math.min(first, last); page <= Math.max(first, last); page += 1) pages.add(page);
+    });
+    return pages.size ? pages : new Set(Array.from({ length: this.pageCount }, (_, index) => index + 1));
+  }
+
+  updateOutputRangeLabels() {
+    const selected = this.selectedPageNumbers();
+    this.previewPagesEl.querySelectorAll(".bysan-pdf-preview-page").forEach((page, index) => {
+      page.classList.toggle("is-excluded-from-export", !selected.has(index + 1));
+    });
   }
 
   collectCss() {
@@ -423,6 +580,10 @@ class BysanPdfPreviewModal extends Modal {
       this.previewPagesEl.style.zoom = originalZoom;
     }
     exportPages.forEach((page) => page.classList.remove("is-hidden"));
+    const selected = this.selectedPageNumbers();
+    exportPages.forEach((page, index) => {
+      if (!selected.has(index + 1)) page.remove();
+    });
     return pages;
   }
 
@@ -437,6 +598,7 @@ class BysanPdfPreviewModal extends Modal {
       .bysan-pdf-preview-page { margin: 0 !important; box-shadow: none !important; break-after: page; page-break-after: always; }
       .bysan-pdf-preview-page:last-child { break-after: auto; page-break-after: auto; }
       .bysan-pdf-preview-page.is-hidden { display: block !important; }
+      .bysan-pdf-preview-page.is-excluded-from-export { display: block !important; }
       .mir-button-group, .mir-fullscreen-button { display: none !important; }
     `;
     return `<!doctype html><html><head><meta charset="utf-8"><style>${this.collectCss()}\n${exportCss}</style></head><body class="${bodyClasses}"><div class="print">${pages.outerHTML}</div></body></html>`;
@@ -504,7 +666,7 @@ class BysanPdfPreviewModal extends Modal {
       await new Promise((resolve) => window.setTimeout(resolve, 400));
       const buffer = await printWindow.webContents.printToPDF({
         printBackground: true,
-        preferCSSPageSize: false,
+        preferCSSPageSize: true,
         landscape: this.orientation === "landscape",
         pageSize: this.paperSize,
         margins: { top: 0, bottom: 0, left: 0, right: 0 }

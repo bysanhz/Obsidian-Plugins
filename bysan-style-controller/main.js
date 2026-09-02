@@ -1,6 +1,6 @@
 /**
  * Bysan Style Controller
- * Version: 0.15.3
+ * Version: 0.15.4
  *
  * Owns visual presentation and provides switchable, integrated Bysan modules.
  */
@@ -191,13 +191,22 @@ const CONTROLLED_PROPERTIES = [
 ];
 
 const DEFAULT_SETTINGS = {
-  settingsVersion: 7,
+  settingsVersion: 8,
   uiLanguage: "auto",
   pdfPaperSize: "A4",
   pdfOrientation: "portrait",
   pdfMarginMode: "normal",
+  pdfMarginTop: 18,
+  pdfMarginRight: 16,
+  pdfMarginBottom: 18,
+  pdfMarginLeft: 16,
   pdfPreviewZoom: 75,
   pdfActualScale: 100,
+  pdfHeaderText: "",
+  pdfFooterText: "",
+  pdfShowPageNumbers: true,
+  pdfPageRange: "all",
+  pdfGrayscale: false,
   stylePresets: {},
   activeStylePreset: "__default__",
   stylePresetDirty: false,
@@ -290,8 +299,17 @@ const PRESET_META_KEYS = new Set([
   "pdfPaperSize",
   "pdfOrientation",
   "pdfMarginMode",
+  "pdfMarginTop",
+  "pdfMarginRight",
+  "pdfMarginBottom",
+  "pdfMarginLeft",
   "pdfPreviewZoom",
   "pdfActualScale",
+  "pdfHeaderText",
+  "pdfFooterText",
+  "pdfShowPageNumbers",
+  "pdfPageRange",
+  "pdfGrayscale",
   ...MODULE_SETTING_KEYS
 ]);
 

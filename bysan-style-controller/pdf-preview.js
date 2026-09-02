@@ -393,14 +393,25 @@ class BysanPdfPreviewModal extends Modal {
   applyActualScale(content) {
     if (!content) return;
     const scale = clamp(this.actualScale, 40, 160) / 100;
-    content.style.zoom = String(scale);
-    /* CSS zoom already participates in Chromium's layout size. Counter-scaling
-     * the width here made a 130% document narrower than a 100% document and
-     * disconnected preview pagination from the printed page. Keeping the
-     * natural content box lets zoom enlarge text while Chromium reflows it
-     * within the printable area. */
-    content.style.width = "100%";
-    content.style.height = "100%";
+    /* Chromium's CSS zoom changes the layout viewport, which lets percentage
+     * sized Mermaid SVGs and tables cancel out a reduced scale completely.
+     * Transform keeps the rendered result genuinely smaller/larger, including
+     * images. At values above 100%, inversing the layout box first keeps the
+     * enlarged result within the paper width. */
+    content.style.zoom = "1";
+    content.style.transform = scale === 1 ? "" : `scale(${scale})`;
+    content.style.transformOrigin = "top left";
+    const layoutSize = scale > 1 ? `${100 / scale}%` : "100%";
+    content.style.width = layoutSize;
+    content.style.height = layoutSize;
+  }
+
+  isContentOverflow(content) {
+    const scale = clamp(this.actualScale, 40, 160) / 100;
+    /* A reduced transform does not affect scrollHeight. Compare the painted
+     * height instead so smaller output can use the additional page space. */
+    const paintedHeight = scale < 1 ? content.scrollHeight * scale : content.scrollHeight;
+    return paintedHeight > content.clientHeight + 1;
   }
 
   renderPageChrome(page, pageNumber) {
@@ -432,7 +443,7 @@ class BysanPdfPreviewModal extends Modal {
       const clone = sourceNode.cloneNode(true);
       content.appendChild(clone);
       const whitespace = clone.nodeType === Node.TEXT_NODE && !clone.textContent.trim();
-      const overflows = content.scrollHeight > content.clientHeight + 1;
+      const overflows = this.isContentOverflow(content);
       if (overflows && hasContent && !whitespace) {
         clone.remove();
         pageNumber += 1;

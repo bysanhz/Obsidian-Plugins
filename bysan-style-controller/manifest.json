@@ -1,7 +1,7 @@
 {
   "id": "bysan-style-controller",
   "name": "Bysan Style Controller",
-  "version": "0.15.5",
+  "version": "0.15.6",
   "minAppVersion": "1.13.0",
   "description": "Unified Bysan style system with native controls and switchable heading, media and review modules.",
   "author": "Bysan",

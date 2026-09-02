@@ -1,6 +1,6 @@
 /**
  * Bysan Style Controller
- * Version: 0.15.8
+ * Version: 0.16.0
  *
  * Owns visual presentation and provides switchable, integrated Bysan modules.
  */
@@ -8,6 +8,7 @@
 const {
   MarkdownRenderer,
   MarkdownView,
+  Component,
   Modal,
   Notice,
   Plugin,
@@ -23,7 +24,7 @@ const { ThemeControls } = require(app.vault.adapter.getFullPath(
 const { resolveLanguage, translate } = require(app.vault.adapter.getFullPath(
   ".obsidian/plugins/bysan-style-controller/i18n.js"
 ));
-globalThis.__bysanPdfApi = { MarkdownRenderer, Modal, Notice };
+globalThis.__bysanPdfApi = { MarkdownRenderer, Modal, Notice, Component };
 const { BysanPdfPreviewModal } = require(app.vault.adapter.getFullPath(
   ".obsidian/plugins/bysan-style-controller/pdf-preview.js"
 ));
@@ -489,7 +490,7 @@ module.exports = class BysanStyleController extends Plugin {
       this.register(() => window.clearTimeout(timer));
     }
 
-    console.log(`[Bysan Style Controller] v0.15.8 loaded with ${this.themeControls.count} regional theme controls`);
+    console.log(`[Bysan Style Controller] v0.16.0 loaded with ${this.themeControls.count} regional theme controls`);
   }
 
 

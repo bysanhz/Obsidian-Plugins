@@ -1,4 +1,4 @@
-const { MarkdownRenderer, Modal, Notice } = globalThis.__bysanPdfApi;
+const { MarkdownRenderer, Modal, Notice, Component } = globalThis.__bysanPdfApi;
 
 const PAPER_SIZES = {
   A3: [297, 420],
@@ -45,14 +45,8 @@ class BysanPdfPreviewModal extends Modal {
     this.currentPage = 1;
     this.pageCount = 1;
     this.renderTimer = null;
-    /* Large notes can contain hundreds of output pages. Keep rendering and
-     * pagination single-flight so late Mermaid/image mutations coalesce into
-     * one additional pass instead of starting several full repaginations. */
-    this.isRenderingPreview = false;
-    this.pendingPreviewRender = false;
-    this.paginationRunning = false;
-    this.paginationQueued = false;
-    this.stagingMutationVersion = 0;
+    this.renderGeneration = 0;
+    this.renderComponent = null;
   }
 
   onOpen() {
@@ -90,15 +84,10 @@ class BysanPdfPreviewModal extends Modal {
     this.previewStagingContentEl = this.previewStagingEl.createDiv({
       cls: "bysan-pdf-preview-page-content markdown-rendered"
     });
-    this.previewObserver = new MutationObserver(() => {
-      if (this.isRenderingPreview) return;
-      this.stagingMutationVersion += 1;
-      this.schedulePagination(240);
-    });
-    this.previewObserver.observe(this.previewStagingContentEl, {
-      childList: true,
-      subtree: true
-    });
+    /* Mermaid and MathJax may keep mutating their detached render tree after
+     * the Markdown render resolves. Watching every mutation repeatedly
+     * restarts full-document pagination; deliberate refresh triggers below
+     * (initial render, image load, source edit and layout changes) are enough. */
     /* The source editor remains live while the modal is open. Rebuild from the
      * latest Markdown after a short debounce so Mermaid width directives are
      * never applied to one pagination pass and missed by the next one. */
@@ -106,6 +95,7 @@ class BysanPdfPreviewModal extends Modal {
     this.sourceChangeHandler = () => this.schedulePreviewRender(220);
     this.sourceEditor?.on?.("change", this.sourceChangeHandler);
 
+    this.resetRenderComponent();
     this.applyLayoutSettings(false);
     void this.renderPreview();
   }
@@ -340,45 +330,48 @@ class BysanPdfPreviewModal extends Modal {
   }
 
   async renderPreview() {
-    if (this.isRenderingPreview) {
-      this.pendingPreviewRender = true;
-      return;
-    }
     const markdown = this.view.editor?.getValue();
     if (typeof markdown !== "string") {
       this.previewPagesEl.setText(this.plugin.t("pdf.readError"));
       return;
     }
-    this.isRenderingPreview = true;
-    window.clearTimeout(this.previewTimer);
-    try {
-      this.previewPagesEl.empty();
-      this.previewStagingContentEl.empty();
-      this.pageCountEl.setText(this.plugin.t("pdf.paginating"));
-      await MarkdownRenderer.render(
-        this.app,
-        markdown,
-        this.previewStagingContentEl,
-        this.view.file?.path || "",
-        this
-      );
-      await this.hydrateInternalImageEmbeds(this.previewStagingContentEl);
-      await this.settleMediaWidths(markdown, this.previewStagingContentEl);
-      this.previewStagingContentEl.querySelectorAll("img").forEach((image) => {
-        if (!image.complete) image.addEventListener("load", () => {
-          this.stagingMutationVersion += 1;
-          this.schedulePagination(180);
-        }, { once: true });
-      });
-      this.stagingMutationVersion += 1;
-      this.schedulePagination(90);
-    } finally {
-      this.isRenderingPreview = false;
-      if (this.pendingPreviewRender) {
-        this.pendingPreviewRender = false;
-        this.schedulePreviewRender(80);
-      }
+    const generation = ++this.renderGeneration;
+    this.resetRenderComponent();
+    this.previewPagesEl.empty();
+    this.previewStagingContentEl.empty();
+    this.pageCountEl.setText(this.plugin.t("pdf.paginating"));
+    const renderPromise = MarkdownRenderer.render(
+      this.app,
+      markdown,
+      this.previewStagingContentEl,
+      this.view.file?.path || "",
+      this.renderComponent
+    );
+    /* Some post-processors resolve well after the rendered content is already
+     * in the staging DOM. Do not keep the preview blank while they finish. */
+    const rendererFinished = await Promise.race([
+      renderPromise.then(() => true),
+      new Promise((resolve) => window.setTimeout(() => resolve(false), 900))
+    ]);
+    if (!rendererFinished) {
+      void renderPromise.then(() => {
+        if (generation === this.renderGeneration && this.previewStagingContentEl?.isConnected) {
+          this.schedulePagination(160);
+        }
+      }).catch((error) => console.error("[Bysan PDF] delayed Markdown render failed", error));
     }
+    await this.hydrateInternalImageEmbeds(this.previewStagingContentEl);
+    await this.settleMediaWidths(markdown, this.previewStagingContentEl);
+    this.previewStagingContentEl.querySelectorAll("img").forEach((image) => {
+      if (!image.complete) image.addEventListener("load", () => this.schedulePagination(50), { once: true });
+    });
+    this.schedulePagination(60);
+  }
+
+  resetRenderComponent() {
+    this.renderComponent?.unload?.();
+    this.renderComponent = new Component();
+    this.renderComponent.load();
   }
 
   applyMediaWidths(markdown, root = this.previewStagingContentEl) {
@@ -400,9 +393,13 @@ class BysanPdfPreviewModal extends Modal {
       if (!file?.extension || !supported.test(`.${file.extension}`)) continue;
       const resourcePath = this.app.vault.getResourcePath(file);
       if (!resourcePath) continue;
+      const existingImage = embed.querySelector("img");
+      if (embed.dataset.bysanPdfResourcePath === resourcePath
+        && existingImage?.getAttribute("src") === resourcePath) continue;
       const requestedWidth = Number(embed.getAttribute("width"));
       embed.empty();
       embed.addClass("image-embed", "is-loaded");
+      embed.dataset.bysanPdfResourcePath = resourcePath;
       const image = embed.createEl("img", {
         attr: {
           src: resourcePath,
@@ -437,14 +434,7 @@ class BysanPdfPreviewModal extends Modal {
 
   schedulePagination(delay = 100) {
     window.clearTimeout(this.previewTimer);
-    this.previewTimer = window.setTimeout(() => {
-      this.previewTimer = null;
-      if (this.paginationRunning) {
-        this.paginationQueued = true;
-        return;
-      }
-      void this.paginatePreview();
-    }, delay);
+    this.previewTimer = window.setTimeout(() => void this.paginatePreview(), delay);
   }
 
   createPreviewPage(pageNumber) {
@@ -497,101 +487,33 @@ class BysanPdfPreviewModal extends Modal {
 
   async paginatePreview() {
     if (!this.previewStagingContentEl?.isConnected) return;
-    if (this.paginationRunning) {
-      this.paginationQueued = true;
-      return;
-    }
-    this.paginationRunning = true;
-    const mutationVersion = this.stagingMutationVersion;
     const markdown = this.view.editor?.getValue() || "";
     const previousScroll = { top: this.previewScrollEl.scrollTop, left: this.previewScrollEl.scrollLeft };
-    try {
-      await this.settleMediaWidths(markdown, this.previewStagingContentEl);
-      if (!this.previewStagingContentEl?.isConnected) return;
-      this.previewPagesEl.empty();
-      const sourceNodes = Array.from(this.previewStagingContentEl.childNodes);
-      let cursor = 0;
-      let pageNumber = 1;
-      let { content } = this.createPreviewPage(pageNumber);
-      const appendRange = (start, count) => {
-        const fragment = document.createDocumentFragment();
-        const clones = [];
-        for (let index = 0; index < count; index += 1) {
-          const clone = sourceNodes[start + index].cloneNode(true);
-          clones.push(clone);
-          fragment.appendChild(clone);
-        }
-        content.appendChild(fragment);
-        return clones;
-      };
-      const removeNodes = (nodes) => nodes.forEach((node) => node.remove());
+    await this.settleMediaWidths(markdown, this.previewStagingContentEl);
+    if (!this.previewStagingContentEl?.isConnected) return;
+    this.previewPagesEl.empty();
+    let pageNumber = 1;
+    let { content } = this.createPreviewPage(pageNumber);
+    let hasContent = false;
 
-      /* Measuring once per DOM node forces thousands of layouts on long
-       * academic notes. Probe groups first, then use a small binary search
-       * only at a page boundary. */
-      while (cursor < sourceNodes.length) {
-        while (cursor < sourceNodes.length) {
-          const node = sourceNodes[cursor];
-          if (node.nodeType !== Node.TEXT_NODE || node.textContent.trim()) break;
-          appendRange(cursor, 1);
-          cursor += 1;
-        }
-        if (cursor >= sourceNodes.length) break;
-
-        const first = appendRange(cursor, 1);
-        cursor += 1;
-        if (this.isContentOverflow(content)) {
-          /* An oversized single block remains intact instead of looping
-           * forever. Chromium will clip only its page overflow as before. */
-          if (cursor < sourceNodes.length) {
-            pageNumber += 1;
-            ({ content } = this.createPreviewPage(pageNumber));
-          }
-          continue;
-        }
-
-        while (cursor < sourceNodes.length) {
-          const count = Math.min(24, sourceNodes.length - cursor);
-          const trial = appendRange(cursor, count);
-          if (!this.isContentOverflow(content)) {
-            cursor += count;
-            continue;
-          }
-          removeNodes(trial);
-          let low = 0;
-          let high = count;
-          while (low < high) {
-            const middle = Math.ceil((low + high) / 2);
-            const probe = appendRange(cursor, middle);
-            const fits = !this.isContentOverflow(content);
-            removeNodes(probe);
-            if (fits) low = middle;
-            else high = middle - 1;
-          }
-          if (low > 0) {
-            appendRange(cursor, low);
-            cursor += low;
-          }
-          pageNumber += 1;
-          ({ content } = this.createPreviewPage(pageNumber));
-          /* Yield between page batches so a large preview remains responsive
-           * without paying one animation frame for every output page. */
-          if (pageNumber % 12 === 0) await new Promise((resolve) => requestAnimationFrame(resolve));
-          break;
-        }
+    Array.from(this.previewStagingContentEl.childNodes).forEach((sourceNode) => {
+      const clone = sourceNode.cloneNode(true);
+      content.appendChild(clone);
+      const whitespace = clone.nodeType === Node.TEXT_NODE && !clone.textContent.trim();
+      const overflows = this.isContentOverflow(content);
+      if (overflows && hasContent && !whitespace) {
+        clone.remove();
+        pageNumber += 1;
+        ({ content } = this.createPreviewPage(pageNumber));
+        content.appendChild(clone);
       }
+      if (!whitespace) hasContent = true;
+    });
 
-      this.pageCount = Math.max(1, pageNumber);
-      this.pageCountEl.setText(this.plugin.t("pdf.pageCount", { count: this.pageCount }));
-      this.showPage(Math.min(this.currentPage, this.pageCount), false, previousScroll);
-      this.updateOutputRangeLabels();
-    } finally {
-      this.paginationRunning = false;
-      if (this.paginationQueued || this.stagingMutationVersion !== mutationVersion) {
-        this.paginationQueued = false;
-        this.schedulePagination(260);
-      }
-    }
+    this.pageCount = pageNumber;
+    this.pageCountEl.setText(this.plugin.t("pdf.pageCount", { count: pageNumber }));
+    this.showPage(Math.min(this.currentPage, pageNumber), false, previousScroll);
+    this.updateOutputRangeLabels();
   }
 
   showPage(pageNumber, resetScroll = false, preservedScroll = null) {
@@ -726,10 +648,10 @@ class BysanPdfPreviewModal extends Modal {
     pages.style.removeProperty("zoom");
     const sourcePages = Array.from(this.previewPagesEl.querySelectorAll(".bysan-pdf-preview-page"));
     const exportPages = Array.from(pages.querySelectorAll(".bysan-pdf-preview-page"));
-    /* Keep Mermaid's native foreignObject labels in the interactive preview:
-     * converting every diagram on each refresh is prohibitively expensive for
-     * long notes. Convert them only in the export clone, using one layout pass
-     * for all relevant source pages, so the printed SVG remains portable. */
+    /* Keep native Mermaid labels in the preview; converting every diagram on
+     * every refresh is expensive for long notes. At export, reveal only the
+     * pages that still contain foreignObject labels and convert all of them
+     * after one layout frame instead of waiting once per page. */
     const conversionPages = sourcePages.map((sourcePage, pageIndex) => ({
       sourcePage,
       exportPage: exportPages[pageIndex]
@@ -870,7 +792,7 @@ class BysanPdfPreviewModal extends Modal {
   onClose() {
     window.clearTimeout(this.previewTimer);
     window.clearTimeout(this.renderTimer);
-    this.previewObserver?.disconnect();
+    this.renderComponent?.unload?.();
     this.sourceEditor?.off?.("change", this.sourceChangeHandler);
     this.contentEl.empty();
   }

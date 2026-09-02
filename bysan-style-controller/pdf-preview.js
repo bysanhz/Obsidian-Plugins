@@ -45,6 +45,14 @@ class BysanPdfPreviewModal extends Modal {
     this.currentPage = 1;
     this.pageCount = 1;
     this.renderTimer = null;
+    /* Large notes can contain hundreds of output pages. Keep rendering and
+     * pagination single-flight so late Mermaid/image mutations coalesce into
+     * one additional pass instead of starting several full repaginations. */
+    this.isRenderingPreview = false;
+    this.pendingPreviewRender = false;
+    this.paginationRunning = false;
+    this.paginationQueued = false;
+    this.stagingMutationVersion = 0;
   }
 
   onOpen() {
@@ -82,7 +90,11 @@ class BysanPdfPreviewModal extends Modal {
     this.previewStagingContentEl = this.previewStagingEl.createDiv({
       cls: "bysan-pdf-preview-page-content markdown-rendered"
     });
-    this.previewObserver = new MutationObserver(() => this.schedulePagination(140));
+    this.previewObserver = new MutationObserver(() => {
+      if (this.isRenderingPreview) return;
+      this.stagingMutationVersion += 1;
+      this.schedulePagination(240);
+    });
     this.previewObserver.observe(this.previewStagingContentEl, {
       childList: true,
       subtree: true
@@ -328,28 +340,45 @@ class BysanPdfPreviewModal extends Modal {
   }
 
   async renderPreview() {
+    if (this.isRenderingPreview) {
+      this.pendingPreviewRender = true;
+      return;
+    }
     const markdown = this.view.editor?.getValue();
     if (typeof markdown !== "string") {
       this.previewPagesEl.setText(this.plugin.t("pdf.readError"));
       return;
     }
-    this.previewPagesEl.empty();
-    this.previewStagingContentEl.empty();
-    this.pageCountEl.setText(this.plugin.t("pdf.paginating"));
-    await MarkdownRenderer.render(
-      this.app,
-      markdown,
-      this.previewStagingContentEl,
-      this.view.file?.path || "",
-      this
-    );
-    await this.hydrateInternalImageEmbeds(this.previewStagingContentEl);
-    await this.settleMediaWidths(markdown, this.previewStagingContentEl);
-    this.previewStagingContentEl.querySelectorAll("img").forEach((image) => {
-      if (!image.complete) image.addEventListener("load", () => this.schedulePagination(50), { once: true });
-    });
-    this.schedulePagination(60);
-    this.schedulePagination(600);
+    this.isRenderingPreview = true;
+    window.clearTimeout(this.previewTimer);
+    try {
+      this.previewPagesEl.empty();
+      this.previewStagingContentEl.empty();
+      this.pageCountEl.setText(this.plugin.t("pdf.paginating"));
+      await MarkdownRenderer.render(
+        this.app,
+        markdown,
+        this.previewStagingContentEl,
+        this.view.file?.path || "",
+        this
+      );
+      await this.hydrateInternalImageEmbeds(this.previewStagingContentEl);
+      await this.settleMediaWidths(markdown, this.previewStagingContentEl);
+      this.previewStagingContentEl.querySelectorAll("img").forEach((image) => {
+        if (!image.complete) image.addEventListener("load", () => {
+          this.stagingMutationVersion += 1;
+          this.schedulePagination(180);
+        }, { once: true });
+      });
+      this.stagingMutationVersion += 1;
+      this.schedulePagination(90);
+    } finally {
+      this.isRenderingPreview = false;
+      if (this.pendingPreviewRender) {
+        this.pendingPreviewRender = false;
+        this.schedulePreviewRender(80);
+      }
+    }
   }
 
   applyMediaWidths(markdown, root = this.previewStagingContentEl) {
@@ -408,7 +437,14 @@ class BysanPdfPreviewModal extends Modal {
 
   schedulePagination(delay = 100) {
     window.clearTimeout(this.previewTimer);
-    this.previewTimer = window.setTimeout(() => void this.paginatePreview(), delay);
+    this.previewTimer = window.setTimeout(() => {
+      this.previewTimer = null;
+      if (this.paginationRunning) {
+        this.paginationQueued = true;
+        return;
+      }
+      void this.paginatePreview();
+    }, delay);
   }
 
   createPreviewPage(pageNumber) {
@@ -461,37 +497,101 @@ class BysanPdfPreviewModal extends Modal {
 
   async paginatePreview() {
     if (!this.previewStagingContentEl?.isConnected) return;
+    if (this.paginationRunning) {
+      this.paginationQueued = true;
+      return;
+    }
+    this.paginationRunning = true;
+    const mutationVersion = this.stagingMutationVersion;
     const markdown = this.view.editor?.getValue() || "";
     const previousScroll = { top: this.previewScrollEl.scrollTop, left: this.previewScrollEl.scrollLeft };
-    await this.settleMediaWidths(markdown, this.previewStagingContentEl);
-    if (!this.previewStagingContentEl?.isConnected) return;
-    this.previewPagesEl.empty();
-    let pageNumber = 1;
-    let { content } = this.createPreviewPage(pageNumber);
-    let hasContent = false;
+    try {
+      await this.settleMediaWidths(markdown, this.previewStagingContentEl);
+      if (!this.previewStagingContentEl?.isConnected) return;
+      this.previewPagesEl.empty();
+      const sourceNodes = Array.from(this.previewStagingContentEl.childNodes);
+      let cursor = 0;
+      let pageNumber = 1;
+      let { content } = this.createPreviewPage(pageNumber);
+      const appendRange = (start, count) => {
+        const fragment = document.createDocumentFragment();
+        const clones = [];
+        for (let index = 0; index < count; index += 1) {
+          const clone = sourceNodes[start + index].cloneNode(true);
+          clones.push(clone);
+          fragment.appendChild(clone);
+        }
+        content.appendChild(fragment);
+        return clones;
+      };
+      const removeNodes = (nodes) => nodes.forEach((node) => node.remove());
 
-    Array.from(this.previewStagingContentEl.childNodes).forEach((sourceNode) => {
-      const clone = sourceNode.cloneNode(true);
-      content.appendChild(clone);
-      const whitespace = clone.nodeType === Node.TEXT_NODE && !clone.textContent.trim();
-      const overflows = this.isContentOverflow(content);
-      if (overflows && hasContent && !whitespace) {
-        clone.remove();
-        pageNumber += 1;
-        ({ content } = this.createPreviewPage(pageNumber));
-        content.appendChild(clone);
+      /* Measuring once per DOM node forces thousands of layouts on long
+       * academic notes. Probe groups first, then use a small binary search
+       * only at a page boundary. */
+      while (cursor < sourceNodes.length) {
+        while (cursor < sourceNodes.length) {
+          const node = sourceNodes[cursor];
+          if (node.nodeType !== Node.TEXT_NODE || node.textContent.trim()) break;
+          appendRange(cursor, 1);
+          cursor += 1;
+        }
+        if (cursor >= sourceNodes.length) break;
+
+        const first = appendRange(cursor, 1);
+        cursor += 1;
+        if (this.isContentOverflow(content)) {
+          /* An oversized single block remains intact instead of looping
+           * forever. Chromium will clip only its page overflow as before. */
+          if (cursor < sourceNodes.length) {
+            pageNumber += 1;
+            ({ content } = this.createPreviewPage(pageNumber));
+          }
+          continue;
+        }
+
+        while (cursor < sourceNodes.length) {
+          const count = Math.min(24, sourceNodes.length - cursor);
+          const trial = appendRange(cursor, count);
+          if (!this.isContentOverflow(content)) {
+            cursor += count;
+            continue;
+          }
+          removeNodes(trial);
+          let low = 0;
+          let high = count;
+          while (low < high) {
+            const middle = Math.ceil((low + high) / 2);
+            const probe = appendRange(cursor, middle);
+            const fits = !this.isContentOverflow(content);
+            removeNodes(probe);
+            if (fits) low = middle;
+            else high = middle - 1;
+          }
+          if (low > 0) {
+            appendRange(cursor, low);
+            cursor += low;
+          }
+          pageNumber += 1;
+          ({ content } = this.createPreviewPage(pageNumber));
+          /* Yield between page batches so a large preview remains responsive
+           * without paying one animation frame for every output page. */
+          if (pageNumber % 12 === 0) await new Promise((resolve) => requestAnimationFrame(resolve));
+          break;
+        }
       }
-      if (!whitespace) hasContent = true;
-    });
 
-    this.previewPagesEl.querySelectorAll(".mermaid svg").forEach((svg) => {
-      this.replaceForeignObjectsWithText(svg, svg);
-    });
-
-    this.pageCount = pageNumber;
-    this.pageCountEl.setText(this.plugin.t("pdf.pageCount", { count: pageNumber }));
-    this.showPage(Math.min(this.currentPage, pageNumber), false, previousScroll);
-    this.updateOutputRangeLabels();
+      this.pageCount = Math.max(1, pageNumber);
+      this.pageCountEl.setText(this.plugin.t("pdf.pageCount", { count: this.pageCount }));
+      this.showPage(Math.min(this.currentPage, this.pageCount), false, previousScroll);
+      this.updateOutputRangeLabels();
+    } finally {
+      this.paginationRunning = false;
+      if (this.paginationQueued || this.stagingMutationVersion !== mutationVersion) {
+        this.paginationQueued = false;
+        this.schedulePagination(260);
+      }
+    }
   }
 
   showPage(pageNumber, resetScroll = false, preservedScroll = null) {
@@ -626,28 +726,37 @@ class BysanPdfPreviewModal extends Modal {
     pages.style.removeProperty("zoom");
     const sourcePages = Array.from(this.previewPagesEl.querySelectorAll(".bysan-pdf-preview-page"));
     const exportPages = Array.from(pages.querySelectorAll(".bysan-pdf-preview-page"));
-    const originalVisibility = this.previewPagesEl.style.visibility;
-    const originalZoom = this.previewPagesEl.style.zoom;
-    this.previewPagesEl.style.visibility = "hidden";
-    this.previewPagesEl.style.zoom = "1";
-    try {
-      for (let pageIndex = 0; pageIndex < sourcePages.length; pageIndex += 1) {
-        const sourcePage = sourcePages[pageIndex];
-        const exportPage = exportPages[pageIndex];
-        const wasHidden = sourcePage.classList.contains("is-hidden");
-        sourcePage.classList.remove("is-hidden");
+    /* Keep Mermaid's native foreignObject labels in the interactive preview:
+     * converting every diagram on each refresh is prohibitively expensive for
+     * long notes. Convert them only in the export clone, using one layout pass
+     * for all relevant source pages, so the printed SVG remains portable. */
+    const conversionPages = sourcePages.map((sourcePage, pageIndex) => ({
+      sourcePage,
+      exportPage: exportPages[pageIndex]
+    })).filter(({ sourcePage, exportPage }) => (
+      exportPage && sourcePage.querySelector(".mermaid foreignObject")
+    ));
+    if (conversionPages.length) {
+      const originalVisibility = this.previewPagesEl.style.visibility;
+      const originalZoom = this.previewPagesEl.style.zoom;
+      const hiddenPages = conversionPages.filter(({ sourcePage }) => sourcePage.classList.contains("is-hidden"));
+      this.previewPagesEl.style.visibility = "hidden";
+      this.previewPagesEl.style.zoom = "1";
+      hiddenPages.forEach(({ sourcePage }) => sourcePage.classList.remove("is-hidden"));
+      try {
         await new Promise((resolve) => requestAnimationFrame(resolve));
-        const sourceSvgs = Array.from(sourcePage.querySelectorAll(".mermaid svg"));
-        const exportSvgs = Array.from(exportPage.querySelectorAll(".mermaid svg"));
-        sourceSvgs.forEach((sourceSvg, svgIndex) => {
-          const exportSvg = exportSvgs[svgIndex];
-          if (exportSvg) this.replaceForeignObjectsWithText(sourceSvg, exportSvg);
+        conversionPages.forEach(({ sourcePage, exportPage }) => {
+          const sourceSvgs = Array.from(sourcePage.querySelectorAll(".mermaid svg"));
+          const exportSvgs = Array.from(exportPage.querySelectorAll(".mermaid svg"));
+          sourceSvgs.forEach((sourceSvg, svgIndex) => {
+            if (exportSvgs[svgIndex]) this.replaceForeignObjectsWithText(sourceSvg, exportSvgs[svgIndex]);
+          });
         });
-        if (wasHidden) sourcePage.classList.add("is-hidden");
+      } finally {
+        hiddenPages.forEach(({ sourcePage }) => sourcePage.classList.add("is-hidden"));
+        this.previewPagesEl.style.visibility = originalVisibility;
+        this.previewPagesEl.style.zoom = originalZoom;
       }
-    } finally {
-      this.previewPagesEl.style.visibility = originalVisibility;
-      this.previewPagesEl.style.zoom = originalZoom;
     }
     exportPages.forEach((page) => page.classList.remove("is-hidden"));
     const selected = this.selectedPageNumbers();

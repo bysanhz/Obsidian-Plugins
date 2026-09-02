@@ -653,6 +653,13 @@ body.bysan-style-controller-active
   transform-origin: top left;
 }
 
+/* A reduced transform also reduces this element's clipping box. Let the paper
+ * page, rather than the transformed content box, provide the final clipping so
+ * a wide image is not reduced to only its top edge. */
+.bysan-pdf-preview-page-content.is-reduced-output-scale {
+  overflow: visible;
+}
+
 .bysan-pdf-preview-page.has-header .bysan-pdf-preview-page-content {
   height: calc(100% - 9mm);
   margin-top: 9mm;

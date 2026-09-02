@@ -434,6 +434,7 @@ class BysanPdfPreviewModal extends Modal {
     const layoutSize = scale > 1 ? `${100 / scale}%` : "100%";
     content.style.width = layoutSize;
     content.style.height = layoutSize;
+    content.classList.toggle("is-reduced-output-scale", scale < 1);
   }
 
   isContentOverflow(content) {

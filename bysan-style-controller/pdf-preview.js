@@ -343,6 +343,7 @@ class BysanPdfPreviewModal extends Modal {
       this.view.file?.path || "",
       this
     );
+    await this.hydrateInternalImageEmbeds(this.previewStagingContentEl);
     await this.settleMediaWidths(markdown, this.previewStagingContentEl);
     this.previewStagingContentEl.querySelectorAll("img").forEach((image) => {
       if (!image.complete) image.addEventListener("load", () => this.schedulePagination(50), { once: true });
@@ -361,6 +362,31 @@ class BysanPdfPreviewModal extends Modal {
     resizer?.applyWidthsToRenderedRoot?.(root, markdown);
   }
 
+  async hydrateInternalImageEmbeds(root) {
+    const sourcePath = this.view.file?.path || "";
+    const supported = /\.(?:apng|avif|bmp|gif|jpe?g|png|svg|webp)$/i;
+    for (const embed of root.querySelectorAll("span.internal-embed[src]")) {
+      const link = embed.getAttribute("src") || "";
+      const file = this.app.metadataCache.getFirstLinkpathDest(link, sourcePath);
+      if (!file?.extension || !supported.test(`.${file.extension}`)) continue;
+      const resourcePath = this.app.vault.getResourcePath(file);
+      if (!resourcePath) continue;
+      const requestedWidth = Number(embed.getAttribute("width"));
+      embed.empty();
+      embed.addClass("image-embed", "is-loaded");
+      const image = embed.createEl("img", {
+        attr: {
+          src: resourcePath,
+          alt: embed.getAttribute("alt") || file.basename
+        }
+      });
+      if (Number.isFinite(requestedWidth) && requestedWidth > 0) {
+        image.style.width = `${requestedWidth}px`;
+        image.style.maxWidth = "100%";
+      }
+    }
+  }
+
   schedulePreviewRender(delay = 180) {
     window.clearTimeout(this.renderTimer);
     this.renderTimer = window.setTimeout(() => void this.renderPreview(), delay);
@@ -372,6 +398,10 @@ class BysanPdfPreviewModal extends Modal {
      * be copied at its default 100% width into a PDF page. */
     for (let frame = 0; frame < 2; frame += 1) {
       await new Promise((resolve) => requestAnimationFrame(resolve));
+      /* Obsidian inserts internal-embed placeholders after the Markdown
+       * renderer resolves. Hydrate on every settling frame so they cannot
+       * remain an empty span in the detached PDF tree. */
+      await this.hydrateInternalImageEmbeds(root);
       this.applyMediaWidths(markdown, root);
     }
   }

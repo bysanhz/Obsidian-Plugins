@@ -1922,3 +1922,23 @@ body.bysan-style-controller-active
 .markdown-source-view .cm-lineNumbers .cm-gutterElement.bysan-source-line-range.cm-active::after {
   color: var(--interactive-accent);
 }
+
+/* MathJax widgets in Live Preview are not Mermaid widgets.  The bundled base
+ * stylesheet used to give every non-editable CodeMirror block `overflow:auto`.
+ * That makes a display equation acquire both scroll axes and Chromium may
+ * relayout the following CodeMirror widgets each time its horizontal bar is
+ * hovered.  Keep equations horizontally scrollable, but isolate the scroll
+ * axis and their layout; Mermaid retains its own resizable scroll container. */
+.markdown-source-view.mod-cm6 .cm-content > .math.math-block.cm-embed-block[contenteditable="false"] {
+  box-sizing: border-box;
+  max-width: 100%;
+  overflow-x: auto !important;
+  overflow-y: hidden !important;
+  overscroll-behavior-inline: contain;
+  scrollbar-gutter: stable;
+  contain: layout paint !important;
+}
+
+.markdown-source-view.mod-cm6 .cm-content > .math.math-block.cm-embed-block[contenteditable="false"]::-webkit-scrollbar {
+  height: 8px;
+}

@@ -274,10 +274,21 @@ body.bysan-style-controller-active
   border-left: var(--bysan-quote-border-width, 4px) solid var(--bysan-quote-border) !important;
   font-family: var(--bysan-quote-font);
   font-style: normal;
-  /* The Live Preview marker occupies the first 11px.  Use the horizontal
-   * padding setting here (not the vertical one), so quote text keeps the same
-   * breathing room as Reading View. */
-  padding-inline-start: calc(11px + var(--bysan-quote-padding-x, 2em)) !important;
+  /* CodeMirror decorates quote lines with an inline negative text-indent.
+   * Padding alone therefore only moves wrapped lines.  Reset that decoration,
+   * reserve one compact text inset, and place the source `>` marker outside
+   * normal text flow so the first and subsequent lines start together. */
+  position: relative;
+  padding-inline-start: max(2em, var(--bysan-quote-padding-x, 2em)) !important;
+  text-indent: 0 !important;
+}
+
+body.bysan-style-controller-active
+  .markdown-source-view.mod-cm6.is-live-preview
+  .HyperMD-quote
+  > .cm-formatting.cm-formatting-quote {
+  position: absolute;
+  inset-inline-start: -1.1em;
 }
 
 .markdown-source-view.mod-cm6 .cm-blockquote-border {

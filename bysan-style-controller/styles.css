@@ -274,7 +274,10 @@ body.bysan-style-controller-active
   border-left: var(--bysan-quote-border-width, 4px) solid var(--bysan-quote-border) !important;
   font-family: var(--bysan-quote-font);
   font-style: normal;
-  padding-inline-start: calc(11px + var(--bysan-quote-padding-y, 0.55em)) !important;
+  /* The Live Preview marker occupies the first 11px.  Use the horizontal
+   * padding setting here (not the vertical one), so quote text keeps the same
+   * breathing room as Reading View. */
+  padding-inline-start: calc(11px + var(--bysan-quote-padding-x, 2em)) !important;
 }
 
 .markdown-source-view.mod-cm6 .cm-blockquote-border {

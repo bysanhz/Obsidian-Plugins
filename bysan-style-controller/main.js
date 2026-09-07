@@ -1,6 +1,6 @@
 /**
  * Bysan Style Controller
- * Version: 0.16.5
+ * Version: 0.16.6
  *
  * Owns visual presentation and provides switchable, integrated Bysan modules.
  */
@@ -539,7 +539,7 @@ module.exports = class BysanStyleController extends Plugin {
       name: this.t("paragraphCleanup.command"),
       editorCallback: (editor, view) => this.removeParagraphBlankLines(editor, view)
     });
-    this.addRibbonIcon("remove-formatting", this.t("paragraphCleanup.command"), () => {
+    this.addRibbonIcon("list-collapse", this.t("paragraphCleanup.command"), () => {
       const view = this.app.workspace.getActiveViewOfType(MarkdownView);
       if (!view?.editor) {
         new Notice(this.t("paragraphCleanup.openNote"));
@@ -578,7 +578,7 @@ module.exports = class BysanStyleController extends Plugin {
       this.register(() => window.clearTimeout(timer));
     }
 
-    console.log(`[Bysan Style Controller] v0.16.5 loaded with ${this.themeControls.count} regional theme controls`);
+    console.log(`[Bysan Style Controller] v0.16.6 loaded with ${this.themeControls.count} regional theme controls`);
   }
 
 

@@ -1,6 +1,6 @@
 /**
  * Bysan Style Controller
- * Version: 0.16.6
+ * Version: 0.16.7
  *
  * Owns visual presentation and provides switchable, integrated Bysan modules.
  */
@@ -88,7 +88,11 @@ function isPlainParagraphLine(line) {
     /^\|/.test(text) || /\|\s*:?-{3,}:?\s*(?:\||$)/.test(text) ||
     /^(?:`{3,}|~{3,})/.test(text) ||
     /^\${2,}/.test(text) ||
-    /^(?:---|\*\*\*|___)$/.test(text) ||
+    /* Keep Markdown horizontal rules and Setext heading underlines separate.
+     * ChatGPT often emits `------` (six dashes), not only `---`.  Removing
+     * the preceding blank line would turn the previous plain paragraph into a
+     * Setext heading, so every 3+ marker form must be structural. */
+    /^(?:[-=*_][ \t]*){3,}$/.test(text) ||
     /^<\/?[A-Za-z][^>]*>$/.test(text) ||
     /^\[\^[^\]]+\]:/.test(text)
   );
@@ -578,7 +582,7 @@ module.exports = class BysanStyleController extends Plugin {
       this.register(() => window.clearTimeout(timer));
     }
 
-    console.log(`[Bysan Style Controller] v0.16.6 loaded with ${this.themeControls.count} regional theme controls`);
+    console.log(`[Bysan Style Controller] v0.16.7 loaded with ${this.themeControls.count} regional theme controls`);
   }
 
 

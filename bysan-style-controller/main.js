@@ -1,6 +1,6 @@
 /**
  * Bysan Style Controller
- * Version: 0.16.4
+ * Version: 0.16.5
  *
  * Owns visual presentation and provides switchable, integrated Bysan modules.
  */
@@ -70,6 +70,81 @@ const INTEGRATED_MODULES = [
 ];
 
 const MODULE_SETTING_KEYS = new Set(INTEGRATED_MODULES.map((module) => module.key));
+
+/*
+ * ChatGPT-style pasted Markdown commonly has one or more visual blank lines
+ * between otherwise ordinary text paragraphs.  Markdown also uses blank lines
+ * as structural separators, so this deliberately removes only runs whose two
+ * neighbouring lines are plain paragraph text.  Fenced code, frontmatter,
+ * headings, lists, quotes, tables, callouts and display math stay untouched.
+ */
+function isPlainParagraphLine(line) {
+  const text = String(line || "").trim();
+  if (!text) return false;
+  return !(
+    /^#{1,6}(?:\s|$)/.test(text) ||
+    /^(?:[-*+]\s+|\d+[.)]\s+|[-*+]\s+\[[ xX]\]\s+)/.test(text) ||
+    /^>/.test(text) ||
+    /^\|/.test(text) || /\|\s*:?-{3,}:?\s*(?:\||$)/.test(text) ||
+    /^(?:`{3,}|~{3,})/.test(text) ||
+    /^\${2,}/.test(text) ||
+    /^(?:---|\*\*\*|___)$/.test(text) ||
+    /^<\/?[A-Za-z][^>]*>$/.test(text) ||
+    /^\[\^[^\]]+\]:/.test(text)
+  );
+}
+
+function buildParagraphBlankLineChanges(markdown) {
+  const lines = String(markdown || "").split("\n");
+
+  const protectedLines = new Set();
+  let inFrontmatter = lines[0]?.trim() === "---";
+  let fence = null;
+  for (let index = 0; index < lines.length; index += 1) {
+    const trimmed = lines[index].trim();
+    if (inFrontmatter) {
+      protectedLines.add(index);
+      if (index > 0 && /^(---|\.\.\.)\s*$/.test(trimmed)) inFrontmatter = false;
+      continue;
+    }
+    const fenceMatch = trimmed.match(/^(`{3,}|~{3,})/);
+    if (fence) {
+      protectedLines.add(index);
+      if (fenceMatch && fenceMatch[1][0] === fence) fence = null;
+      continue;
+    }
+    if (fenceMatch) {
+      protectedLines.add(index);
+      fence = fenceMatch[1][0];
+    }
+  }
+
+  const changes = [];
+  for (let start = 0; start < lines.length;) {
+    if (lines[start].trim() !== "" || protectedLines.has(start)) {
+      start += 1;
+      continue;
+    }
+    let end = start;
+    while (end < lines.length && lines[end].trim() === "" && !protectedLines.has(end)) end += 1;
+    const before = start - 1;
+    const after = end;
+    if (
+      before >= 0 && after < lines.length &&
+      !protectedLines.has(before) && !protectedLines.has(after) &&
+      isPlainParagraphLine(lines[before]) && isPlainParagraphLine(lines[after])
+    ) {
+      /* Remove only blank-line records; retain one normal line break. */
+      changes.push({
+        from: { line: start, ch: 0 },
+        to: { line: after, ch: 0 },
+        text: ""
+      });
+    }
+    start = end;
+  }
+  return changes;
+}
 
 const CONTENT_GEOMETRY_CONTROLS = [
   ["inlineCodeRadius", "--bysan-inline-code-radius", "px", 0, 16, 1, "行内代码圆角", "Inline-code radius"],
@@ -459,6 +534,19 @@ module.exports = class BysanStyleController extends Plugin {
       }
     });
     this.addRibbonIcon("file-down", this.t("pdf.command"), () => this.openPdfPreview());
+    this.addCommand({
+      id: "remove-paragraph-blank-lines",
+      name: this.t("paragraphCleanup.command"),
+      editorCallback: (editor, view) => this.removeParagraphBlankLines(editor, view)
+    });
+    this.addRibbonIcon("remove-formatting", this.t("paragraphCleanup.command"), () => {
+      const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+      if (!view?.editor) {
+        new Notice(this.t("paragraphCleanup.openNote"));
+        return;
+      }
+      this.removeParagraphBlankLines(view.editor, view);
+    });
     this.applySettings();
     await this.syncIntegratedModules();
 
@@ -490,7 +578,7 @@ module.exports = class BysanStyleController extends Plugin {
       this.register(() => window.clearTimeout(timer));
     }
 
-    console.log(`[Bysan Style Controller] v0.16.4 loaded with ${this.themeControls.count} regional theme controls`);
+    console.log(`[Bysan Style Controller] v0.16.5 loaded with ${this.themeControls.count} regional theme controls`);
   }
 
 
@@ -500,6 +588,27 @@ module.exports = class BysanStyleController extends Plugin {
       return;
     }
     window.setTimeout(() => new BysanPdfPreviewModal(this.app, this, view).open(), 80);
+  }
+
+
+  removeParagraphBlankLines(editor, view) {
+    const changes = buildParagraphBlankLineChanges(editor.getValue());
+    if (changes.length === 0) {
+      new Notice(this.t("paragraphCleanup.none"));
+      return false;
+    }
+
+    const fileName = view?.file?.name || this.t("pdf.currentNote");
+    const confirmed = window.confirm(this.t("paragraphCleanup.confirm", {
+      name: fileName,
+      count: changes.length
+    }));
+    if (!confirmed) return false;
+
+    /* One CodeMirror transaction makes the entire cleanup a single Ctrl+Z. */
+    editor.transaction({ changes });
+    new Notice(this.t("paragraphCleanup.done", { count: changes.length }));
+    return true;
   }
 
 

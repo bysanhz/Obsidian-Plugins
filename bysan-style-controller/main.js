@@ -73,37 +73,17 @@ const MODULE_SETTING_KEYS = new Set(INTEGRATED_MODULES.map((module) => module.ke
 
 /*
  * ChatGPT-style pasted Markdown commonly has one or more visual blank lines
- * between otherwise ordinary text paragraphs.  Markdown also uses blank lines
- * as structural separators, so this deliberately removes only runs whose two
- * neighbouring lines are plain paragraph text.  Fenced code, frontmatter,
- * headings, lists, quotes, tables, callouts and display math stay untouched.
+ * outside standalone blocks. Paragraph merging is intentional. Keep a separator
+ * before potential Setext underlines so ordinary text cannot become a heading.
  */
-function isPlainParagraphLine(line) {
-  const text = String(line || "").trim();
-  if (!text) return false;
-  return !(
-    /^#{1,6}(?:\s|$)/.test(text) ||
-    /^(?:[-*+]\s+|\d+[.)]\s+|[-*+]\s+\[[ xX]\]\s+)/.test(text) ||
-    /^>/.test(text) ||
-    /^\|/.test(text) || /\|\s*:?-{3,}:?\s*(?:\||$)/.test(text) ||
-    /^(?:`{3,}|~{3,})/.test(text) ||
-    /^\${2,}/.test(text) ||
-    /* Keep Markdown horizontal rules and Setext heading underlines separate.
-     * ChatGPT often emits `------` (six dashes), not only `---`.  Removing
-     * the preceding blank line would turn the previous plain paragraph into a
-     * Setext heading, so every 3+ marker form must be structural. */
-    /^(?:[-=*_][ \t]*){3,}$/.test(text) ||
-    /^<\/?[A-Za-z][^>]*>$/.test(text) ||
-    /^\[\^[^\]]+\]:/.test(text)
-  );
-}
-
 function buildParagraphBlankLineChanges(markdown) {
   const lines = String(markdown || "").split("\n");
 
   const protectedLines = new Set();
   let inFrontmatter = lines[0]?.trim() === "---";
   let fence = null;
+  let math = null;
+  let html = null;
   for (let index = 0; index < lines.length; index += 1) {
     const trimmed = lines[index].trim();
     if (inFrontmatter) {
@@ -111,15 +91,39 @@ function buildParagraphBlankLineChanges(markdown) {
       if (index > 0 && /^(---|\.\.\.)\s*$/.test(trimmed)) inFrontmatter = false;
       continue;
     }
-    const fenceMatch = trimmed.match(/^(`{3,}|~{3,})/);
+    const fenceMatch = trimmed.match(/^(`{3,}|~{3,})(.*)$/);
     if (fence) {
       protectedLines.add(index);
-      if (fenceMatch && fenceMatch[1][0] === fence) fence = null;
+      if (fenceMatch && fenceMatch[1][0] === fence[0] &&
+          fenceMatch[1].length >= fence.length && !fenceMatch[2].trim()) fence = null;
+      continue;
+    }
+    if (math) {
+      protectedLines.add(index);
+      if (trimmed.includes(math)) math = null;
+      continue;
+    }
+    if (html) {
+      protectedLines.add(index);
+      if (trimmed.toLowerCase().includes(html)) html = null;
       continue;
     }
     if (fenceMatch) {
       protectedLines.add(index);
-      fence = fenceMatch[1][0];
+      fence = fenceMatch[1];
+      continue;
+    }
+    const mathOpen = trimmed.startsWith('$$') ? '$$' : trimmed.startsWith('\\[') ? '\\]' : null;
+    if (mathOpen) {
+      protectedLines.add(index);
+      if (!trimmed.slice(2).includes(mathOpen)) math = mathOpen;
+      continue;
+    }
+    const htmlOpen = trimmed.match(/^<(pre|script|style|table|div|details)\b/i);
+    const htmlEnd = htmlOpen ? `</${htmlOpen[1].toLowerCase()}>` : trimmed.startsWith('<!--') ? '-->' : null;
+    if (htmlEnd) {
+      protectedLines.add(index);
+      if (!trimmed.toLowerCase().includes(htmlEnd)) html = htmlEnd;
     }
   }
 
@@ -133,16 +137,23 @@ function buildParagraphBlankLineChanges(markdown) {
     while (end < lines.length && lines[end].trim() === "" && !protectedLines.has(end)) end += 1;
     const before = start - 1;
     const after = end;
-    if (
-      before >= 0 && after < lines.length &&
-      !protectedLines.has(before) && !protectedLines.has(after) &&
-      isPlainParagraphLine(lines[before]) && isPlainParagraphLine(lines[after])
-    ) {
+    // A blank within indented code is content, as is an internal table gap.
+    const indented = (line) => /^(?: {4}|\t)\s*\S/.test(line || '');
+    const inIndentedBlock = indented(lines[before]) && indented(lines[after]);
+    const inTable = /^\s*\|/.test(lines[before] || '') && /^\s*\|/.test(lines[after] || '');
+    const setextRisk = before >= 0 && after < lines.length &&
+      /^ {0,3}(?:-+|=+)[ \t]*$/.test(lines[after]);
+    if (!inIndentedBlock && !inTable) {
       /* Remove only blank-line records; retain one normal line break. */
+      const text = setextRisk ? '\n' : '';
+      const to = after < lines.length ? { line: after, ch: 0 } :
+        { line: lines.length - 1, ch: lines[lines.length - 1].length };
+      if (to.line === start && to.ch === 0 && !text) { start = end; continue; }
+      if (setextRisk && end - start === 1) { start = end; continue; }
       changes.push({
         from: { line: start, ch: 0 },
-        to: { line: after, ch: 0 },
-        text: ""
+        to,
+        text
       });
     }
     start = end;
@@ -582,7 +593,7 @@ module.exports = class BysanStyleController extends Plugin {
       this.register(() => window.clearTimeout(timer));
     }
 
-    console.log(`[Bysan Style Controller] v0.16.7 loaded with ${this.themeControls.count} regional theme controls`);
+    console.log(`[Bysan Style Controller] v0.16.8 loaded with ${this.themeControls.count} regional theme controls`);
   }
 
 

@@ -1,6 +1,6 @@
 /**
  * Bysan Style Controller
- * Version: 0.16.7
+ * Version: 0.16.9
  *
  * Owns visual presentation and provides switchable, integrated Bysan modules.
  */
@@ -76,10 +76,24 @@ const MODULE_SETTING_KEYS = new Set(INTEGRATED_MODULES.map((module) => module.ke
  * outside standalone blocks. Paragraph merging is intentional. Keep a separator
  * before potential Setext underlines so ordinary text cannot become a heading.
  */
-function buildParagraphBlankLineChanges(markdown) {
+const BLANK_LINE_OPTIONS = [
+  ['paragraph', '普通段落', 'Paragraphs', false],
+  ['heading', '标题', 'Headings', false],
+  ['list', '列表与任务列表', 'Lists and tasks', false],
+  ['quote', '引用与 Callout', 'Quotes and callouts', false],
+  ['code', '代码块', 'Code blocks', true],
+  ['image', '图片与嵌入', 'Images and embeds', true],
+  ['table', '表格', 'Tables', true],
+  ['math', '公式块', 'Math blocks', true],
+  ['divider', '分隔线', 'Dividers', true],
+  ['html', 'HTML 块', 'HTML blocks', true]
+];
+
+function buildParagraphBlankLineChanges(markdown, options = {}) {
   const lines = String(markdown || "").split("\n");
 
   const protectedLines = new Set();
+  const types = new Map();
   let inFrontmatter = lines[0]?.trim() === "---";
   let fence = null;
   let math = null;
@@ -93,28 +107,33 @@ function buildParagraphBlankLineChanges(markdown) {
     }
     const fenceMatch = trimmed.match(/^(`{3,}|~{3,})(.*)$/);
     if (fence) {
+      types.set(index, 'code');
       protectedLines.add(index);
       if (fenceMatch && fenceMatch[1][0] === fence[0] &&
           fenceMatch[1].length >= fence.length && !fenceMatch[2].trim()) fence = null;
       continue;
     }
     if (math) {
+      types.set(index, 'math');
       protectedLines.add(index);
       if (trimmed.includes(math)) math = null;
       continue;
     }
     if (html) {
+      types.set(index, 'html');
       protectedLines.add(index);
       if (trimmed.toLowerCase().includes(html)) html = null;
       continue;
     }
     if (fenceMatch) {
+      types.set(index, 'code');
       protectedLines.add(index);
       fence = fenceMatch[1];
       continue;
     }
     const mathOpen = trimmed.startsWith('$$') ? '$$' : trimmed.startsWith('\\[') ? '\\]' : null;
     if (mathOpen) {
+      types.set(index, 'math');
       protectedLines.add(index);
       if (!trimmed.slice(2).includes(mathOpen)) math = mathOpen;
       continue;
@@ -122,11 +141,34 @@ function buildParagraphBlankLineChanges(markdown) {
     const htmlOpen = trimmed.match(/^<(pre|script|style|table|div|details)\b/i);
     const htmlEnd = htmlOpen ? `</${htmlOpen[1].toLowerCase()}>` : trimmed.startsWith('<!--') ? '-->' : null;
     if (htmlEnd) {
+      types.set(index, 'html');
       protectedLines.add(index);
       if (!trimmed.toLowerCase().includes(htmlEnd)) html = htmlEnd;
     }
   }
 
+  // Identify table rows from their delimiter, including tables without outer pipes.
+  for (let i = 1; i < lines.length; i += 1) {
+    if (protectedLines.has(i)) continue;
+    const cells = lines[i].trim().replace(/^\|/, '').replace(/\|$/, '').split('|');
+    if (!lines[i].includes('|') || !cells.every(cell => /^\s*:?-{3,}:?\s*$/.test(cell))) continue;
+    types.set(i - 1, 'table');
+    types.set(i, 'table');
+    for (let j = i + 1; j < lines.length && lines[j].trim() && lines[j].includes('|') && !protectedLines.has(j); j++) types.set(j, 'table');
+  }
+  const classify = (index) => {
+    if (index < 0 || index >= lines.length) return null;
+    if (types.has(index)) return types.get(index);
+    const line = lines[index];
+    if (/^\s*(?:!\[|<img\b)/i.test(line)) return 'image';
+    if (/^ {0,3}#{1,6}(?:\s|$)/.test(line) || /^ {0,3}(?:=+|-+)[ \t]*$/.test(lines[index + 1] || '')) return 'heading';
+    if (/^\s*>/.test(line)) return 'quote';
+    if (/^\s*(?:[-+*]|\d+[.)])\s+/.test(line)) return 'list';
+    if (/^ {0,3}(?:(?:\*\s*){3,}|(?:-\s*){3,}|(?:_\s*){3,})$/.test(line)) return 'divider';
+    if (/^(?: {4}|\t)\S/.test(line)) return 'code';
+    return 'paragraph';
+  };
+  const preserve = (type) => type && (options[type] ?? BLANK_LINE_OPTIONS.find(item => item[0] === type)?.[3]);
   const changes = [];
   for (let start = 0; start < lines.length;) {
     if (lines[start].trim() !== "" || protectedLines.has(start)) {
@@ -145,11 +187,12 @@ function buildParagraphBlankLineChanges(markdown) {
       /^ {0,3}(?:-+|=+)[ \t]*$/.test(lines[after]);
     if (!inIndentedBlock && !inTable) {
       /* Remove only blank-line records; retain one normal line break. */
-      const text = setextRisk ? '\n' : '';
+      const keep = setextRisk || preserve(classify(before)) || preserve(classify(after));
+      const text = keep && before >= 0 && after < lines.length ? '\n' : '';
       const to = after < lines.length ? { line: after, ch: 0 } :
         { line: lines.length - 1, ch: lines[lines.length - 1].length };
       if (to.line === start && to.ch === 0 && !text) { start = end; continue; }
-      if (setextRisk && end - start === 1) { start = end; continue; }
+      if (text && end - start === 1) { start = end; continue; }
       changes.push({
         from: { line: start, ch: 0 },
         to,
@@ -382,6 +425,7 @@ const DEFAULT_SETTINGS = {
 };
 
 const PRESET_META_KEYS = new Set([
+  "blankLinePreservation",
   "settingsVersion",
   "stylePresets",
   "activeStylePreset",
@@ -593,7 +637,7 @@ module.exports = class BysanStyleController extends Plugin {
       this.register(() => window.clearTimeout(timer));
     }
 
-    console.log(`[Bysan Style Controller] v0.16.8 loaded with ${this.themeControls.count} regional theme controls`);
+    console.log(`[Bysan Style Controller] v0.16.9 loaded with ${this.themeControls.count} regional theme controls`);
   }
 
 
@@ -607,7 +651,7 @@ module.exports = class BysanStyleController extends Plugin {
 
 
   removeParagraphBlankLines(editor, view) {
-    const changes = buildParagraphBlankLineChanges(editor.getValue());
+    const changes = buildParagraphBlankLineChanges(editor.getValue(), this.settings.blankLinePreservation);
     if (changes.length === 0) {
       new Notice(this.t("paragraphCleanup.none"));
       return false;
@@ -2000,6 +2044,27 @@ class BysanStyleSettingTab extends PluginSettingTab {
 
 
   renderTextDetailSettings(containerEl) {
+    const zh = this.plugin.language === 'zh';
+    this.createFeatureGroup(containerEl, zh ? '空行清理' : 'Blank-line cleanup',
+      zh ? '开启：保留该类型前后一行；关闭：删除。相邻任一类型要求保留时保留一行。模块内部及防止误变标题的必要空行始终受保护。' : 'On: keep one surrounding blank line; off: remove. Either neighbouring type can preserve the gap. Block contents and heading safety are always protected.',
+      body => {
+        for (const [key, cn, en, fallback] of BLANK_LINE_OPTIONS) {
+          new Setting(body).setName(zh ? cn : en).addToggle(toggle => toggle
+            .setValue(this.plugin.settings.blankLinePreservation?.[key] ?? fallback)
+            .onChange(value => this.plugin.updateSetting('blankLinePreservation', {
+              ...this.plugin.settings.blankLinePreservation, [key]: value
+            })));
+        }
+        new Setting(body).setName(zh ? '批量设置' : 'Bulk settings')
+          .addButton(button => button.setButtonText(zh ? '全部开启清理' : 'Remove all').onClick(async () => {
+            await this.plugin.updateSetting('blankLinePreservation', Object.fromEntries(BLANK_LINE_OPTIONS.map(([key]) => [key, false])));
+            this.display();
+          }))
+          .addButton(button => button.setButtonText(zh ? '恢复默认' : 'Restore defaults').onClick(async () => {
+            await this.plugin.updateSetting('blankLinePreservation', {});
+            this.display();
+          }));
+      });
     const heading = new Setting(containerEl)
       .setName(this.plugin.language === "zh" ? "文字、列表与分隔线" : "Text, lists and dividers")
       .setHeading();

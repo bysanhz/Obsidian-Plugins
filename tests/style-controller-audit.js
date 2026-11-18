@@ -196,6 +196,8 @@ const expectedGroups = [
 ];
 assert.deepStrictEqual(mountedGroups.sort(), expectedGroups.sort(), "every theme group must be mounted exactly once");
 assert(mainSource.includes('this.renderCompactSample(containerEl, "tags"'), "missing preview colocated with tag controls");
+assert(![mainSource, themeSource].some(source => source.includes("bysan-theme-color-value")),
+  "color codes must be in picker tooltips, not inline settings labels");
 for (const sample of ["tabs", "navigation", "window", "lists", "embeds", "canvas", "graph"]) {
   assert(mainSource.includes(`\n      ${sample}: [tr(`), `missing inline preview: ${sample}`);
 }

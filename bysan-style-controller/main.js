@@ -1,6 +1,6 @@
 /**
  * Bysan Style Controller
- * Version: 0.17.7
+ * Version: 0.17.8
  *
  * Owns visual presentation and provides switchable, integrated Bysan modules.
  */
@@ -2449,37 +2449,36 @@ class BysanStyleSettingTab extends PluginSettingTab {
     const setting = new Setting(containerEl).setName(name).setDesc(description);
     const addMode = (mode, colorKey, opacityKey) => {
       let pickerComponent;
-      let colorValue;
       let opacitySlider;
+      const modeLabel = this.plugin.t(mode === "light" ? "theme.light" : "theme.dark");
+      const colorLabel = this.plugin.t("theme.colorTitle", { mode: modeLabel });
       const displayColor = () => opacityKey
         ? hexWithAlpha(this.plugin.settings[colorKey], this.plugin.settings[opacityKey])
         : String(this.plugin.settings[colorKey]).toUpperCase();
-      const group = this.addModeControl(setting, mode, "color", () => {
+      const updateTooltip = () => {
+        pickerComponent.colorPickerEl.title = `${colorLabel} · ${displayColor()}`;
+      };
+      this.addModeControl(setting, mode, "color", () => {
         setting.addColorPicker((picker) => {
           pickerComponent = picker;
+          picker.colorPickerEl.setAttribute("aria-label", `${name} · ${colorLabel}`);
           picker.setValue(this.plugin.settings[colorKey])
             .onChange((value) => {
-              this.plugin.settings[colorKey] = value;
-              colorValue.setText(displayColor());
-              colorValue.title = colorValue.textContent;
-              this.plugin.updateSetting(colorKey, value);
+              void this.plugin.updateSetting(colorKey, value);
+              updateTooltip();
             });
+          updateTooltip();
         });
-        colorValue = setting.controlEl.createSpan({
-          cls: "bysan-theme-color-value",
-          text: displayColor()
-        });
-        colorValue.title = colorValue.textContent;
         if (opacityKey) {
           setting.addSlider((slider) => {
             opacitySlider = slider;
+            slider.sliderEl.setAttribute("aria-label", `${name} · ${this.plugin.t("theme.opacityTitle", { mode: modeLabel })}`);
             slider.setLimits(0, 1, 0.01)
+              .setDynamicTooltip()
               .setValue(this.plugin.settings[opacityKey])
               .onChange((value) => {
-                this.plugin.settings[opacityKey] = value;
-                colorValue.setText(displayColor());
-                colorValue.title = colorValue.textContent;
-                this.plugin.updateSetting(opacityKey, value);
+                void this.plugin.updateSetting(opacityKey, value);
+                updateTooltip();
               });
           });
         }
@@ -2488,10 +2487,8 @@ class BysanStyleSettingTab extends PluginSettingTab {
         if (opacityKey) await this.plugin.resetSetting(opacityKey);
         pickerComponent.setValue(this.plugin.settings[colorKey]);
         opacitySlider?.setValue(this.plugin.settings[opacityKey]);
-        colorValue?.setText(displayColor());
-        colorValue.title = colorValue.textContent;
+        updateTooltip();
       });
-      if (opacityKey) group.addClass("bysan-mode-control-has-opacity");
     };
     addMode("light", lightKey, lightOpacityKey);
     addMode("dark", darkKey, darkOpacityKey);

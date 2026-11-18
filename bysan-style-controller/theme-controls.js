@@ -1233,7 +1233,7 @@ class ThemeControls {
       const label = mode === "light" ? this.plugin.t("theme.light") : this.plugin.t("theme.dark");
       const parsed = parseColor(this.displayValueFor(item, mode));
       const group = setting.controlEl.createDiv({
-        cls: `bysan-color-mode bysan-theme-color-mode bysan-theme-color-mode-${mode}${item.opacity ? " bysan-theme-color-mode-has-opacity" : ""}`
+        cls: `bysan-color-mode bysan-theme-color-mode bysan-theme-color-mode-${mode}`
       });
       group.createSpan({
         cls: `bysan-mode-label bysan-mode-label-${mode}`,
@@ -1247,18 +1247,18 @@ class ThemeControls {
         }
       };
       let pickerComponent;
-      let valueLabel;
       let sliderComponent;
       let syncingControls = false;
-      const updateValueLabel = (hex, alpha) => {
-        const value = colorWithAlpha(hex, item.opacity ? alpha : 1).toUpperCase();
-        valueLabel.setText(value);
-        valueLabel.title = value;
+      const colorLabel = this.plugin.t("theme.colorTitle", { mode: label });
+      const updateTooltip = (hex, alpha) => {
+        const value = (item.opacity ? colorWithAlpha(hex, alpha) : hex).toUpperCase();
+        pickerComponent.colorPickerEl.title = `${colorLabel} · ${value}`;
       };
       appendNewControls(() => setting.addColorPicker((picker) => {
         pickerComponent = picker;
         picker.setValue(parsed.hex);
-        picker.colorPickerEl?.setAttribute("title", this.plugin.t("theme.colorTitle", { mode: label }));
+        picker.colorPickerEl.setAttribute("aria-label", `${setting.nameEl.textContent} · ${colorLabel}`);
+        updateTooltip(parsed.hex, parsed.alpha);
         picker.onChange((hex) => {
           if (syncingControls) return;
           const current = parseColor(this.displayValueFor(item, mode));
@@ -1272,14 +1272,10 @@ class ThemeControls {
               syncingControls = false;
             }
           }
-          updateValueLabel(hex, alpha);
+          updateTooltip(hex, alpha);
           this.updateThemedColor(item, mode, hex, alpha);
         });
       }));
-      valueLabel = group.createSpan({
-        cls: "bysan-theme-color-value"
-      });
-      updateValueLabel(parsed.hex, parsed.alpha);
       if (item.opacity) {
         appendNewControls(() => setting.addSlider((slider) => {
           sliderComponent = slider;
@@ -1290,7 +1286,7 @@ class ThemeControls {
           slider.onChange((alpha) => {
             if (syncingControls) return;
             const current = parseColor(this.displayValueFor(item, mode));
-            updateValueLabel(current.hex, alpha);
+            updateTooltip(current.hex, alpha);
             this.updateThemedColor(item, mode, current.hex, alpha);
           });
         }));
@@ -1308,7 +1304,7 @@ class ThemeControls {
         try {
           pickerComponent?.setValue(restored.hex);
           sliderComponent?.setValue(restored.alpha);
-          updateValueLabel(restored.hex, restored.alpha);
+          updateTooltip(restored.hex, restored.alpha);
         } finally {
           syncingControls = false;
         }

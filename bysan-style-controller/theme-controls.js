@@ -351,7 +351,36 @@ function chineseTitle(text) {
     .replace(/Options for 'Custom'/g, "自定义选项");
 }
 
+const NOTE_BACKGROUND_COPY = {
+  "bg-color-notebook": {
+    "title.zh": "点阵与网格纸面底色",
+    title: "Dotted and grid paper colour",
+    "description.zh": "随纸纹理开启；「覆盖笔记底色」设值时优先显示覆盖色。",
+    description: "Used when a dotted or grid pattern is enabled. The note base-colour override takes priority."
+  },
+  "background-image-settings-switch": {
+    "title.zh": "启用背景图或透明底层",
+    title: "Enable background image or transparent underlay"
+  },
+  "background-image-settings-markdown-page-options": {
+    "title.zh": "底层方式",
+    title: "Underlay mode"
+  },
+  "bg-markdown-page-opacity-cp": {
+    "title.zh": "背景图与底层颜色不透明度",
+    title: "Image and underlay opacity"
+  },
+  "custom-markdown-page-background-color": {
+    "title.zh": "自定义底层颜色",
+    title: "Custom underlay colour",
+    "description.zh": "仅在底层方式为「自定义」时生效。位于纸纹理和笔记底色下方。",
+    description: "Only applies in Custom mode. This layer sits under the paper pattern and note background colour."
+  }
+};
+
 function localised(item, key, language) {
+  const copy = NOTE_BACKGROUND_COPY[item.id]?.[language === "en" ? key : `${key}.zh`];
+  if (copy) return copy;
   if (language === "en") return item[key] || "";
   if (key === "description") return item[`${key}.zh`] || "";
   return chineseTitle(item[`${key}.zh`] || item[key] || "");
@@ -916,12 +945,13 @@ class ThemeControls {
     if (isIn(/pdf/) || /^(?:ob-pdf|pdf-|all-dark-pdf)/.test(id)) return "pdf";
     if (isIn(/background-settings-workplace/) || /^background-(?:settings-workplace|waves)/.test(id)) return "workspace-background";
     if (isIn(/command-palette|setting-etc|prompt-settings|loading-page/) || /^(?:background-command-palette|background-popover|loading-|setting-style)/.test(id)) return "window";
+    if (isIn(/markdown-page|notebook/) || id === "toggle-split-note-background" ||
+        /^(?:bg-markdown|bg-color-notebook|dotted-notebook|grid-notebook|stripe-notebook)/.test(id)) return "note-background";
     if (/^(?:toggle-bg-panel|bg-panel-page|background-panel-page)/.test(id) ||
         isIn(/outline-settings|folder-style|file-browser|file-tree/) ||
         /(?:outline|backlink|folder-file|folder-and-file|vault-name|font-.*-vault|split-note|font-size-split|line-height-split|letter-space-split)/.test(id)) return "navigation";
     if (isIn(/titlebar|tabs-settings|stack-settings|tab-stack/) ||
         /^(?:tab-|stack-tab|titlebar-|background-titlebar|font-size-file-header-title)/.test(id)) return "tabs";
-    if (isIn(/markdown-page|notebook/) || /^(?:bg-markdown|bg-color-notebook|dotted-notebook|grid-notebook|stripe-notebook)/.test(id)) return "note-background";
     if (isIn(/^(?:header-settings|h[1-6]-settings|inline-title-settings)$/) || /^(?:print-h[1-6]|inline-title|header-[1-6]|h[1-6]-)/.test(id)) return "headings";
     if (isIn(/list-style|checkbox-style|indentation-line/) || /^(?:list-|checklist-|indentation-guide)/.test(id)) return "lists";
     if (isIn(/fancy-hr|blockquote|table-styles/) || /^(?:admonition-|.*callout|table-)/.test(id)) return "blocks";
@@ -968,6 +998,14 @@ class ThemeControls {
     if (withTitle) wrapper.createEl("h4", { text: title });
     const renderGrid = (parent, entries) =>
       this.renderGroupedItems(parent.createDiv({ cls: "bysan-theme-grid" }), entries);
+    if (groupId === "note-background") {
+      const zh = this.plugin.language === "zh";
+      const isPaper = item => /notebook|fixed-pattern|split-note-background/.test(item.id);
+      renderGrid(wrapper, items.filter(isPaper));
+      wrapper.createEl("h4", { text: zh ? "背景图与透明底层" : "Background image and transparency" });
+      renderGrid(wrapper, items.filter(item => !isPaper(item)));
+      return;
+    }
     if (groupId === "marks" && renderTagSample) {
       const isTag = item => /^(tag(?:[1-5]|-.*)|head-tag-style|font-(?:family|size)-tag)$/.test(item.id);
       const tags = items.filter(isTag);

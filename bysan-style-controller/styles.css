@@ -68,7 +68,7 @@ body.bysan-style-controller-active .workspace {
 /* Overrides are written only for the mode the user customized. Existing
  * theme backgrounds and textures keep their original rules on reset. */
 body.bysan-style-controller-active[style*="--bysan-note-page-bg:"]
-.workspace-leaf-content[data-type="markdown"] :is(.cm-scroller, .markdown-preview-view) {
+:is(.workspace-leaf-content[data-type="markdown"] :is(.cm-scroller, .markdown-preview-view), .bysan-note-paper-example) {
   background-color: var(--bysan-note-page-bg) !important;
 }
 
@@ -899,11 +899,26 @@ body.bysan-style-controller-active
 .bysan-note-colors-example {
   padding: 0.4rem;
   border-radius: 5px;
-  background-color: var(--bysan-note-page-bg, var(--bysan-example-note-bg, var(--background-primary)));
 }
 
-body.background-notebook-liked-switch .bysan-note-colors-example {
-  --bysan-example-note-bg: var(--bg-color-notebook);
+/* Target these two layers from the same base-theme rules as the note leaf
+ * and its reading/editing surface so they cannot drift from the real paper. */
+.bysan-note-backdrop-example {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 5px;
+  background-color: var(--background-primary);
+}
+
+.bysan-note-backdrop-example::before {
+  z-index: -1;
+}
+
+.bysan-note-paper-example {
+  min-height: 6rem;
+  padding: 0.65rem;
 }
 
 body.muted-activeline-bg .bysan-note-colors-example .cm-active {

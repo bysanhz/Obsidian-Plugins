@@ -110,6 +110,14 @@ for (const region of ["workspace", "editor", "media", "extensions"]) {
   assert(regionStats[region] > 0, `empty interface region: ${region}`);
 }
 const byId = new Map(themeControls.controlItems.map(item => [item.id, item]));
+for (const id of ["background-notebook-liked-switch", "notebook-liked-markdown-page-options",
+  "bg-color-notebook", "dotted-notebook-dot-color", "grid-notebook-line-color-1", "grid-notebook-line-color-2",
+  "stripe-notebook-stripe-color", "toggle-fixed-pattern", "toggle-split-note-background",
+  "background-image-settings-switch", "custom-markdown-page-background-color", "bg-markdown-page-opacity-cp"]) {
+  assert.equal(themeControls.advancedGroupFor(byId.get(id)), "note-background", `split note background control: ${id}`);
+}
+assert.match(baseCss, /dotted-notebook-1[^\n]*\.bysan-note-paper-example/);
+assert.match(baseCss, /markdown-page-custom\.theme-dark[^\n]*\.bysan-note-backdrop-example/);
 for (const [lightId, darkId] of sandbox.module.exports.ADVANCED_MODE_PAIRS) {
   const light = byId.get(lightId);
   const dark = byId.get(darkId);
@@ -187,7 +195,7 @@ for (const objectId of ["body-text", "headings", "code", "blocks", "text-details
   assert(mainSource.includes(`createSettingsSection(containerEl, "${objectId}"`), `missing editor object group: ${objectId}`);
 }
 assert(!mainSource.includes('createSubarea('), "legacy nested settings navigation is still rendered");
-const mountedGroups = [...mainSource.matchAll(/this\.renderThemeGroups\(body, \[([^\]]*)\]/g)]
+const mountedGroups = [...mainSource.matchAll(/this\.renderThemeGroups\((?:body|controls), \[([^\]]*)\]/g)]
   .flatMap(match => [...match[1].matchAll(/"([^"]+)"/g)].map(entry => entry[1]));
 const expectedGroups = [
   "general", "workspace-background", "tabs", "navigation", "window", "canvas", "graph",

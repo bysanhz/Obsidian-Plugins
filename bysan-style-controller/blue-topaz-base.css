@@ -22542,7 +22542,7 @@ body.background-image-settings-switch.toggle-nonoverlapping-bg .workspace-split.
   background: var(--background-nonoverlapping-note);
 }
  
-body.background-image-settings-switch.toggle-nonoverlapping-bg .workspace-split.mod-root .view-content {
+body.background-image-settings-switch.toggle-nonoverlapping-bg :is(.workspace-split.mod-root .view-content,.bysan-note-backdrop-example) {
   background: var(--background-nonoverlapping-note);
 }
 
@@ -22563,19 +22563,19 @@ body.background-notebook-liked-switch .markdown-embed :is(.markdown-preview-view
 body.background-notebook-liked-switch .cm-s-obsidian .cm-embed-block {
   background: inherit !important;
 }
-body.background-notebook-liked-switch.notebook-liked-markdown-page-grid-notebook-1 .markdown-preview-view.markdown-rendered,
+body.background-notebook-liked-switch.notebook-liked-markdown-page-grid-notebook-1 :is(.markdown-preview-view.markdown-rendered,.bysan-note-paper-example),
 body.background-notebook-liked-switch.notebook-liked-markdown-page-grid-notebook-1 .cm-s-obsidian .cm-scroller {
   background: var(--bg-color-notebook);
   background-image: linear-gradient(90deg, var(--grid-notebook-line-color-1) 3%, transparent 0), linear-gradient(var(--grid-notebook-line-color-1) 3%, transparent 0);
   background-size: 20px 20px;
 }
 
-body:not(.toggle-fixed-pattern).background-notebook-liked-switch .markdown-preview-view.markdown-rendered,
+body:not(.toggle-fixed-pattern).background-notebook-liked-switch :is(.markdown-preview-view.markdown-rendered,.bysan-note-paper-example),
 body:not(.toggle-fixed-pattern).background-notebook-liked-switch .cm-s-obsidian .cm-scroller {
   background-attachment: local !important;
 }
 
-body.background-notebook-liked-switch.notebook-liked-markdown-page-dotted-notebook-1 .markdown-preview-view.markdown-rendered,
+body.background-notebook-liked-switch.notebook-liked-markdown-page-dotted-notebook-1 :is(.markdown-preview-view.markdown-rendered,.bysan-note-paper-example),
 body.background-notebook-liked-switch.notebook-liked-markdown-page-dotted-notebook-1 .cm-s-obsidian .cm-scroller {
   background: var(--bg-color-notebook);
   background-image: radial-gradient(var(--dotted-notebook-dot-color) 10%, transparent 0);
@@ -22583,7 +22583,7 @@ body.background-notebook-liked-switch.notebook-liked-markdown-page-dotted-notebo
   background-position: 8px 8px;
 }
 
-body.background-notebook-liked-switch.notebook-liked-markdown-page-dotted-notebook-2 .markdown-preview-view.markdown-rendered,
+body.background-notebook-liked-switch.notebook-liked-markdown-page-dotted-notebook-2 :is(.markdown-preview-view.markdown-rendered,.bysan-note-paper-example),
 body.background-notebook-liked-switch.notebook-liked-markdown-page-dotted-notebook-2 .cm-s-obsidian .cm-scroller {
   background: var(--bg-color-notebook);
   background-image: radial-gradient(var(--dotted-notebook-dot-color) 10%, transparent 0),
@@ -22593,7 +22593,7 @@ body.background-notebook-liked-switch.notebook-liked-markdown-page-dotted-notebo
 }
 
 /*https://www.jianshu.com/p/2b713844cfe9*/
-body.background-notebook-liked-switch.notebook-liked-markdown-page-grid-notebook-2 .markdown-preview-view.markdown-rendered,
+body.background-notebook-liked-switch.notebook-liked-markdown-page-grid-notebook-2 :is(.markdown-preview-view.markdown-rendered,.bysan-note-paper-example),
 body.background-notebook-liked-switch.notebook-liked-markdown-page-grid-notebook-2 .cm-s-obsidian .cm-scroller {
   background: var(--bg-color-notebook);
   background-image:
@@ -22605,25 +22605,25 @@ body.background-notebook-liked-switch.notebook-liked-markdown-page-grid-notebook
     transparent 0);
   background-size: 75px 75px, 75px 75px, 15px 15px, 15px 15px;
 }
-body.background-notebook-liked-switch.notebook-liked-markdown-page-stripe-notebook-1 .markdown-preview-view.markdown-rendered,
+body.background-notebook-liked-switch.notebook-liked-markdown-page-stripe-notebook-1 :is(.markdown-preview-view.markdown-rendered,.bysan-note-paper-example),
 body.background-notebook-liked-switch.notebook-liked-markdown-page-stripe-notebook-1 .cm-s-obsidian .cm-scroller {
   background: var(--stripe-notebook-stripe-color);
   background-image: repeating-linear-gradient(135deg,
   hsla(0,0%,100%,.03), hsla(0,0%,100%,.03) 13px, transparent 0, transparent 30px);
 }
-body.background-notebook-liked-switch.notebook-liked-markdown-page-stripe-notebook-1.theme-light .markdown-preview-view.markdown-rendered,
+body.background-notebook-liked-switch.notebook-liked-markdown-page-stripe-notebook-1.theme-light :is(.markdown-preview-view.markdown-rendered,.bysan-note-paper-example),
 body.background-notebook-liked-switch.notebook-liked-markdown-page-stripe-notebook-1.theme-light .cm-s-obsidian .cm-scroller {
   background: var(--stripe-notebook-stripe-color);
   background-image: repeating-linear-gradient(135deg,
   hsla(0,0%,100%,.3), hsla(0,0%,100%,.3) 13px, transparent 0, transparent 30px);
 }
-body.background-notebook-liked-switch.notebook-liked-markdown-page-stripe-notebook-2 .markdown-preview-view.markdown-rendered,
+body.background-notebook-liked-switch.notebook-liked-markdown-page-stripe-notebook-2 :is(.markdown-preview-view.markdown-rendered,.bysan-note-paper-example),
 body.background-notebook-liked-switch.notebook-liked-markdown-page-stripe-notebook-2 .cm-s-obsidian .cm-scroller {
   background: var(--stripe-notebook-stripe-color);
   background-image:repeating-linear-gradient(45deg,
   hsla(0,0%,100%,.025), hsla(0,0%,100%,.025) 20px, transparent 0, transparent 60px), repeating-linear-gradient(-45deg, hsla(0,0%,100%,.025), hsla(0,0%,100%,.025) 20px, transparent 0, transparent 60px);
 }
-body.background-notebook-liked-switch.notebook-liked-markdown-page-stripe-notebook-2.theme-light .markdown-preview-view.markdown-rendered,
+body.background-notebook-liked-switch.notebook-liked-markdown-page-stripe-notebook-2.theme-light :is(.markdown-preview-view.markdown-rendered,.bysan-note-paper-example),
 body.background-notebook-liked-switch.notebook-liked-markdown-page-stripe-notebook-2.theme-light .cm-s-obsidian .cm-scroller {
   background: var(--stripe-notebook-stripe-color);
   background-image:repeating-linear-gradient(45deg,
@@ -22640,7 +22640,7 @@ body.toggle-split-note-background .workspace-split.mod-horizontal:is(.mod-left-s
   background: initial;
 }
 
-body.background-image-settings-switch .workspace-split.mod-root .workspace-leaf:nth-child(n) .workspace-leaf-content[data-type="markdown"]::before {
+body.background-image-settings-switch :is(.workspace-split.mod-root .workspace-leaf:nth-child(n) .workspace-leaf-content[data-type="markdown"],.bysan-note-backdrop-example)::before {
   content: '';
   display: block;
   position: absolute;
@@ -22653,7 +22653,7 @@ body.background-image-settings-switch .workspace-split.mod-root .workspace-leaf:
 }
 
 
-body.background-image-settings-switch.background-image-settings-markdown-page-transparent .workspace-split.mod-root {
+body.background-image-settings-switch.background-image-settings-markdown-page-transparent :is(.workspace-split.mod-root,.bysan-note-backdrop-example) {
   --background-primary: transparent;
   --tab-outline-color:transparent;
 }
@@ -22668,14 +22668,14 @@ body.background-image-settings-switch.background-image-settings-markdown-page-tr
 
  
 
-body.background-image-settings-switch.background-image-settings-markdown-page-custom.theme-dark .workspace-split.mod-root .workspace-leaf .workspace-leaf-content[data-type="markdown"]::before {
+body.background-image-settings-switch.background-image-settings-markdown-page-custom.theme-dark :is(.workspace-split.mod-root .workspace-leaf .workspace-leaf-content[data-type="markdown"],.bysan-note-backdrop-example)::before {
   background-image: var(--background-markdown-page-theme-dark-custom);
 }
 
-body.background-image-settings-switch.background-image-settings-markdown-page-custom.theme-light .workspace-split.mod-root .workspace-leaf .workspace-leaf-content[data-type="markdown"]::before {
+body.background-image-settings-switch.background-image-settings-markdown-page-custom.theme-light :is(.workspace-split.mod-root .workspace-leaf .workspace-leaf-content[data-type="markdown"],.bysan-note-backdrop-example)::before {
   background-image: var(--background-markdown-page-theme-light-custom);
 }
-body.background-image-settings-switch.background-image-settings-markdown-page-custom .workspace-split.mod-root .workspace-leaf .workspace-leaf-content[data-type="markdown"]::before {
+body.background-image-settings-switch.background-image-settings-markdown-page-custom :is(.workspace-split.mod-root .workspace-leaf .workspace-leaf-content[data-type="markdown"],.bysan-note-backdrop-example)::before {
 background-size:unset;
 background-color: var(--custom-markdown-page-background-color);
 opacity: var(--bg-markdown-page-opacity-cp,1);

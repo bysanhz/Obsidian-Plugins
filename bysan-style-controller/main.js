@@ -1,6 +1,6 @@
 /**
  * Bysan Style Controller
- * Version: 0.17.8
+ * Version: 0.17.9
  *
  * Owns visual presentation and provides switchable, integrated Bysan modules.
  */
@@ -80,19 +80,25 @@ const NOTE_BODY_CONTROLS = [
   ["line-height-main", "正文行高", "Body line height"]
 ];
 const NOTE_BACKGROUND_CONTROLS = [
-  ["bysan-note-page-bg", "笔记页面底色", "Note page colour", "编辑与阅读正文。可与现有点阵、网格或条纹一起使用。", "Editor and reading view. Keeps the current dot, grid or stripe pattern."],
+  ["bysan-note-page-bg", "覆盖笔记底色", "Override note base colour", "只覆盖底色，不移除纹理。恢复后使用主题或纸面底色。", "Replaces the base colour without removing the pattern. Reset to use the theme or paper colour."],
   ["background-notebook-liked-switch", "开启笔记纸纹理", "Enable notebook pattern"],
-  ["notebook-liked-markdown-page-options", "笔记纸纹理", "Notebook pattern"],
+  ["notebook-liked-markdown-page-options", "笔记纸纹理", "Notebook pattern"]
+];
+const EDITOR_MARK_CONTROLS = [
   ["activeline-background", "当前编辑行背景", "Active editor line background", "关闭「隐藏当前行背景」后生效。", "Turn off “Hide active line background” to show this colour."],
   ["muted-activeline-bg", "隐藏当前行背景", "Hide active line background"],
   ["text-selection", "鼠标选中文字的背景", "Selected text background", "开启「显示编辑器选区背景」后生效。", "Turn on “Show editor selection background” to show this colour."],
-  ["remove-selectionbackground", "显示编辑器选区背景", "Show editor selection background"],
+  ["remove-selectionbackground", "显示编辑器选区背景", "Show editor selection background"]
+];
+const NOTE_MARK_CONTROLS = [
   ["bysan-mark-bg", "Markdown 高亮背景", "Markdown highlight background", "用于 ==文字==。", "Used for ==text==."],
   ["text-highlight", "Markdown 高亮文字颜色", "Markdown highlight text colour"],
-  ["admonition-bg-color", "提示框内容背景", "Callout body background"],
-  ["admonition-bg-color-same", "提示框内容沿用标题配色", "Use callout title colours for the body"],
   ["internal-link-color", "笔记内链颜色", "Internal link colour"],
   ["external-link-color", "外部链接颜色", "External link colour"]
+];
+const CALLOUT_CONTROLS = [
+  ["admonition-bg-color", "提示框内容背景", "Callout body background"],
+  ["admonition-bg-color-same", "提示框内容沿用标题配色", "Use callout title colours for the body"]
 ];
 const INTERFACE_COLOR_CONTROLS = [
   ["bysan-left-pane-bg", "左侧栏底色", "Left sidebar background"],
@@ -134,7 +140,8 @@ const PAGE_TITLE_CONTROLS = [
   ["toggle-inline-title-background", "显示页面标题背景", "Show page title background"]
 ];
 const COMMON_THEME_IDS = new Set(
-  [...NOTE_BODY_CONTROLS, ...NOTE_BACKGROUND_CONTROLS, ...INTERFACE_COLOR_CONTROLS, ...PAGE_TITLE_CONTROLS,
+  [...NOTE_BODY_CONTROLS, ...NOTE_BACKGROUND_CONTROLS, ...EDITOR_MARK_CONTROLS, ...NOTE_MARK_CONTROLS,
+    ...CALLOUT_CONTROLS, ...INTERFACE_COLOR_CONTROLS, ...PAGE_TITLE_CONTROLS,
     ...NOTE_HEADING_CONTROLS.flat(), ...HEADING_BACKGROUND_CONTROLS.flat(), ["font-size-latex"]].map(([id]) => id)
 );
 
@@ -2078,9 +2085,23 @@ class BysanStyleSettingTab extends PluginSettingTab {
 
   renderEditorRegionSettings(containerEl) {
     const zh = this.plugin.language === "zh";
-    this.createSettingsSection(containerEl, "note-colors", zh ? "背景、颜色与标记" : "Background, colours and marks", body => {
+    this.createSettingsSection(containerEl, "note-background", zh ? "笔记背景" : "Note background", body => {
       this.renderNoteBackgroundColors(body);
-      this.renderThemeGroups(body, ["note-background", "marks"]);
+    });
+    this.createSettingsSection(containerEl, "note-colors", zh ? "选区、高亮与链接" : "Selection, highlights and links", body => {
+      const controls = this.createAppearanceLayout(body, sample => {
+        const page = sample.createDiv({ cls: "bysan-note-colors-example" });
+        page.createDiv({ cls: "cm-line cm-active", text: zh ? "当前编辑行" : "Active editor line" });
+        page.createEl("p").createSpan({ cls: "bysan-selection-example", text: zh ? "鼠标选中的文字" : "Selected text" });
+        page.createEl("p").createEl("mark", { text: zh ? "Markdown 高亮" : "Markdown highlight", attr: { "data-highlight": "" } });
+        const links = page.createEl("p");
+        links.createEl("a", { cls: "internal-link", text: zh ? "内链" : "Internal link" });
+        links.append(" · ");
+        links.createEl("a", { cls: "external-link", text: zh ? "外链" : "External link" });
+      });
+      this.renderNoteThemeControls(controls, EDITOR_MARK_CONTROLS);
+      this.renderNoteThemeControls(controls, NOTE_MARK_CONTROLS);
+      this.renderThemeGroups(body, ["marks"], false);
     });
     this.createSettingsSection(containerEl, "headings", zh ? "页面标题与文内标题" : "Page title and headings", (body) => {
       this.createFeatureGroup(body, zh ? "页面标题" : "Page title", "", group => {
@@ -2143,6 +2164,14 @@ class BysanStyleSettingTab extends PluginSettingTab {
     this.createSettingsSection(containerEl, "blocks", zh ? "表格、引用与提示框" : "Tables, quotes and callouts", (body) => {
       this.createFeatureGroup(body, zh ? "表格" : "Tables", "", group => this.renderTableSettings(group));
       this.createFeatureGroup(body, zh ? "引用块" : "Blockquotes", "", group => this.renderQuoteSettings(group));
+      this.createFeatureGroup(body, zh ? "提示框" : "Callouts", "", group => {
+        const controls = this.createAppearanceLayout(group, sample => {
+          const callout = sample.createDiv({ cls: "callout", attr: { "data-callout": "note" } });
+          callout.createDiv({ cls: "callout-title", text: zh ? "提示框" : "Callout" });
+          callout.createDiv({ cls: "callout-content", text: zh ? "提示框内容" : "Callout body" });
+        });
+        this.renderNoteThemeControls(controls, CALLOUT_CONTROLS);
+      });
       this.renderThemeGroups(body, ["blocks"], false);
     });
     this.createSettingsSection(containerEl, "embeds", zh ? "图片、嵌入与 Mermaid" : "Images, embeds and Mermaid",
@@ -2175,20 +2204,11 @@ class BysanStyleSettingTab extends PluginSettingTab {
   renderNoteBackgroundColors(containerEl) {
     const zh = this.plugin.language === "zh";
     const controls = this.createAppearanceLayout(containerEl, sample => {
-      const page = sample.createDiv({ cls: "bysan-note-colors-example" });
-      page.createEl("p", { text: zh ? "笔记页面底色" : "Note page colour" });
-      page.createDiv({ cls: "cm-line cm-active", text: zh ? "当前编辑行" : "Active editor line" });
-      page.createEl("p").createSpan({ cls: "bysan-selection-example", text: zh ? "鼠标选中的文字" : "Selected text" });
-      page.createEl("p").createEl("mark", { text: zh ? "Markdown 高亮" : "Markdown highlight", attr: { "data-highlight": "" } });
-      const callout = page.createDiv({ cls: "callout", attr: { "data-callout": "note" } });
-      callout.createDiv({ cls: "callout-title", text: zh ? "提示框" : "Callout" });
-      callout.createDiv({ cls: "callout-content", text: zh ? "提示框内容" : "Callout body" });
-      const links = page.createEl("p");
-      links.createEl("a", { cls: "internal-link", text: zh ? "内链" : "Internal link" });
-      links.append(" · ");
-      links.createEl("a", { cls: "external-link", text: zh ? "外链" : "External link" });
+      const backdrop = sample.createDiv({ cls: "bysan-note-backdrop-example" });
+      backdrop.createDiv({ cls: "bysan-note-paper-example", text: zh ? "笔记正文" : "Note content" });
     });
     this.renderNoteThemeControls(controls, NOTE_BACKGROUND_CONTROLS);
+    this.renderThemeGroups(controls, ["note-background"], false);
   }
 
   renderInterfaceColors(containerEl) {

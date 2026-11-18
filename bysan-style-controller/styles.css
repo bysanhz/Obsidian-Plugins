@@ -876,6 +876,85 @@ body.bysan-style-controller-active
   color: var(--text-normal);
 }
 
+body.bysan-note-font-size-set :is(.markdown-source-view, .markdown-preview-view, .bysan-appearance-sample .markdown-rendered, .bysan-pdf-preview-page-content) {
+  --font-text-size: var(--bysan-note-font-size);
+  font-size: var(--font-text-size);
+}
+
+body.bysan-table-font-size-set :is(.markdown-rendered, .markdown-preview-view, .markdown-source-view)
+table:not(.dataview) :is(th, td) {
+  font-size: var(--bysan-table-font-size) !important;
+}
+
+.bysan-value-stepper {
+  display: flex;
+  align-items: center;
+  gap: 0.24rem;
+  min-width: 0;
+  width: 100%;
+  max-width: 14rem;
+}
+
+.bysan-style-settings .bysan-value-stepper input {
+  flex: 1 1 0;
+  width: 0;
+  min-width: 0;
+  padding-inline: 0.3rem;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  appearance: textfield;
+}
+
+.bysan-value-stepper input::-webkit-inner-spin-button,
+.bysan-value-stepper input::-webkit-outer-spin-button {
+  appearance: none;
+}
+
+.bysan-style-settings .bysan-value-stepper button {
+  flex: 0 0 1.5rem;
+  min-width: 0;
+  padding: 0;
+  font-weight: 700;
+}
+
+.bysan-stepper-unit {
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+}
+
+.bysan-math-sample-fallback {
+  font-family: serif;
+  font-style: italic;
+  font-size: var(--font-size-latex, 1em);
+}
+
+.bysan-advanced-group h4 {
+  margin: 0.9rem 0 0.25rem;
+  color: var(--bysan-settings-cta);
+}
+
+.bysan-advanced-group {
+  border-bottom: 1px solid var(--bysan-settings-border);
+  padding-bottom: 0.45rem;
+}
+
+.bysan-settings-section[hidden] {
+  display: none !important;
+}
+
+.bysan-badge-sample {
+  display: inline-grid;
+  place-items: center;
+  width: var(--art-review-badge-size, 17px);
+  height: var(--art-review-badge-size, 17px);
+  margin-top: 0.2rem;
+  border-radius: 50%;
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+  font-size: clamp(9px, calc(var(--art-review-badge-size, 17px) * 0.56), 12px);
+  font-weight: 800;
+}
+
 /* Obsidian hides h1 in .vertical-tab-content, including embedded samples. */
 .bysan-style-settings .bysan-appearance-sample h1 {
   display: block;
@@ -943,7 +1022,7 @@ body.bysan-style-controller-active
 
 .bysan-heading-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(6.25rem, 28%);
+  grid-template-columns: minmax(0, 1fr) minmax(9.25rem, 34%);
   grid-template-areas: "sample size" "colour colour";
   align-items: center;
   gap: 0.25rem 0.55rem;
@@ -1048,9 +1127,20 @@ body.bysan-style-controller-active
     grid-template-columns: minmax(8.7rem, 0.84fr) minmax(0, 2.16fr);
   }
 
+  .bysan-appearance-layout > .bysan-appearance-sample {
+    position: sticky;
+    top: 8.75rem;
+  }
+
   .bysan-heading-row {
-    grid-template-columns: minmax(6.5rem, 1fr) minmax(20.6rem, 2.5fr) minmax(6.25rem, 0.9fr);
+    grid-template-columns: minmax(4.5rem, 0.7fr) minmax(20.6rem, 2.5fr) minmax(9.1rem, 1fr);
     grid-template-areas: "sample colour size";
+  }
+}
+
+@container (max-width: 28rem) {
+  .bysan-appearance-controls > .bysan-feature-group > .bysan-feature-group-body {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 

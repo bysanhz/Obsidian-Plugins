@@ -67,7 +67,7 @@ const sandbox = {
 };
 vm.runInNewContext(
   themeSource.replace(
-    "module.exports = { ThemeControls };",
+    "module.exports = { ThemeControls, addValueStepper };",
     "module.exports = { ThemeControls, parseColor, colorWithAlpha };"
   ),
   sandbox
@@ -166,7 +166,7 @@ for (const method of [
   "renderSectionNavigation", "renderStylePresetSettings", "renderWorkspaceSettings",
   "renderCodeSettings", "renderEditorRegionSettings", "renderInlineCodeSettings",
   "renderTableSettings", "renderQuoteSettings", "renderTextDetailSettings", "openPdfPreview",
-  "renderIntegratedModuleSettings", "syncIntegratedModules", "addResettableSlider",
+  "renderIntegratedModuleSettings", "syncIntegratedModules", "addNumberSetting",
   "createMajorArea", "createSubarea", "createSettingsSection", "createFeatureGroup",
   "setActiveMajorArea", "renderGeometryControls"
 ]) {

@@ -445,6 +445,55 @@ function rgbToHsl(red, green, blue) {
 }
 
 
+function addValueStepper(containerEl, { label, language, value, unit = "", numeric = false, edit, adjust, save, reset }) {
+  const zh = language === "zh";
+  const controls = containerEl.createDiv({ cls: "bysan-value-stepper" });
+  let current = String(value);
+  const action = (text, tooltip, onClick) => {
+    const button = controls.createEl("button", {
+      text,
+      attr: { type: "button", title: tooltip, "aria-label": tooltip }
+    });
+    button.addEventListener("click", onClick);
+  };
+  const set = (next) => {
+    if (next != null) current = String(next);
+    input.value = current;
+  };
+  const apply = (next) => {
+    const changed = next != null && String(next) !== current;
+    set(next);
+    if (changed) void save(next);
+  };
+  const step = direction => apply(adjust(current, direction));
+  action("−", zh ? `减小${label}` : `Decrease ${label}`, () => step(-1));
+  const input = controls.createEl("input", {
+    attr: { type: numeric ? "number" : "text", "aria-label": unit ? `${label} (${unit})` : label }
+  });
+  if (numeric) input.step = "any";
+  set(value);
+  input.addEventListener("change", () => apply(edit(input.value)));
+  input.addEventListener("keydown", event => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      apply(edit(input.value));
+    } else if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+      event.preventDefault();
+      step(event.key === "ArrowUp" ? 1 : -1);
+    }
+  });
+  action("+", zh ? `增大${label}` : `Increase ${label}`, () => step(1));
+  if (unit) controls.createSpan({ cls: "bysan-stepper-unit", text: unit });
+  action("↺", zh ? `恢复${label}默认值` : `Reset ${label}`, async () => set(await reset()));
+}
+
+function stepCssFontSize(value, direction) {
+  const [, amount, unit] = String(value).trim().match(/^(\d+(?:\.\d+)?|\.\d+)(px|em|rem|pt|%)$/i) || [];
+  if (!unit) return null;
+  const increment = /^(em|rem)$/i.test(unit) ? 0.05 : unit === "%" ? 5 : 1;
+  return `${Math.max(0, Number((Number(amount) + increment * direction).toFixed(4)))}${unit}`;
+}
+
 class ThemeControls {
   constructor(plugin, catalog) {
     this.plugin = plugin;
@@ -887,7 +936,6 @@ class ThemeControls {
   renderRegion(containerEl, regionId, excludedIds = new Set()) {
     if (!this.cachedRegionBuckets) this.beginRegionRender();
     const groups = [...(this.cachedRegionBuckets.get(regionId)?.values() || [])];
-    let first = true;
     let count = 0;
     for (const groupData of groups) {
       const items = groupData.items.filter(item => !excludedIds.has(item.id));
@@ -897,36 +945,12 @@ class ThemeControls {
         for (const item of items) this.renderItem(containerEl, item);
         continue;
       }
-      const group = this.createThemeGroup(containerEl, groupData.heading, "minor", first);
-      group.details.id = `${this.headingAnchors.get(groupData.heading) || groupData.heading.id}-${regionId}`;
-      group.details.dataset.bysanThemeRegion = regionId;
-      first = false;
-      for (const item of items) this.renderItem(group.body, item);
+      const title = localised(groupData.heading, "title", this.plugin.language) || groupData.heading.id;
+      const parent = containerEl.createDiv({ cls: "bysan-advanced-group", attr: { "data-bysan-section-label": title } });
+      parent.createEl("h4", { text: title });
+      for (const item of items) this.renderItem(parent, item);
     }
     return count;
-  }
-
-
-  createThemeGroup(containerEl, item, size, open) {
-    const title = localised(item, "title", this.plugin.language) || item.id;
-    const description = item.id === "build-in-style-folder"
-      ? (this.plugin.language === "zh"
-        ? "按需在笔记属性的 cssclasses 中启用文档样式类。"
-        : "Enable document style classes through the note's cssclasses property as needed.")
-      : localised(item, "description", this.plugin.language);
-    const details = containerEl.createEl("details", {
-      cls: `bysan-theme-group bysan-theme-group-${size}`
-    });
-    details.open = open;
-    details.id = this.headingAnchors.get(item);
-    details.dataset.bysanSearch = `${title} ${item.title || ""} ${description || ""} ${item.id}`.toLowerCase();
-    const summary = details.createEl("summary", { cls: "bysan-theme-group-summary" });
-    summary.createSpan({ cls: "bysan-theme-group-chevron", text: "›" });
-    const text = summary.createSpan({ cls: "bysan-theme-group-summary-text" });
-    text.createSpan({ cls: "bysan-theme-group-title", text: title });
-    if (description) text.createSpan({ cls: "bysan-theme-group-description", text: description });
-    const body = details.createDiv({ cls: "bysan-theme-group-body" });
-    return { details, body };
   }
 
 
@@ -1056,6 +1080,32 @@ class ThemeControls {
         .setDynamicTooltip()
         .setValue(Number(this.displayValueFor(item)))
         .onChange((value) => this.plugin.updateThemeSetting(item.id, value)));
+      return;
+    }
+
+    const fontSize = /^(?:font-size-|h[1-6]-size$|inline-title-size$)/.test(item.id);
+    if (fontSize || (presentation && item.type === "variable-number")) {
+      const numeric = !fontSize;
+      setting.settingEl.addClass("bysan-stepper-setting");
+      addValueStepper(setting.controlEl, {
+        label: title,
+        language: this.plugin.language,
+        value: this.displayValueFor(item) ?? "",
+        numeric,
+        edit: value => {
+          const trimmed = value.trim();
+          if (fontSize) return CSS.supports("font-size", trimmed) ? trimmed : null;
+          return trimmed && Number.isFinite(Number(trimmed)) && Number(trimmed) > 0 ? Number(trimmed) : null;
+        },
+        adjust: (value, direction) => fontSize
+          ? stepCssFontSize(value, direction)
+          : Math.max(0.1, Number((Number(value) + 0.05 * direction).toFixed(2))),
+        save: value => this.plugin.updateThemeSetting(item.id, value),
+        reset: async () => {
+          await this.plugin.resetThemeSetting(item.id);
+          return this.displayValueFor(item) ?? "";
+        }
+      });
       return;
     }
 
@@ -1191,4 +1241,4 @@ class ThemeControls {
 }
 
 
-module.exports = { ThemeControls };
+module.exports = { ThemeControls, addValueStepper };

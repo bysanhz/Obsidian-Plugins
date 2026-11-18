@@ -1,12 +1,15 @@
 /**
  * Bysan Style Controller
- * Version: 0.17.1
+ * Version: 0.17.2
  *
  * Owns visual presentation and provides switchable, integrated Bysan modules.
  */
 
 const {
   MarkdownRenderer,
+  finishRenderMath,
+  loadMathJax,
+  renderMath,
   MarkdownView,
   Component,
   Modal,
@@ -18,7 +21,7 @@ const {
 /* Obsidian evaluates main.js without a plugin-local CommonJS base path. Resolve
  * the helper through the active vault so the plugin remains portable. */
 globalThis.__bysanObsidianSetting = Setting;
-const { ThemeControls } = require(app.vault.adapter.getFullPath(
+const { ThemeControls, addValueStepper } = require(app.vault.adapter.getFullPath(
   ".obsidian/plugins/bysan-style-controller/theme-controls.js"
 ));
 const { resolveLanguage, translate } = require(app.vault.adapter.getFullPath(
@@ -84,7 +87,7 @@ const NOTE_HEADING_CONTROLS = Array.from({ length: 6 }, (_, index) => {
   ];
 });
 const NOTE_APPEARANCE_IDS = new Set(
-  [...NOTE_BODY_CONTROLS, ...NOTE_HEADING_CONTROLS.flat()].map(([id]) => id)
+  [...NOTE_BODY_CONTROLS, ...NOTE_HEADING_CONTROLS.flat(), ["font-size-latex"]].map(([id]) => id)
 );
 
 /*
@@ -310,7 +313,9 @@ const CONTROLLED_CLASSES = [
   "bysan-style-controller-active",
   "bysan-table-zebra-disabled",
   "bysan-table-left-aligned",
-  "bysan-quote-system-font"
+  "bysan-quote-system-font",
+  "bysan-note-font-size-set",
+  "bysan-table-font-size-set"
 ];
 
 const CONTROLLED_PROPERTIES = [
@@ -337,11 +342,15 @@ const CONTROLLED_PROPERTIES = [
   "--blur-codebox-frosted-glass",
   "--letter-space-code",
   "--art-review-badge-size",
+  "--bysan-note-font-size",
+  "--bysan-table-font-size",
   ...CONTENT_GEOMETRY_CONTROLS.map(([, property]) => property)
 ];
 
 const DEFAULT_SETTINGS = {
   settingsVersion: 8,
+  noteFontSize: null,
+  tableFontSize: null,
   uiLanguage: "auto",
   pdfPaperSize: "A4",
   pdfOrientation: "portrait",
@@ -1111,6 +1120,13 @@ module.exports = class BysanStyleController extends Plugin {
       "--art-review-badge-size",
       `${clamp(this.settings.reviewBadgeSize, 12, 24)}px`
     );
+    for (const [key, property] of [["noteFontSize", "--bysan-note-font-size"], ["tableFontSize", "--bysan-table-font-size"]]) {
+      const value = this.settings[key];
+      const customized = Number.isFinite(value) && value > 0;
+      body.classList.toggle(`${property.slice(2)}-set`, customized);
+      if (customized) body.style.setProperty(property, `${value}px`);
+      else body.style.removeProperty(property);
+    }
     body.style.setProperty(
       "--bysan-quote-font",
       this.settings.quoteSerif
@@ -1466,6 +1482,10 @@ class BysanStyleSettingTab extends PluginSettingTab {
     const body = this.advancedArea?.querySelector(":scope > .bysan-subarea-body");
     if (!body || body.childElementCount) return;
     const zh = this.plugin.language === "zh";
+    let picker;
+    new Setting(body).setName(zh ? "界面区域" : "Interface area").addDropdown(dropdown => {
+      picker = dropdown;
+    });
     for (const [region, cn, en] of [
       ["workspace", "整体工作区", "Whole workspace"],
       ["top", "顶部与标签页", "Top bar and tabs"],
@@ -1477,10 +1497,23 @@ class BysanStyleSettingTab extends PluginSettingTab {
       ["plugins", "第三方插件适配", "Third-party plugin integrations"],
       ["documents", "文档样式类", "Document style classes"]
     ]) {
-      this.createSubarea(body, region, zh ? cn : en, (group) => {
+      picker.addOption(region, zh ? cn : en);
+      const section = this.createSettingsSection(body, region, zh ? cn : en, (group) => {
         if (region === "workspace") this.renderWorkspaceSettings(group);
         this.plugin.themeControls.renderRegion(group, region, NOTE_APPEARANCE_IDS);
       });
+      section.dataset.bysanAdvancedRegion = region;
+    }
+    this.advancedRegionPicker = picker;
+    picker.onChange(region => this.selectAdvancedRegion(region));
+    this.selectAdvancedRegion(this.activeAdvancedRegion || "workspace");
+  }
+
+  selectAdvancedRegion(region) {
+    this.activeAdvancedRegion = region;
+    this.advancedRegionPicker.setValue(region);
+    for (const section of this.advancedArea.querySelectorAll("[data-bysan-advanced-region]")) {
+      section.hidden = section.dataset.bysanAdvancedRegion !== region;
     }
   }
 
@@ -1609,6 +1642,8 @@ class BysanStyleSettingTab extends PluginSettingTab {
       clearSearch();
       const area = row.closest("[data-bysan-major-area]");
       if (area) this.setActiveMajorArea(containerEl, area.dataset.bysanMajorArea, false);
+      const region = row.closest("[data-bysan-advanced-region]");
+      if (region) this.selectAdvancedRegion(region.dataset.bysanAdvancedRegion);
       let parent = row.parentElement;
       while (parent) {
         if (parent.matches?.("details")) parent.open = true;
@@ -1654,7 +1689,7 @@ class BysanStyleSettingTab extends PluginSettingTab {
         for (let parent = row.parentElement; parent; parent = parent.parentElement) {
           if (parent.matches("details")) {
             const summary = parent.querySelector(":scope > summary");
-            const label = summary?.querySelector(".bysan-subarea-title, .bysan-theme-group-title");
+            const label = summary?.querySelector(".bysan-subarea-title");
             if (summary) path.unshift((label || summary).textContent.trim());
           }
           if (parent.dataset.bysanSectionLabel) path.unshift(parent.dataset.bysanSectionLabel);
@@ -1705,8 +1740,9 @@ class BysanStyleSettingTab extends PluginSettingTab {
       attr: { "aria-label": zh ? "笔记外观分组" : "Note appearance sections" }
     });
     for (const [id, cn, en] of [
-      ["headings", "标题", "Headings"], ["body-text", "正文", "Body"], ["code", "代码", "Code"],
-      ["tables", "表格", "Tables"], ["quotes", "引用", "Quotes"]
+      ["headings", "标题", "Headings"], ["body-text", "正文", "Body"], ["text-details", "列表", "Lists"],
+      ["code", "代码", "Code"], ["inline-code", "行内代码", "Inline code"],
+      ["tables", "表格", "Tables"], ["quotes", "引用", "Quotes"], ["math", "公式", "Math"]
     ]) {
       const shortcut = shortcuts.createEl("button", { text: zh ? cn : en, attr: { type: "button" } });
       shortcut.addEventListener("click", () => this.jumpToSection(containerEl, `bysan-section-${id}`));
@@ -1734,8 +1770,10 @@ class BysanStyleSettingTab extends PluginSettingTab {
           }));
       setting.settingEl.addClass("bysan-unified-control-setting", "bysan-control-type-toggle");
       if (module.key === "moduleReviewToolbar") {
-        this.addResettableSlider(group, this.plugin.t("review.badgeSize"),
+        const badgeSetting = this.addNumberSetting(group, this.plugin.t("review.badgeSize"),
           this.plugin.t("review.badgeSizeDesc"), "reviewBadgeSize", 12, 24, 1, "px");
+        badgeSetting.infoEl.createSpan({ cls: "bysan-badge-sample", text: "1",
+          attr: { title: zh ? "评论角标样例" : "Comment badge sample" } });
       }
     }
   }
@@ -1924,15 +1962,15 @@ class BysanStyleSettingTab extends PluginSettingTab {
         this.addDualColor(body, this.plugin.t("palette.codeBorder"), "codeBorderLight", "codeBorderDark");
       }
     );
-    this.createSubarea(
-      containerEl,
-      "code-details",
+    this.createFeatureGroup(
+      controls,
       this.plugin.language === "zh" ? "代码块尺寸与编辑细节" : "Code block size and editor details",
+      "",
       (body) => {
         this.addToggle(body, this.plugin.t("code.noWrapLive"), this.plugin.t("code.noWrapLiveDesc"), "codeNoWrapLive");
         this.addToggle(body, this.plugin.t("code.muteActive"), this.plugin.t("code.muteActiveDesc"), "muteCodeActiveLine");
-        this.addSlider(body, this.plugin.t("code.spacing"), this.plugin.t("code.spacingDesc"), "codeLetterSpacing", 0, 2, 0.1);
-        this.addSlider(body, this.plugin.t("code.blur"), this.plugin.t("code.blurDesc"), "codeBlur", 0, 8, 1);
+        this.addNumberSetting(body, this.plugin.t("code.spacing"), this.plugin.t("code.spacingDesc"), "codeLetterSpacing", 0, 2, 0.1, "px");
+        this.addNumberSetting(body, this.plugin.t("code.blur"), this.plugin.t("code.blurDesc"), "codeBlur", 0, 8, 1, "px");
         this.renderGeometryControls(body, "codeBlock");
       }
     );
@@ -1962,9 +2000,14 @@ class BysanStyleSettingTab extends PluginSettingTab {
         paragraph.createEl("br");
         paragraph.createSpan({ text: zh ? "这是同一段的第二行。" : "This is the second line of the paragraph." });
       });
+      this.addNumberSetting(controls, zh ? "正文字号" : "Body font size",
+        zh ? "恢复后跟随 Obsidian 的字体大小。" : "Reset to follow Obsidian’s font size.",
+        "noteFontSize", 8, 48, 1, "px",
+        () => parseFloat(getComputedStyle(document.body).getPropertyValue("--font-text-size")) || 16);
       this.renderNoteThemeControls(controls, NOTE_BODY_CONTROLS);
-      this.createSubarea(body, "text-details", zh ? "列表、任务框与分隔线" : "Lists, tasks and dividers",
-        details => this.renderTextDetailSettings(details));
+    });
+    this.createSettingsSection(containerEl, "text-details", zh ? "列表、粗体与分隔线" : "Lists, bold text and dividers", (body) => {
+      this.renderTextDetailSettings(body);
     });
     this.createSettingsSection(containerEl, "code", zh ? "代码块" : "Code blocks", (body) => {
       this.renderCodeSettings(body);
@@ -1977,6 +2020,20 @@ class BysanStyleSettingTab extends PluginSettingTab {
     });
     this.createSettingsSection(containerEl, "quotes", zh ? "引用块" : "Blockquotes", (body) => {
       this.renderQuoteSettings(body);
+    });
+    this.createSettingsSection(containerEl, "math", zh ? "块公式" : "Display math", (body) => {
+      const controls = this.createAppearanceLayout(body, sample => {
+        const math = sample.createDiv({ cls: "math math-block" });
+        const fallback = math.createSpan({ cls: "bysan-math-sample-fallback", text: "E = mc²" });
+        void loadMathJax().then(async () => {
+          if (!math.isConnected) return;
+          const equation = renderMath("E = mc^2", true);
+          math.appendChild(equation);
+          await finishRenderMath();
+          fallback.remove();
+        }).catch(error => console.warn("[Bysan Style Controller] Math preview unavailable", error));
+      });
+      this.renderNoteThemeControls(controls, [["font-size-latex", "块公式字号", "Display math font size"]]);
     });
   }
 
@@ -2039,10 +2096,10 @@ class BysanStyleSettingTab extends PluginSettingTab {
         this.addDualColor(body, this.plugin.language === "zh" ? "行内代码阴影" : "Inline-code shadow", "inlineShadowLight", "inlineShadowDark");
       }
     );
-    this.createSubarea(
-      containerEl,
-      "inline-code-details",
+    this.createFeatureGroup(
+      controls,
       this.plugin.language === "zh" ? "行内代码尺寸与间距" : "Inline code size and spacing",
+      "",
       (body) => this.renderGeometryControls(body, "inlineCode")
     );
   }
@@ -2087,13 +2144,19 @@ class BysanStyleSettingTab extends PluginSettingTab {
           zh ? "启用斑马纹后生效。编辑预览与阅读模式。" : "Shown when zebra stripes are enabled. Live Preview and reading view.");
       }
     );
-    this.createSubarea(
-      containerEl,
-      "table-details",
+    this.createFeatureGroup(
+      controls,
       zh ? "表格边框、悬停与尺寸" : "Table borders, hover and sizing",
+      "",
       (body) => {
         this.addDualColor(body, this.plugin.t("palette.tableHover"), "tableHoverLight", "tableHoverDark");
         this.addDualColor(body, this.plugin.t("palette.tableBorder"), "tableBorderLight", "tableBorderDark");
+        this.addNumberSetting(body, zh ? "表格字号" : "Table font size",
+          zh ? "恢复后使用主题的表格字号。" : "Reset to use the theme’s table font size.",
+          "tableFontSize", 7, 48, 1, "px", () => {
+            const cell = containerEl.querySelector(".bysan-appearance-sample td");
+            return parseFloat(cell.ownerDocument.defaultView.getComputedStyle(cell).fontSize) || 14;
+          });
         this.renderGeometryControls(body, "table");
       }
     );
@@ -2121,10 +2184,10 @@ class BysanStyleSettingTab extends PluginSettingTab {
         this.addDualColor(body, this.plugin.t("palette.quoteBorder"), "quoteBorderLight", "quoteBorderDark");
       }
     );
-    this.createSubarea(
-      containerEl,
-      "quote-details",
+    this.createFeatureGroup(
+      controls,
       this.plugin.language === "zh" ? "引用块尺寸与间距" : "Blockquote size and spacing",
+      "",
       (body) => this.renderGeometryControls(body, "quote")
     );
   }
@@ -2156,18 +2219,24 @@ class BysanStyleSettingTab extends PluginSettingTab {
 
 
   renderTextDetailSettings(containerEl) {
-    const heading = new Setting(containerEl)
-      .setName(this.plugin.language === "zh" ? "文字、列表与分隔线" : "Text, lists and dividers")
-      .setHeading();
-    heading.settingEl.id = "bysan-section-text-details";
+    const zh = this.plugin.language === "zh";
+    const controls = this.createAppearanceLayout(containerEl, sample => {
+      const list = sample.createEl("ul");
+      list.createEl("li", { text: zh ? "普通列表项" : "List item" });
+      const task = list.createEl("li", { cls: "task-list-item" });
+      task.createEl("input", { cls: "task-list-item-checkbox", attr: { type: "checkbox", disabled: "", checked: "" } });
+      task.append(zh ? " 已完成任务" : " Completed task");
+      sample.createEl("hr");
+      sample.createEl("p").createEl("strong", { text: zh ? "粗体文字" : "Bold text" });
+    });
     this.createFeatureGroup(
-      containerEl,
+      controls,
       this.plugin.language === "zh" ? "列表外观" : "List appearance",
       this.plugin.language === "zh" ? "浅色与深色模式的列表标记颜色。" : "List-marker colours in light and dark mode.",
       (body) => this.addDualColor(body, this.plugin.t("palette.marker"), "markerLight", "markerDark")
     );
     this.createFeatureGroup(
-      containerEl,
+      controls,
       this.plugin.language === "zh" ? "文字与结构尺寸" : "Text and structure size",
       this.plugin.language === "zh" ? "列表标记、任务框、分隔线和粗体字重。" : "List markers, task boxes, dividers and strong-text weight.",
       (body) => this.renderGeometryControls(body, "other")
@@ -2294,7 +2363,7 @@ class BysanStyleSettingTab extends PluginSettingTab {
       return key.startsWith(groupId);
     });
     for (const [key, property, unit, minimum, maximum, step, controlZh, controlEn] of entries) {
-      const setting = this.addResettableSlider(
+      const setting = this.addNumberSetting(
         containerEl,
         this.plugin.language === "zh" ? controlZh : controlEn,
         this.plugin.language === "zh" ? "编辑预览与阅读模式。" : "Live Preview and reading view.",
@@ -2321,58 +2390,25 @@ class BysanStyleSettingTab extends PluginSettingTab {
   }
 
 
-  addSlider(containerEl, name, description, key, minimum, maximum, step) {
-    const setting = new Setting(containerEl)
-      .setName(name)
-      .setDesc(description)
-      .addSlider((slider) => slider
-        .setLimits(minimum, maximum, step)
-        .setDynamicTooltip()
-        .setValue(this.plugin.settings[key])
-        .onChange((value) => this.plugin.updateSetting(key, value)));
-    setting.settingEl.addClass("bysan-unified-control-setting", "bysan-control-type-slider");
-    setting.settingEl.dataset.bysanSettingKeys = key;
-  }
-
-
-  addResettableSlider(containerEl, name, description, key, minimum, maximum, step, unit = "") {
-    let sliderComponent;
-    let valueEl;
-    const formatValue = (value) => `${Number(value).toFixed(step < 0.1 ? 2 : step < 1 ? 1 : 0)}${unit}`;
-    const setting = new Setting(containerEl)
-      .setName(name)
-      .setDesc(description)
-      .addSlider((slider) => {
-        sliderComponent = slider;
-        slider.setLimits(minimum, maximum, step)
-          .setValue(this.plugin.settings[key])
-          .onChange((value) => {
-            valueEl?.setText(formatValue(value));
-            this.plugin.updateSetting(key, value);
-          });
-      });
-    valueEl = setting.controlEl.querySelector(".slider-value");
-    valueEl?.addClass("bysan-slider-value");
-    valueEl?.setText(formatValue(this.plugin.settings[key]));
-    const resetButton = setting.controlEl.createEl("button", {
-      cls: "clickable-icon bysan-color-reset",
-      text: "↺",
-      attr: {
-        type: "button",
-        title: this.plugin.language === "zh" ? "恢复初始默认值" : "Restore initial default",
-        "aria-label": this.plugin.language === "zh" ? "恢复初始默认值" : "Restore initial default"
+  addNumberSetting(containerEl, name, description, key, minimum, maximum, step, unit = "", inherited = () => minimum) {
+    const setting = new Setting(containerEl).setName(name).setDesc(description);
+    const valueForDisplay = () => this.plugin.settings[key] ?? Number(inherited().toFixed(2));
+    const bound = value => Number(clamp(value, minimum, maximum).toFixed(4));
+    addValueStepper(setting.controlEl, {
+      label: name,
+      language: this.plugin.language,
+      value: valueForDisplay(),
+      unit,
+      numeric: true,
+      edit: value => value.trim() && Number.isFinite(Number(value)) ? bound(Number(value)) : null,
+      adjust: (value, direction) => bound(Number(value) + step * direction),
+      save: value => this.plugin.updateSetting(key, value),
+      reset: async () => {
+        await this.plugin.resetSetting(key);
+        return valueForDisplay();
       }
     });
-    resetButton.addEventListener("click", async () => {
-      if (!await this.plugin.resetSetting(key)) return;
-      sliderComponent.setValue(this.plugin.settings[key]);
-      valueEl?.setText(formatValue(this.plugin.settings[key]));
-    });
-    setting.settingEl.addClass(
-      "bysan-unified-control-setting",
-      "bysan-control-type-slider",
-      "bysan-resettable-slider"
-    );
+    setting.settingEl.addClass("bysan-unified-control-setting", "bysan-stepper-setting");
     setting.settingEl.dataset.bysanSettingKeys = key;
     return setting;
   }

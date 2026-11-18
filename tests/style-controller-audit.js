@@ -118,6 +118,20 @@ for (const id of ["background-notebook-liked-switch", "notebook-liked-markdown-p
 }
 assert.match(baseCss, /dotted-notebook-1[^\n]*\.bysan-note-paper-example/);
 assert.match(baseCss, /markdown-page-custom\.theme-dark[^\n]*\.bysan-note-backdrop-example/);
+for (const [group, ids] of Object.entries({
+  navigation: ["toggle-bg-panel-page", "background-panel-page-theme-light-custom", "bg-panel-page-opacity-cp"],
+  tabs: ["tab-outline-color", "bt-colorful-titlebar"],
+  tables: ["table-style-options", "table-width", "show-border-table"],
+  quotes: ["blockquote-style-change-options"],
+  blocks: ["admonition-bg-color", "callout-style-settings"],
+  lists: ["fancy-hr", "hr-color-1", "checkbox-size"],
+  marks: ["font-family-tag", "tag-style-option"],
+  math: ["mjx-inline-math-color", "mjx-math-color"],
+  code: ["font-family-inline-code", "font-monospace-theme"],
+  window: ["setting-etc-pane-style", "background-popover"]
+})) {
+  for (const id of ids) assert.equal(themeControls.advancedGroupFor(byId.get(id)), group, `misplaced control: ${id}`);
+}
 for (const [lightId, darkId] of sandbox.module.exports.ADVANCED_MODE_PAIRS) {
   const light = byId.get(lightId);
   const dark = byId.get(darkId);
@@ -200,15 +214,17 @@ const mountedGroups = [...mainSource.matchAll(/this\.renderThemeGroups\((?:body|
 const expectedGroups = [
   "general", "workspace-background", "tabs", "navigation", "window", "canvas", "graph",
   "pdf", "plugins", "documents", "note-background", "marks", "headings", "typography",
-  "lists", "blocks", "embeds"
+  "lists", "blocks", "embeds", "math", "code", "code", "tables", "quotes"
 ];
 assert.deepStrictEqual(mountedGroups.sort(), expectedGroups.sort(), "every theme group must be mounted exactly once");
 assert(mainSource.includes('this.renderCompactSample(containerEl, "tags"'), "missing preview colocated with tag controls");
 assert(![mainSource, themeSource].some(source => source.includes("bysan-theme-color-value")),
   "color codes must be in picker tooltips, not inline settings labels");
-for (const sample of ["tabs", "navigation", "window", "lists", "embeds", "canvas", "graph"]) {
+for (const sample of ["tabs", "navigation", "window", "embeds", "canvas", "graph"]) {
   assert(mainSource.includes(`\n      ${sample}: [tr(`), `missing inline preview: ${sample}`);
 }
+assert(mainSource.includes('MarkdownRenderer.render(this.app, markdown, sample, "", this.sampleComponent)'),
+  "reading examples must use the note renderer");
 assert(mainSource.includes('createSettingsSection(tools, "blank-line-cleanup"'), "blank-line cleanup must be directly available in writing tools");
 
 const usedTranslations = new Set();

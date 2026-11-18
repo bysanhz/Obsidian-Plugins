@@ -1,15 +1,12 @@
 /**
  * Bysan Style Controller
- * Version: 0.17.9
+ * Version: 0.18.0
  *
  * Owns visual presentation and provides switchable, integrated Bysan modules.
  */
 
 const {
   MarkdownRenderer,
-  finishRenderMath,
-  loadMathJax,
-  renderMath,
   MarkdownView,
   Component,
   Modal,
@@ -100,14 +97,18 @@ const CALLOUT_CONTROLS = [
   ["admonition-bg-color", "提示框内容背景", "Callout body background"],
   ["admonition-bg-color-same", "提示框内容沿用标题配色", "Use callout title colours for the body"]
 ];
-const INTERFACE_COLOR_CONTROLS = [
+const NAVIGATION_COLOR_CONTROLS = [
   ["bysan-left-pane-bg", "左侧栏底色", "Left sidebar background"],
   ["bysan-right-pane-bg", "右侧栏底色", "Right sidebar background"],
-  ["bysan-active-tab-bg", "当前标签页背景", "Active tab background"],
   ["bysan-active-file-bg", "文件树当前文件背景", "Active file background in the file tree"],
-  ["bt-background-split-container", "侧栏共用底色", "Shared sidebar background", "工作区背景开启时使用。独立设置可覆盖对应侧栏。", "Used with workspace background enabled. A sidebar override takes priority."],
+  ["bt-background-split-container", "侧栏共用底色", "Shared sidebar background", "工作区背景开启时使用。独立设置可覆盖对应侧栏。", "Used with workspace background enabled. A sidebar override takes priority."]
+];
+const TAB_COLOR_CONTROLS = [
+  ["bysan-active-tab-bg", "当前标签页背景", "Active tab background"],
   ["background-titlebar-inner", "窗口标题栏背景", "Window title bar background", "开启下方的标题栏自定义背景后生效。", "Enable the custom title bar background below to use this colour."],
-  ["bt-colorful-titlebar", "开启标题栏自定义背景", "Enable custom title bar background"],
+  ["bt-colorful-titlebar", "开启标题栏自定义背景", "Enable custom title bar background"]
+];
+const INTERFACE_COLOR_CONTROLS = [
   ["status-bar-bg", "底部状态栏背景", "Status bar background"],
   ["interactive-accent", "界面强调色", "Interface accent colour"]
 ];
@@ -141,7 +142,7 @@ const PAGE_TITLE_CONTROLS = [
 ];
 const COMMON_THEME_IDS = new Set(
   [...NOTE_BODY_CONTROLS, ...NOTE_BACKGROUND_CONTROLS, ...EDITOR_MARK_CONTROLS, ...NOTE_MARK_CONTROLS,
-    ...CALLOUT_CONTROLS, ...INTERFACE_COLOR_CONTROLS, ...PAGE_TITLE_CONTROLS,
+    ...CALLOUT_CONTROLS, ...INTERFACE_COLOR_CONTROLS, ...NAVIGATION_COLOR_CONTROLS, ...TAB_COLOR_CONTROLS, ...PAGE_TITLE_CONTROLS,
     ...NOTE_HEADING_CONTROLS.flat(), ...HEADING_BACKGROUND_CONTROLS.flat(), ["font-size-latex"]].map(([id]) => id)
 );
 
@@ -1471,6 +1472,9 @@ class BysanStyleSettingTab extends PluginSettingTab {
   display() {
     const { containerEl } = this;
     const zh = this.plugin.language === "zh";
+    this.sampleComponent?.unload();
+    this.sampleComponent = new Component();
+    this.sampleComponent.load();
     containerEl.empty();
     containerEl.addClass("bysan-style-settings");
 
@@ -1544,12 +1548,19 @@ class BysanStyleSettingTab extends PluginSettingTab {
     this.setActiveMajorArea(containerEl, this.activeMajorArea || "content", false);
   }
 
+  hide() {
+    this.sampleComponent?.unload();
+    this.sampleComponent = null;
+  }
 
-  renderThemeGroups(containerEl, ids, withTitle = true) {
+
+  renderThemeGroups(containerEl, ids, withTitle = true, include) {
     for (const id of ids) {
       this.renderThemeSample(containerEl, id);
+      if (id === "tabs") this.renderNoteThemeControls(containerEl, TAB_COLOR_CONTROLS);
+      if (id === "navigation") this.renderNoteThemeControls(containerEl, NAVIGATION_COLOR_CONTROLS);
       this.plugin.themeControls.renderGroup(containerEl, id, COMMON_THEME_IDS, withTitle,
-        id === "marks" ? panel => this.renderTagSample(panel) : null);
+        id === "marks" ? panel => this.renderTagSample(panel) : null, include);
     }
   }
 
@@ -1587,7 +1598,8 @@ class BysanStyleSettingTab extends PluginSettingTab {
     const tr = (cn, en) => zh ? cn : en;
     const specs = {
       tabs: [tr("标题栏与标签页预览", "Title bar and tabs preview"), sample => {
-        const bar = sample.createDiv({ cls: "bysan-sample-tabstrip bysan-example-titlebar workspace-tab-header-container" });
+        const bar = sample.createDiv({ cls: "bysan-sample-tabstrip bysan-example-titlebar workspace-tab-header-container" })
+          .createDiv({ cls: "workspace-tab-header-container-inner" });
         for (const [label, active] of [[tr("当前笔记", "Active note"), true], [tr("其他笔记", "Other note"), false]]) {
           const tab = bar.createDiv({ cls: `workspace-tab-header${active ? " is-active bysan-example-tab" : ""}` });
           tab.createDiv({ cls: "workspace-tab-header-inner" })
@@ -1596,9 +1608,14 @@ class BysanStyleSettingTab extends PluginSettingTab {
       }],
       navigation: [tr("文件树与大纲预览", "File tree and outline preview"), sample => {
         const row = sample.createDiv({ cls: "bysan-sample-nav" });
-        const tree = row.createDiv({ cls: "bysan-example-left nav-files-container" });
-        tree.createDiv({ cls: "nav-folder-title", text: tr("▾ 示例文件夹", "▾ Sample folder") });
-        tree.createDiv({ cls: "nav-file-title tree-item-self is-active bysan-example-file", text: tr("当前笔记", "Active note") });
+        const tree = row.createDiv({ cls: "bysan-example-left" }).createDiv({ cls: "nav-files-container" });
+        const folder = tree.createDiv({ cls: "tree-item nav-folder" });
+        folder.createDiv({ cls: "nav-folder-title tree-item-self", attr: { "data-path": "Sample" } })
+          .createDiv({ cls: "nav-folder-title-content", text: tr("▾ 示例文件夹", "▾ Sample folder") });
+        const childTree = folder.createDiv({ cls: "tree-item-children nav-folder-children" });
+        childTree.createDiv({ cls: "tree-item nav-file" })
+          .createDiv({ cls: "nav-file-title tree-item-self is-active bysan-example-file", attr: { "data-path": "Sample/Note.md" } })
+          .createDiv({ cls: "nav-file-title-content", text: tr("当前笔记", "Active note") });
         const outline = row.createDiv({ cls: "bysan-example-right outline" });
         const item = outline.createDiv({ cls: "tree-item" });
         item.createDiv({ cls: "tree-item-self" }).createDiv({ cls: "tree-item-inner", text: tr("1. 一级标题", "1. Section") });
@@ -1612,22 +1629,6 @@ class BysanStyleSettingTab extends PluginSettingTab {
         menu.createDiv({ cls: "menu-item selected", text: tr("当前菜单项", "Selected item") });
         row.createDiv({ cls: "bysan-sample-popover", text: tr("链接悬浮预览", "Link popover") });
       }],
-      lists: [tr("列表、任务、粗体与分隔线预览", "List, task, bold text and divider preview"), sample => {
-        const line = sample.createDiv({ cls: "bysan-sample-list" });
-        const list = line.createEl("ul", { cls: "has-list-bullet" });
-        const li = list.createEl("li");
-        li.createSpan({ cls: "list-bullet" });
-        li.createEl("strong", { text: tr("列表项", "List item") });
-        li.createEl("ul", { cls: "has-list-bullet" }).createEl("li", { text: tr("子项", "Nested item") });
-        const tasks = line.createEl("ul", { cls: "contains-task-list" });
-        for (const done of [false, true]) {
-          const task = tasks.createEl("li", { cls: `task-list-item${done ? " is-checked" : ""}`, attr: { "data-task": done ? "x" : " " } });
-          const checkbox = task.createEl("input", { cls: "task-list-item-checkbox", attr: { type: "checkbox", tabindex: "-1", "aria-hidden": "true" } });
-          checkbox.checked = done;
-          task.append(done ? tr("已完成", "Completed") : tr("待办任务", "Open task"));
-        }
-        sample.createEl("hr");
-      }],
       embeds: [tr("图片与嵌入预览", "Image and embed preview"), sample => {
         const row = sample.createDiv({ cls: "bysan-sample-embeds" });
         const image = row.createSpan({ cls: "internal-embed image-embed is-loaded" });
@@ -1639,7 +1640,7 @@ class BysanStyleSettingTab extends PluginSettingTab {
         embed.createDiv({ cls: "markdown-embed-title", text: tr("嵌入笔记", "Embedded note") });
         embed.createDiv({ cls: "markdown-embed-content", text: tr("另一篇笔记的内容", "Content from another note") });
       }],
-      canvas: [tr("白板底色与卡片示意", "Canvas background and cards sample"), sample => {
+      canvas: [tr("白板底色与网格预览", "Canvas background and grid preview"), sample => {
         const canvas = sample.createDiv({ cls: "bysan-sample-canvas" });
         canvas.createSpan({ text: tr("卡片", "Card") });
         canvas.createSpan({ cls: "bysan-sample-canvas-link", text: "→" });
@@ -1772,8 +1773,8 @@ class BysanStyleSettingTab extends PluginSettingTab {
       clearSearch();
       const area = row.closest("[data-bysan-major-area]");
       if (area) this.setActiveMajorArea(containerEl, area.dataset.bysanMajorArea, false);
-      const headingMode = row.closest("[data-bysan-heading-mode]");
-      if (headingMode) this.selectHeadingColorMode(headingMode.dataset.bysanHeadingMode);
+      const headingTarget = row.closest("[data-bysan-heading-target]");
+      if (headingTarget) this.selectHeadingTarget(headingTarget.dataset.bysanHeadingTarget);
       window.requestAnimationFrame(() => {
         row.scrollIntoView({ behavior: "auto", block: "center" });
         row.classList.add("bysan-search-target");
@@ -2028,13 +2029,8 @@ class BysanStyleSettingTab extends PluginSettingTab {
 
 
   renderCodeSettings(containerEl) {
-    const controls = this.createAppearanceLayout(containerEl, sample => {
-      const code = sample.createDiv({ cls: "el-pre" }).createEl("pre").createEl("code", { cls: "language-js" });
-      code.createSpan({ cls: "token keyword", text: "const" });
-      code.append(" n = ");
-      code.createSpan({ cls: "token number", text: "42" });
-      code.append(";\nconsole.log(n);");
-    });
+    const controls = this.createAppearanceLayout(containerEl, sample =>
+      this.renderMarkdownSample(sample, ["```js", "const n = 42;", "console.log(n);", "```"].join("\n")));
     this.createFeatureGroup(
       controls,
       this.plugin.language === "zh" ? "功能与渲染" : "Behaviour and rendering",
@@ -2080,6 +2076,7 @@ class BysanStyleSettingTab extends PluginSettingTab {
         this.renderGeometryControls(body, "codeBlock");
       }
     );
+    this.renderThemeGroups(controls, ["code"], false, id => id === "font-monospace-theme");
   }
 
 
@@ -2103,40 +2100,8 @@ class BysanStyleSettingTab extends PluginSettingTab {
       this.renderNoteThemeControls(controls, NOTE_MARK_CONTROLS);
       this.renderThemeGroups(body, ["marks"], false);
     });
-    this.createSettingsSection(containerEl, "headings", zh ? "页面标题与文内标题" : "Page title and headings", (body) => {
-      this.createFeatureGroup(body, zh ? "页面标题" : "Page title", "", group => {
-        const controls = this.createAppearanceLayout(group, sample => {
-          sample.createDiv({ cls: "inline-title", text: zh ? "笔记名称" : "Note name" });
-        });
-        this.renderNoteThemeControls(controls, PAGE_TITLE_CONTROLS);
-      });
-      new Setting(body)
-        .setName(zh ? "调整标题的" : "Heading controls")
-        .addDropdown(dropdown => {
-          this.headingColorPicker = dropdown
-            .addOption("text", zh ? "文字颜色与字号" : "Text colour and font size")
-            .addOption("background", zh ? "背景颜色" : "Background colour")
-            .onChange(value => this.selectHeadingColorMode(value));
-        });
-      NOTE_HEADING_CONTROLS.forEach((controls, index) => {
-        const level = index + 1;
-        const row = body.createDiv({
-          cls: "bysan-heading-row",
-          attr: { id: `bysan-section-appearance-h${level}` }
-        });
-        this.renderAppearanceSample(row, sample => {
-          sample.createEl(`h${level}`, { text: `H${level}` });
-        }, false);
-        for (const [mode, entries] of [["text", controls], ["background", HEADING_BACKGROUND_CONTROLS[index]]]) {
-          this.renderNoteThemeControls(row, entries, true);
-          for (const entry of row.querySelectorAll(".setting-item:not([data-bysan-heading-mode])")) {
-            entry.dataset.bysanHeadingMode = mode;
-          }
-        }
-      });
-      this.selectHeadingColorMode(this.headingColorMode || "text");
-      this.renderThemeGroups(body, ["headings"], false);
-    });
+    this.createSettingsSection(containerEl, "headings", zh ? "页面标题与文内标题" : "Page title and headings",
+      body => this.renderHeadingSettings(body));
     this.createSettingsSection(containerEl, "body-text", zh ? "正文、字体与公式" : "Text, fonts and math", (body) => {
       const controls = this.createAppearanceLayout(body, sample => {
         const paragraph = sample.createEl("p", { text: zh
@@ -2144,18 +2109,22 @@ class BysanStyleSettingTab extends PluginSettingTab {
           : "This paragraph shows the body font, colour and line height." });
         paragraph.createEl("br");
         paragraph.createSpan({ text: zh ? "这是同一段的第二行。" : "This is the second line of the paragraph." });
+        paragraph.append(" · ");
+        paragraph.createEl("strong", { text: zh ? "粗体" : "Bold" });
+        paragraph.append(" / ");
+        paragraph.createEl("em", { text: zh ? "斜体" : "Italic" });
       });
       this.addNumberSetting(controls, zh ? "正文字号" : "Body font size",
         zh ? "恢复后跟随 Obsidian 的字体大小。" : "Reset to follow Obsidian’s font size.",
         "noteFontSize", 8, 48, 1, "px",
         () => parseFloat(getComputedStyle(document.body).getPropertyValue("--font-text-size")) || 16);
       this.renderNoteThemeControls(controls, NOTE_BODY_CONTROLS);
-      this.createFeatureGroup(body, zh ? "块公式" : "Display math", "", group => this.renderMathSettings(group));
-      this.renderThemeGroups(body, ["typography"], false);
+      this.renderGeometryControls(controls, "strong");
+      this.renderThemeGroups(controls, ["typography"], false);
+      this.createFeatureGroup(body, zh ? "公式" : "Math", "", group => this.renderMathSettings(group));
     });
-    this.createSettingsSection(containerEl, "text-details", zh ? "列表、粗体与分隔线" : "Lists, bold text and dividers", (body) => {
+    this.createSettingsSection(containerEl, "text-details", zh ? "列表、任务与分隔线" : "Lists, tasks and dividers", (body) => {
       this.renderTextDetailSettings(body);
-      this.renderThemeGroups(body, ["lists"], false);
     });
     this.createSettingsSection(containerEl, "code", zh ? "代码" : "Code", (body) => {
       this.createFeatureGroup(body, zh ? "代码块" : "Code block", "", group => this.renderCodeSettings(group));
@@ -2165,39 +2134,60 @@ class BysanStyleSettingTab extends PluginSettingTab {
       this.createFeatureGroup(body, zh ? "表格" : "Tables", "", group => this.renderTableSettings(group));
       this.createFeatureGroup(body, zh ? "引用块" : "Blockquotes", "", group => this.renderQuoteSettings(group));
       this.createFeatureGroup(body, zh ? "提示框" : "Callouts", "", group => {
-        const controls = this.createAppearanceLayout(group, sample => {
-          const callout = sample.createDiv({ cls: "callout", attr: { "data-callout": "note" } });
-          callout.createDiv({ cls: "callout-title", text: zh ? "提示框" : "Callout" });
-          callout.createDiv({ cls: "callout-content", text: zh ? "提示框内容" : "Callout body" });
-        });
+        const controls = this.createAppearanceLayout(group, sample =>
+          this.renderMarkdownSample(sample, zh ? "> [!note] 提示框\n> 提示框内容" : "> [!note] Callout\n> Callout body"));
         this.renderNoteThemeControls(controls, CALLOUT_CONTROLS);
+        this.renderThemeGroups(controls, ["blocks"], false);
       });
-      this.renderThemeGroups(body, ["blocks"], false);
     });
     this.createSettingsSection(containerEl, "embeds", zh ? "图片、嵌入与 Mermaid" : "Images, embeds and Mermaid",
       body => this.renderThemeGroups(body, ["embeds"], false));
   }
 
-  renderMathSettings(containerEl) {
-    const controls = this.createAppearanceLayout(containerEl, sample => {
-      const math = sample.createDiv({ cls: "math math-block" });
-      const fallback = math.createSpan({ cls: "bysan-math-sample-fallback", text: "E = mc²" });
-      void loadMathJax().then(async () => {
-        if (!math.isConnected) return;
-        const equation = renderMath("E = mc^2", true);
-        math.appendChild(equation);
-        await finishRenderMath();
-        fallback.remove();
-      }).catch(error => console.warn("[Bysan Style Controller] Math preview unavailable", error));
-    });
-    this.renderNoteThemeControls(controls, [["font-size-latex", "块公式字号", "Display math font size"]]);
+  renderHeadingSettings(body) {
+    const zh = this.plugin.language === "zh";
+    const targets = [
+      ["title", zh ? "页面标题" : "Page title"],
+      ...NOTE_HEADING_CONTROLS.map((_, index) => [String(index + 1), `H${index + 1}`]),
+      ["shared", zh ? "通用标题设置" : "Shared heading settings"]
+    ];
+    new Setting(body).setName(zh ? "调整哪一级标题" : "Heading to customise")
+      .addDropdown(dropdown => {
+        for (const [id, title] of targets) dropdown.addOption(id, title);
+        this.headingPicker = dropdown.onChange(value => this.selectHeadingTarget(value));
+      });
+    const targetFor = id => id.startsWith("inline-title-") || id === "toggle-inline-title-background"
+      ? "title" : (/^(?:print-h|header-|h)([1-6])-/.exec(id)?.[1] ?? "shared");
+    for (const [id, title] of targets) {
+      const panel = body.createDiv({
+        cls: "bysan-heading-target", attr: { "data-bysan-heading-target": id }
+      });
+      const controls = this.createAppearanceLayout(panel, sample => {
+        if (id === "title") sample.createDiv({ cls: "inline-title", text: zh ? "笔记名称" : "Note name" });
+        else sample.createEl(id === "shared" ? "h2" : `h${id}`, {
+          text: id === "shared" ? (zh ? "文内标题" : "Section heading") : title
+        });
+      });
+      if (id === "title") this.renderNoteThemeControls(controls, PAGE_TITLE_CONTROLS);
+      else if (id !== "shared") this.renderNoteThemeControls(controls,
+        [...NOTE_HEADING_CONTROLS[Number(id) - 1], ...HEADING_BACKGROUND_CONTROLS[Number(id) - 1]]);
+      this.renderThemeGroups(controls, ["headings"], false, itemId => targetFor(itemId) === id);
+    }
+    this.selectHeadingTarget(this.headingTarget || "1");
   }
 
-  selectHeadingColorMode(mode) {
-    this.headingColorMode = mode;
-    this.headingColorPicker.setValue(mode);
-    for (const row of this.containerEl.querySelectorAll("[data-bysan-heading-mode]")) {
-      row.hidden = row.dataset.bysanHeadingMode !== mode;
+  renderMathSettings(containerEl) {
+    const controls = this.createAppearanceLayout(containerEl, sample =>
+      this.renderMarkdownSample(sample, "$E=mc^2$\n\n$$\nx^2+y^2=1\n$$"));
+    this.renderNoteThemeControls(controls, [["font-size-latex", "块公式字号", "Display math font size"]]);
+    this.renderThemeGroups(controls, ["math"], false);
+  }
+
+  selectHeadingTarget(target) {
+    this.headingTarget = target;
+    this.headingPicker.setValue(target);
+    for (const panel of this.containerEl.querySelectorAll("[data-bysan-heading-target]")) {
+      panel.hidden = panel.dataset.bysanHeadingTarget !== target;
     }
   }
 
@@ -2215,13 +2205,8 @@ class BysanStyleSettingTab extends PluginSettingTab {
     const zh = this.plugin.language === "zh";
     const controls = this.createAppearanceLayout(containerEl, sample => {
       const frame = sample.createDiv({ cls: "bysan-interface-example" });
-      frame.createDiv({ cls: "bysan-example-titlebar", text: zh ? "标题栏" : "Title bar" });
-      const pane = frame.createDiv({ cls: "bysan-example-workspace" });
-      pane.createDiv({ cls: "bysan-example-left" }).createSpan({
-        cls: "bysan-example-file", text: zh ? "当前文件" : "Active file"
-      });
-      pane.createDiv({ cls: "bysan-example-tab", text: zh ? "当前标签" : "Active tab" });
-      pane.createDiv({ cls: "bysan-example-right", text: zh ? "右栏" : "Right" });
+      frame.createDiv({ cls: "bysan-example-primary", text: zh ? "主背景" : "Primary surface" });
+      frame.createDiv({ cls: "bysan-example-secondary", text: zh ? "次背景" : "Secondary surface" });
       frame.createDiv({ cls: "bysan-example-status", text: zh ? "状态栏" : "Status bar" });
       frame.createDiv({ cls: "bysan-example-accent", text: zh ? "强调色" : "Accent" });
     });
@@ -2245,6 +2230,33 @@ class BysanStyleSettingTab extends PluginSettingTab {
     const layout = containerEl.createDiv({ cls: "bysan-appearance-layout" });
     this.renderAppearanceSample(layout, render);
     return layout.createDiv({ cls: "bysan-appearance-controls" });
+  }
+
+  renderMarkdownSample(sample, markdown) {
+    // The Markdown renderer provides the content. Reading view then adds block
+    // wrappers and list markers, so include those hooks in the fixture too.
+    sample.classList.add("bysan-rendered-fixture");
+    void MarkdownRenderer.render(this.app, markdown, sample, "", this.sampleComponent)
+      .then(() => {
+        if (!sample.isConnected) return;
+        for (const block of [...sample.children]) {
+          const wrapper = sample.ownerDocument.createElement("div");
+          wrapper.className = `el-${block.localName}`;
+          block.before(wrapper);
+          wrapper.append(block);
+        }
+        for (const list of sample.querySelectorAll("ul")) list.classList.add("has-list-bullet");
+        for (const li of sample.querySelectorAll("ul > li:not(.task-list-item)")) {
+          if (li.querySelector(":scope > .list-bullet")) continue;
+          const marker = li.ownerDocument.createElement("span");
+          marker.className = "list-bullet";
+          li.prepend(marker);
+        }
+        if (this.app.vault.getConfig?.("showIndentGuide")) {
+          sample.closest(".markdown-rendered")?.classList.add("show-indentation-guide");
+        }
+      })
+      .catch(error => console.warn("[Bysan Style Controller] Could not render settings sample", error));
   }
 
 
@@ -2292,94 +2304,43 @@ class BysanStyleSettingTab extends PluginSettingTab {
       "",
       (body) => this.renderGeometryControls(body, "inlineCode")
     );
+    this.renderThemeGroups(controls, ["code"], false, id => id === "font-family-inline-code");
   }
 
 
   renderTableSettings(containerEl) {
     const zh = this.plugin.language === "zh";
-    const controls = this.createAppearanceLayout(containerEl, sample => {
-      const table = sample.createDiv({ cls: "el-table" }).createEl("table");
-      const header = table.createEl("thead").createEl("tr");
-      header.createEl("th", { text: zh ? "样本" : "Sample" });
-      header.createEl("th", { text: zh ? "结果" : "Result" });
-      const rows = table.createEl("tbody");
-      for (const [name, value] of [["A", "0.82"], ["B", "0.91"]]) {
-        const row = rows.createEl("tr");
-        row.createEl("td", { text: name });
-        row.createEl("td", { text: value });
-      }
-    });
-    this.createFeatureGroup(
-      controls,
-      this.plugin.language === "zh" ? "功能" : "Behaviour",
-      "",
-      (body) => {
-        this.addToggle(
-          body,
-          this.plugin.language === "zh" ? "启用表格斑马纹" : "Enable table zebra stripes",
-          this.plugin.t("components.zebraDesc"),
-          "tableZebra"
-        );
-        this.addToggle(body, this.plugin.t("components.center"), this.plugin.t("components.centerDesc"), "tableCentered");
-      }
-    );
-    this.createFeatureGroup(
-      controls,
-      this.plugin.language === "zh" ? "明暗外观" : "Light and dark appearance",
-      "",
-      (body) => {
-        this.addDualColor(body, this.plugin.t("palette.tableHead"), "tableHeadLight", "tableHeadDark");
-        this.addDualColor(body, zh ? "表格偶数行背景（斑马纹）" : "Even table row background (zebra stripes)",
-          "tableStripeLight", "tableStripeDark", null, null,
-          zh ? "启用斑马纹后生效。编辑预览与阅读模式。" : "Shown when zebra stripes are enabled. Live Preview and reading view.");
-      }
-    );
-    this.createFeatureGroup(
-      controls,
-      zh ? "表格边框、悬停与尺寸" : "Table borders, hover and sizing",
-      "",
-      (body) => {
-        this.addDualColor(body, this.plugin.t("palette.tableHover"), "tableHoverLight", "tableHoverDark");
-        this.addDualColor(body, this.plugin.t("palette.tableBorder"), "tableBorderLight", "tableBorderDark");
-        this.addNumberSetting(body, zh ? "表格字号" : "Table font size",
-          zh ? "恢复后使用主题的表格字号。" : "Reset to use the theme’s table font size.",
-          "tableFontSize", 7, 48, 1, "px", () => {
-            const cell = containerEl.querySelector(".bysan-appearance-sample td");
-            return parseFloat(cell.ownerDocument.defaultView.getComputedStyle(cell).fontSize) || 14;
-          });
-        this.renderGeometryControls(body, "table");
-      }
-    );
+    const controls = this.createAppearanceLayout(containerEl, sample =>
+      this.renderMarkdownSample(sample, `| ${zh ? "样本" : "Sample"} | ${zh ? "结果" : "Result"} |\n| --- | --- |\n| A | 0.82 |\n| B | 0.91 |`));
+    const grid = controls.createDiv({ cls: "bysan-theme-grid" });
+    this.addToggle(grid, zh ? "启用表格斑马纹" : "Enable table zebra stripes",
+      this.plugin.t("components.zebraDesc"), "tableZebra");
+    this.addToggle(grid, this.plugin.t("components.center"), this.plugin.t("components.centerDesc"), "tableCentered");
+    this.addDualColor(grid, this.plugin.t("palette.tableHead"), "tableHeadLight", "tableHeadDark");
+    this.addDualColor(grid, zh ? "表格偶数行背景（斑马纹）" : "Even row background (zebra stripes)",
+      "tableStripeLight", "tableStripeDark");
+    this.addDualColor(grid, this.plugin.t("palette.tableHover"), "tableHoverLight", "tableHoverDark");
+    this.addDualColor(grid, this.plugin.t("palette.tableBorder"), "tableBorderLight", "tableBorderDark");
+    this.addNumberSetting(grid, zh ? "表格字号" : "Table font size",
+      zh ? "恢复后使用主题的表格字号。" : "Reset to use the theme’s table font size.",
+      "tableFontSize", 7, 48, 1, "px", () => {
+        const cell = containerEl.querySelector(".bysan-appearance-sample td");
+        return cell ? parseFloat(cell.ownerDocument.defaultView.getComputedStyle(cell).fontSize) || 14 : 14;
+      });
+    this.renderGeometryControls(grid, "table");
+    this.renderThemeGroups(controls, ["tables"], false);
   }
 
 
   renderQuoteSettings(containerEl) {
-    const controls = this.createAppearanceLayout(containerEl, sample => {
-      sample.createDiv({ cls: "el-blockquote" }).createEl("blockquote").createEl("p", {
-        text: this.plugin.language === "zh" ? "一段引用文字，用于比较边框、背景和字体。" : "A blockquote for comparing border, background and font."
-      });
-    });
-    this.createFeatureGroup(
-      controls,
-      this.plugin.language === "zh" ? "文字功能" : "Text behaviour",
-      "",
-      (body) => this.addToggle(body, this.plugin.t("components.quoteSerif"), this.plugin.t("components.quoteSerifDesc"), "quoteSerif")
-    );
-    this.createFeatureGroup(
-      controls,
-      this.plugin.language === "zh" ? "明暗外观" : "Light and dark appearance",
-      "",
-      (body) => {
-        this.addDualColor(body, this.plugin.t("palette.quoteBg"), "quoteBgLight", "quoteBgDark", "quoteBgOpacityLight", "quoteBgOpacityDark");
-        this.addDualColor(body, this.plugin.t("palette.quoteBorder"), "quoteBorderLight", "quoteBorderDark");
-      }
-    );
-    this.createFeatureGroup(
-      controls,
-      this.plugin.language === "zh" ? "引用块尺寸与间距" : "Blockquote size and spacing",
-      "",
-      (body) => this.renderGeometryControls(body, "quote")
-    );
+    const controls = this.createAppearanceLayout(containerEl, sample =>
+      this.renderMarkdownSample(sample, this.plugin.language === "zh" ? "> 一段引用文字。" : "> A sample blockquote."));
+    const grid = controls.createDiv({ cls: "bysan-theme-grid" });
+    this.addToggle(grid, this.plugin.t("components.quoteSerif"), this.plugin.t("components.quoteSerifDesc"), "quoteSerif");
+    this.addDualColor(grid, this.plugin.t("palette.quoteBg"), "quoteBgLight", "quoteBgDark", "quoteBgOpacityLight", "quoteBgOpacityDark");
+    this.addDualColor(grid, this.plugin.t("palette.quoteBorder"), "quoteBorderLight", "quoteBorderDark");
+    this.renderGeometryControls(grid, "quote");
+    this.renderThemeGroups(controls, ["quotes"], false);
   }
 
 
@@ -2410,27 +2371,16 @@ class BysanStyleSettingTab extends PluginSettingTab {
 
   renderTextDetailSettings(containerEl) {
     const zh = this.plugin.language === "zh";
-    const controls = this.createAppearanceLayout(containerEl, sample => {
-      const list = sample.createEl("ul");
-      list.createEl("li", { text: zh ? "普通列表项" : "List item" });
-      const task = list.createEl("li", { cls: "task-list-item" });
-      task.createEl("input", { cls: "task-list-item-checkbox", attr: { type: "checkbox", disabled: "", checked: "" } });
-      task.append(zh ? " 已完成任务" : " Completed task");
-      sample.createEl("hr");
-      sample.createEl("p").createEl("strong", { text: zh ? "粗体文字" : "Bold text" });
-    });
-    this.createFeatureGroup(
-      controls,
-      this.plugin.language === "zh" ? "列表外观" : "List appearance",
-      this.plugin.language === "zh" ? "浅色与深色模式的列表标记颜色。" : "List-marker colours in light and dark mode.",
-      (body) => this.addDualColor(body, this.plugin.t("palette.marker"), "markerLight", "markerDark")
-    );
-    this.createFeatureGroup(
-      controls,
-      this.plugin.language === "zh" ? "文字与结构尺寸" : "Text and structure size",
-      this.plugin.language === "zh" ? "列表标记、任务框、分隔线和粗体字重。" : "List markers, task boxes, dividers and strong-text weight.",
-      (body) => this.renderGeometryControls(body, "other")
-    );
+    const controls = this.createAppearanceLayout(containerEl, sample => this.renderMarkdownSample(sample, [
+      zh ? "- 普通列表项\n  - 二级\n    - 三级\n      - 四级" : "- List item\n  - Level two\n    - Level three\n      - Level four",
+      zh ? "1. 有序列表" : "1. Ordered item",
+      zh ? "- [ ] 待办\n- [x] 完成" : "- [ ] To do\n- [x] Done",
+      "---"
+    ].join("\n\n")));
+    const grid = controls.createDiv({ cls: "bysan-theme-grid" });
+    this.addDualColor(grid, this.plugin.t("palette.marker"), "markerLight", "markerDark");
+    for (const feature of ["list", "task", "hr"]) this.renderGeometryControls(grid, feature);
+    this.renderThemeGroups(controls, ["lists"], false);
   }
 
 
@@ -2549,10 +2499,7 @@ class BysanStyleSettingTab extends PluginSettingTab {
 
 
   renderGeometryControls(containerEl, groupId) {
-    const entries = CONTENT_GEOMETRY_CONTROLS.filter(([key]) => {
-      if (groupId === "other") return !/^(inlineCode|codeBlock|table|quote)/.test(key);
-      return key.startsWith(groupId);
-    });
+    const entries = CONTENT_GEOMETRY_CONTROLS.filter(([key]) => key.startsWith(groupId));
     for (const [key, property, unit, minimum, maximum, step, controlZh, controlEn] of entries) {
       const setting = this.addNumberSetting(
         containerEl,

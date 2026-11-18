@@ -30,8 +30,12 @@ const ADVANCED_THEME_GROUPS = [
   ["note-background", "editor", "笔记背景与纸张纹理", "Note background and patterns"],
   ["headings", "editor", "页面标题与 H1–H6", "Page title and H1–H6"],
   ["typography", "editor", "正文、字体与编辑器", "Body text, fonts and editor"],
+  ["math", "editor", "公式", "Math"],
+  ["code", "editor", "代码", "Code"],
   ["lists", "editor", "列表、任务与缩进", "Lists, tasks and indentation"],
-  ["blocks", "editor", "表格、引用、提示框与分隔线", "Tables, quotes, callouts and dividers"],
+  ["tables", "editor", "表格", "Tables"],
+  ["quotes", "editor", "引用块", "Blockquotes"],
+  ["blocks", "editor", "提示框", "Callouts"],
   ["marks", "editor", "链接、标签与高亮", "Links, tags and highlights"],
   ["embeds", "editor", "图片、嵌入与 Mermaid", "Images, embeds and Mermaid"],
   ["canvas", "media", "白板", "Canvas"],
@@ -351,7 +355,7 @@ function chineseTitle(text) {
     .replace(/Options for 'Custom'/g, "自定义选项");
 }
 
-const NOTE_BACKGROUND_COPY = {
+const CONTROL_COPY = {
   "bg-color-notebook": {
     "title.zh": "点阵与网格纸面底色",
     title: "Dotted and grid paper colour",
@@ -375,11 +379,17 @@ const NOTE_BACKGROUND_COPY = {
     title: "Custom underlay colour",
     "description.zh": "仅在底层方式为「自定义」时生效。位于纸纹理和笔记底色下方。",
     description: "Only applies in Custom mode. This layer sits under the paper pattern and note background colour."
+  },
+  "canvas-card-opacity": {
+    "title.zh": "卡片透明度（旧主题参数）",
+    title: "Card opacity (legacy theme parameter)",
+    "description.zh": "当前 Obsidian 原生白板不读取此参数，保留以兼容旧预设和自定义 CSS。",
+    description: "Native Obsidian Canvas does not read this value. Kept for old presets and custom CSS."
   }
 };
 
 function localised(item, key, language) {
-  const copy = NOTE_BACKGROUND_COPY[item.id]?.[language === "en" ? key : `${key}.zh`];
+  const copy = CONTROL_COPY[item.id]?.[language === "en" ? key : `${key}.zh`];
   if (copy) return copy;
   if (language === "en") return item[key] || "";
   if (key === "description") return item[`${key}.zh`] || "";
@@ -943,18 +953,29 @@ class ThemeControls {
     if (isIn(/canvas/)) return "canvas";
     if (isIn(/graph-view/) || /^graph-/.test(id)) return "graph";
     if (isIn(/pdf/) || /^(?:ob-pdf|pdf-|all-dark-pdf)/.test(id)) return "pdf";
+    // Imported headings have duplicate IDs and stale scopes. Explicit targets
+    // must take priority over inferred scopes.
+    if (/^(?:toggle-bg-panel|bg-panel-page|background-panel-page)/.test(id)) return "navigation";
+    if (/^(?:tab-|stack-tab|titlebar-|background-titlebar|font-size-file-header-title)/.test(id)) return "tabs";
+    if (/^(?:setting-etc-pane|popover-)/.test(id)) return "window";
+    if (/^(?:font-family-tag|font-size-tag|tag(?:[1-5]|-.*)|head-tag-style)$/.test(id)) return "marks";
+    if (/^(?:font-size-latex|mjx-)/.test(id)) return "math";
+    if (/^(?:font-monospace-theme|font-family-inline-code)$/.test(id)) return "code";
+    if (/^(?:strong-em-color-|accent-strong$|accent-em$)/.test(id)) return "typography";
+    if (/^(?:fancy-hr|hr-)/.test(id)) return "lists";
+    if (/^(?:table-|toggle-table-|show-border-table$|full-width-table$)/.test(id) || isIn(/table-styles/)) return "tables";
+    if (/^blockquote-/.test(id) || isIn(/blockquote/)) return "quotes";
+    if (/^(?:remove-custom-svg-icons|default-icons|enable-icon-anima)$/.test(id)) return "general";
     if (isIn(/background-settings-workplace/) || /^background-(?:settings-workplace|waves)/.test(id)) return "workspace-background";
     if (isIn(/command-palette|setting-etc|prompt-settings|loading-page/) || /^(?:background-command-palette|background-popover|loading-|setting-style)/.test(id)) return "window";
     if (isIn(/markdown-page|notebook/) || id === "toggle-split-note-background" ||
         /^(?:bg-markdown|bg-color-notebook|dotted-notebook|grid-notebook|stripe-notebook)/.test(id)) return "note-background";
-    if (/^(?:toggle-bg-panel|bg-panel-page|background-panel-page)/.test(id) ||
-        isIn(/outline-settings|folder-style|file-browser|file-tree/) ||
+    if (isIn(/outline-settings|folder-style|file-browser|file-tree/) ||
         /(?:outline|backlink|folder-file|folder-and-file|vault-name|font-.*-vault|split-note|font-size-split|line-height-split|letter-space-split)/.test(id)) return "navigation";
-    if (isIn(/titlebar|tabs-settings|stack-settings|tab-stack/) ||
-        /^(?:tab-|stack-tab|titlebar-|background-titlebar|font-size-file-header-title)/.test(id)) return "tabs";
+    if (isIn(/titlebar|tabs-settings|stack-settings|tab-stack/)) return "tabs";
     if (isIn(/^(?:header-settings|h[1-6]-settings|inline-title-settings)$/) || /^(?:print-h[1-6]|inline-title|header-[1-6]|h[1-6]-)/.test(id)) return "headings";
     if (isIn(/list-style|checkbox-style|indentation-line/) || /^(?:list-|checklist-|indentation-guide)/.test(id)) return "lists";
-    if (isIn(/fancy-hr|blockquote|table-styles/) || /^(?:admonition-|.*callout|table-)/.test(id)) return "blocks";
+    if (/^(?:admonition-|.*callout)/.test(id)) return "blocks";
     // The imported catalogue reuses heading IDs for popovers and settings.
     if (/(?:popover|setting-pane|settings-pane|settings-panel|menu-style)/.test(id)) return "window";
     if (isIn(/link-style|tag-color|highlight-bg-color|cloze-style/) || /^(?:text-highlight|bg-color-highlight|color-highlight)/.test(id)) return "marks";
@@ -984,11 +1005,11 @@ class ThemeControls {
   }
 
 
-  renderGroup(containerEl, groupId, excludedIds, withTitle, renderTagSample) {
+  renderGroup(containerEl, groupId, excludedIds, withTitle, renderTagSample, include = () => true) {
     if (!this.cachedRegionBuckets) this.beginRegionRender();
     const group = [...this.cachedRegionBuckets.values()].flat().find(entry => entry.id === groupId);
     if (!group) return;
-    const items = group.items.filter(item => !excludedIds.has(item.id));
+    const items = group.items.filter(item => !excludedIds.has(item.id) && include(item.id));
     if (!items.length) return;
     const title = this.plugin.language === "zh" ? group.zh : group.en;
     const wrapper = containerEl.createDiv({

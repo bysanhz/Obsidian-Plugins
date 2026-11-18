@@ -943,7 +943,8 @@ body.remove-selectionbackground .bysan-selection-example {
 .bysan-example-titlebar,
 .bysan-example-status,
 .bysan-example-accent,
-.bysan-example-workspace > div {
+.bysan-example-primary,
+.bysan-example-secondary {
   padding: 0.35rem;
   border: 1px solid var(--background-modifier-border);
 }
@@ -956,12 +957,8 @@ body.bt-colorful-titlebar .bysan-example-titlebar {
   background-color: var(--background-titlebar-inner);
 }
 
-.bysan-example-workspace {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr) minmax(0, 0.85fr);
-  gap: 0.2rem;
-  min-height: 3.2rem;
-}
+.bysan-example-primary { background-color: var(--background-primary); }
+.bysan-example-secondary { background-color: var(--background-secondary); }
 
 .bysan-example-left {
   background-color: var(--bysan-left-pane-bg, var(--bt-background-split-container, var(--background-secondary)));
@@ -981,6 +978,7 @@ body.bt-colorful-titlebar .bysan-example-titlebar {
 
 .bysan-example-status {
   background-color: var(--status-bar-bg, var(--background-secondary));
+  color: var(--status-bar-text-color, var(--text-muted));
 }
 
 .bysan-example-accent {
@@ -1034,10 +1032,8 @@ table:not(.dataview) :is(th, td) {
   font-size: var(--font-ui-smaller);
 }
 
-.bysan-math-sample-fallback {
-  font-family: serif;
-  font-style: italic;
-  font-size: var(--font-size-latex, 1em);
+.bysan-rendered-fixture .task-list-item-checkbox {
+  pointer-events: none;
 }
 
 .bysan-theme-group-panel h4 {
@@ -1132,50 +1128,8 @@ table:not(.dataview) :is(th, td) {
   gap: 0.35rem;
 }
 
-.bysan-heading-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(9.25rem, 34%);
-  grid-template-areas: "sample size" "colour colour";
-  align-items: center;
-  gap: 0.25rem 0.55rem;
-  padding: 0.35rem 0;
-  border-top: 1px solid var(--bysan-settings-border);
-}
-
-.bysan-heading-row .bysan-appearance-sample {
-  grid-area: sample;
-  padding: 0.35rem 0.5rem;
-}
-
-.bysan-style-settings .bysan-heading-row > .bysan-theme-setting-item:not(.setting-item-heading) {
-  display: flex;
-  align-items: stretch;
-  flex-direction: column;
-  min-width: 0;
-  border: 0;
-  background: transparent !important;
-}
-
-.bysan-heading-row .bysan-theme-color-setting {
-  grid-area: colour;
-}
-
-.bysan-heading-row .bysan-control-type-variable-text {
-  grid-area: size;
-}
-
-.bysan-heading-row .bysan-control-type-class-toggle {
-  grid-area: size;
-}
-
-.bysan-style-settings .bysan-heading-row > .setting-item[hidden] {
-  display: none !important;
-}
-
-.bysan-style-settings .bysan-heading-row .setting-item > :is(.setting-item-control, .setting-item-info) {
-  min-width: 0;
-  width: 100%;
-  margin: 0;
+.bysan-heading-target {
+  margin-block-start: 0.4rem;
 }
 
 .bysan-appearance-layout {
@@ -1215,10 +1169,6 @@ table:not(.dataview) :is(th, td) {
     top: 8.75rem;
   }
 
-  .bysan-heading-row {
-    grid-template-columns: minmax(4.5rem, 0.7fr) minmax(20.6rem, 2.5fr) minmax(9.1rem, 1fr);
-    grid-template-areas: "sample colour size";
-  }
 }
 
 @container (max-width: 28rem) {
@@ -2111,18 +2061,12 @@ table:not(.dataview) :is(th, td) {
   transform-origin: right center;
 }
 
-.bysan-style-settings .bysan-settings-section-body .bysan-dual-mode-setting.setting-item,
-.bysan-style-settings .bysan-settings-section-body .bysan-heading-row > .setting-item {
+.bysan-style-settings .bysan-settings-section-body .bysan-dual-mode-setting.setting-item {
   grid-template-columns: minmax(0, 1fr);
 }
 
 .bysan-style-settings .bysan-settings-section-body .bysan-dual-mode-setting .setting-item-control {
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 11rem), 1fr));
-}
-
-.bysan-style-settings .bysan-settings-section-body .bysan-heading-row > .setting-item {
-  align-content: center;
-  border-bottom: 0;
 }
 
 .bysan-style-settings .bysan-settings-section-body .bysan-color-row.setting-item {
@@ -2306,7 +2250,6 @@ table:not(.dataview) :is(th, td) {
 
 .bysan-tag-example,
 .bysan-example-tags,
-.bysan-sample-list,
 .bysan-sample-embeds,
 .bysan-sample-canvas,
 .bysan-sample-graph {
@@ -2355,6 +2298,13 @@ body.colorful-tag-bt .bysan-tag-example-palette {
   height: auto;
 }
 
+.bysan-sample-tabstrip .workspace-tab-header-container-inner {
+  display: flex;
+  flex-wrap: wrap;
+  min-width: 0;
+  padding: 0;
+}
+
 .bysan-sample-nav,
 .bysan-sample-window {
   display: grid;
@@ -2370,6 +2320,18 @@ body.colorful-tag-bt .bysan-tag-example-palette {
   padding: 0.25rem;
   border: 1px solid var(--background-modifier-border);
   border-radius: 4px;
+}
+
+.bysan-sample-nav .nav-files-container {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+}
+
+/* The real file-tree background is viewport-fixed. Use the same image and
+ * opacity in the preview but clip the layer to its own sample box. */
+body.toggle-bg-panel-page .bysan-sample-nav .nav-files-container::before {
+  position: absolute;
 }
 
 .bysan-sample-menu {
@@ -2393,7 +2355,7 @@ body:not(.toggle-canvas-grid) .bysan-sample-canvas {
   padding: 0.2rem 0.38rem;
   border: 1px solid var(--background-modifier-border);
   border-radius: 4px;
-  background: color-mix(in srgb, var(--interactive-accent) calc(var(--canvas-card-opacity, 0.1) * 100%), var(--background-primary));
+  background: var(--color-base-00, var(--background-primary));
 }
 
 .bysan-sample-graph {
@@ -2448,12 +2410,6 @@ body:not(.toggle-canvas-grid) .bysan-sample-canvas {
   min-width: 0;
   color: var(--text-muted);
   font-variant-numeric: tabular-nums;
-}
-
-@container (min-width: 39rem) {
-  .bysan-heading-row {
-    grid-template-columns: minmax(4.2rem, 0.65fr) minmax(22.2rem, 2.5fr) minmax(9.1rem, 1fr);
-  }
 }
 
 @container (max-width: 19rem) {

@@ -954,7 +954,7 @@ class ThemeControls {
   }
 
 
-  renderGroup(containerEl, groupId, excludedIds, withTitle) {
+  renderGroup(containerEl, groupId, excludedIds, withTitle, renderTagSample) {
     if (!this.cachedRegionBuckets) this.beginRegionRender();
     const group = [...this.cachedRegionBuckets.values()].flat().find(entry => entry.id === groupId);
     if (!group) return;
@@ -966,7 +966,21 @@ class ThemeControls {
       attr: { "data-bysan-group": groupId }
     });
     if (withTitle) wrapper.createEl("h4", { text: title });
-    this.renderGroupedItems(wrapper.createDiv({ cls: "bysan-theme-grid" }), items);
+    const renderGrid = (parent, entries) =>
+      this.renderGroupedItems(parent.createDiv({ cls: "bysan-theme-grid" }), entries);
+    if (groupId === "marks" && renderTagSample) {
+      const isTag = item => /^(tag(?:[1-5]|-.*)|head-tag-style|font-(?:family|size)-tag)$/.test(item.id);
+      const tags = items.filter(isTag);
+      if (tags.length) {
+        const panel = wrapper.createDiv({ cls: "bysan-tag-settings" });
+        panel.createEl("h4", { text: this.plugin.language === "zh" ? "标签" : "Tags" });
+        renderTagSample(panel);
+        renderGrid(panel, tags);
+        renderGrid(wrapper, items.filter(item => !isTag(item)));
+        return;
+      }
+    }
+    renderGrid(wrapper, items);
   }
 
 
@@ -1115,6 +1129,7 @@ class ThemeControls {
       const userDescription = /^--[\w-]+$/.test(description.trim()) ? "" : description;
       setting.setDesc(presentation?.scope ?? userDescription);
     }
+    setting.descEl.title = controlDescription;
     setting.infoEl.setAttribute("title", controlDescription);
     setting.settingEl.dataset.bysanSearch = `${title} ${item.title || ""} ${controlDescription} ${item.id}`.toLowerCase();
     this.renderControl(setting, item, title, presentation);
@@ -1269,7 +1284,9 @@ class ThemeControls {
         appendNewControls(() => setting.addSlider((slider) => {
           sliderComponent = slider;
           slider.setLimits(0, 1, 0.01).setDynamicTooltip().setValue(parsed.alpha);
-          slider.sliderEl?.setAttribute("title", this.plugin.t("theme.opacityTitle", { mode: label }));
+          const opacityLabel = this.plugin.t("theme.opacityTitle", { mode: label });
+          slider.sliderEl?.setAttribute("title", opacityLabel);
+          slider.sliderEl?.setAttribute("aria-label", opacityLabel);
           slider.onChange((alpha) => {
             if (syncingControls) return;
             const current = parseColor(this.displayValueFor(item, mode));

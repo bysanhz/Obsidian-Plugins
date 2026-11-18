@@ -2093,6 +2093,21 @@ table:not(.dataview) :is(th, td) {
   display: none;
 }
 
+.bysan-theme-grid .setting-item-description {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.bysan-style-settings .bysan-theme-grid > .bysan-control-type-class-toggle.setting-item {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.bysan-style-settings .bysan-theme-grid > .bysan-control-type-class-toggle .checkbox-container {
+  transform: scale(0.85);
+  transform-origin: right center;
+}
+
 .bysan-style-settings .bysan-settings-section-body .bysan-color-row.setting-item,
 .bysan-style-settings .bysan-settings-section-body .bysan-dual-mode-setting.setting-item,
 .bysan-style-settings .bysan-settings-section-body .bysan-heading-row > .setting-item {
@@ -2110,13 +2125,14 @@ table:not(.dataview) :is(th, td) {
 
 .bysan-style-settings .bysan-settings-section-body .bysan-color-row .setting-item-control {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 10.6rem), 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 10.9rem), 1fr));
   align-items: stretch;
+  container-type: inline-size;
 }
 
 .bysan-style-settings .bysan-color-mode {
   display: grid;
-  grid-template-columns: 2.35rem 1.25rem minmax(0, 1fr) 1.35rem;
+  grid-template-columns: 2.35rem 1.25rem minmax(0, max-content) 1.35rem 1fr;
   align-items: center;
   gap: 0.18rem 0.25rem;
   min-width: 0;
@@ -2165,11 +2181,32 @@ table:not(.dataview) :is(th, td) {
 }
 
 .bysan-style-settings .bysan-color-mode > .slider {
-  grid-area: 2 / 2 / 3 / 5;
+  grid-area: 2 / 2 / 3 / 6;
   width: 100% !important;
   min-width: 0 !important;
   max-width: none !important;
   margin: 0 !important;
+}
+
+/* When two mode cards fit, put RGBA, opacity and reset on the same line.
+ * Let only the final track flex so the controls don't drift apart. */
+@container (min-width: 35rem) {
+  .bysan-style-settings .bysan-color-mode:has(> .slider) {
+    grid-template-columns: 2.35rem 1.25rem 4.5rem 2rem minmax(3.15rem, 8rem) 1.35rem 1fr;
+  }
+
+  .bysan-style-settings .bysan-color-mode:has(> .slider) > .bysan-color-reset {
+    grid-area: 1 / 6;
+  }
+
+  .bysan-style-settings .bysan-color-mode > .slider-value {
+    grid-area: 1 / 4;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .bysan-style-settings .bysan-color-mode > .slider {
+    grid-area: 1 / 5;
+  }
 }
 
 .bysan-style-settings .bysan-color-mode .slider input[type="range"] {
@@ -2229,10 +2266,168 @@ table:not(.dataview) :is(th, td) {
   }
 }
 
-@container (min-width: 50rem) {
+@container (min-width: 47rem) {
   .bysan-theme-grid > :is(.bysan-color-row, .bysan-theme-pair) {
     grid-column: auto;
   }
+}
+
+.bysan-compact-preview {
+  display: grid;
+  gap: 0.25rem 0.55rem;
+  padding: 0.28rem 0.45rem;
+  margin: 0.3rem 0;
+  min-width: 0;
+  border: 1px solid var(--bysan-settings-border);
+  border-radius: 6px;
+  background: var(--background-primary);
+}
+
+.bysan-preview-caption {
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+}
+
+.bysan-style-settings .bysan-compact-preview-content {
+  min-width: 0;
+  font-size: var(--font-ui-small);
+  overflow: auto;
+}
+
+.bysan-style-settings .bysan-compact-preview-content :is(ul, hr, h6) {
+  margin-block: 0.125rem;
+}
+
+.bysan-tag-example,
+.bysan-example-tags,
+.bysan-sample-list,
+.bysan-sample-embeds,
+.bysan-sample-canvas,
+.bysan-sample-graph {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.2rem 0.45rem;
+}
+
+.bysan-tag-example > .bysan-preview-caption {
+  flex: 0 0 7.5em;
+}
+
+.bysan-compact-preview [class*="bysan-sample-"],
+.bysan-compact-preview .bysan-tag-example {
+  pointer-events: none;
+}
+
+.bysan-style-settings .bysan-compact-preview .bysan-tag-example-palette .bysan-example-tags .tag {
+  background-color: var(--bysan-sample-tag-bg) !important;
+  color: var(--tag-text, var(--text-normal)) !important;
+  border: none !important;
+  font: var(--font-size-tag, var(--font-ui-small)) var(--font-family-tag, var(--font-interface)) !important;
+  filter: none;
+}
+
+body.colorful-tag-bt .bysan-tag-example-palette {
+  display: none;
+}
+
+.bysan-tag-settings {
+  margin-block-end: 0.5rem;
+}
+
+@container (min-width: 39rem) {
+  .bysan-style-settings .bysan-tag-settings .bysan-color-row.setting-item {
+    grid-column: 1 / -1;
+    grid-template-columns: 4.4rem minmax(0, 1fr);
+  }
+}
+
+.bysan-sample-tabstrip {
+  display: flex;
+  min-height: 0;
+  height: auto;
+  align-items: center;
+  gap: 0.2rem;
+}
+
+.bysan-sample-tabstrip .workspace-tab-header {
+  flex: 0 1 auto;
+  min-width: 0;
+  height: auto;
+}
+
+.bysan-sample-nav,
+.bysan-sample-window {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.4rem;
+}
+
+.bysan-sample-nav > div,
+.bysan-sample-menu,
+.bysan-sample-popover,
+.bysan-sample-canvas,
+.bysan-sample-graph {
+  padding: 0.25rem;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 4px;
+}
+
+.bysan-sample-menu {
+  background: var(--background-secondary);
+}
+
+.bysan-sample-popover {
+  background: var(--background-popover, var(--background-primary));
+}
+
+.bysan-sample-canvas {
+  background: var(--canvas-background, var(--background-primary));
+}
+
+body:not(.toggle-canvas-grid) .bysan-sample-canvas {
+  background-image: radial-gradient(var(--canvas-dot-pattern, var(--background-modifier-border)) 1px, transparent 1px);
+  background-size: 10px 10px;
+}
+
+.bysan-sample-canvas > span:not(.bysan-sample-canvas-link) {
+  padding: 0.2rem 0.38rem;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--interactive-accent) calc(var(--canvas-card-opacity, 0.1) * 100%), var(--background-primary));
+}
+
+.bysan-sample-graph {
+  background: var(--graph-canvas-bg, var(--background-primary));
+  color: var(--graph-text-color, var(--text-normal));
+}
+
+.bysan-sample-graph-node {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.bysan-sample-graph-node::before {
+  content: "";
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 50%;
+  background: var(--bysan-sample-node, var(--text-muted));
+}
+
+.bysan-sample-graph-node + .bysan-sample-graph-node::after {
+  content: "";
+  order: -1;
+  width: 0.65rem;
+  height: 1px;
+  background: var(--graph-line, var(--text-muted));
+}
+
+.bysan-sample-embeds img {
+  width: 7rem;
+  max-width: 100%;
+  height: auto;
 }
 
 .bysan-theme-mode-card .bysan-mode-label {

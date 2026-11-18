@@ -195,6 +195,10 @@ const expectedGroups = [
   "lists", "blocks", "embeds"
 ];
 assert.deepStrictEqual(mountedGroups.sort(), expectedGroups.sort(), "every theme group must be mounted exactly once");
+assert(mainSource.includes('this.renderCompactSample(containerEl, "tags"'), "missing preview colocated with tag controls");
+for (const sample of ["tabs", "navigation", "window", "lists", "embeds", "canvas", "graph"]) {
+  assert(mainSource.includes(`\n      ${sample}: [tr(`), `missing inline preview: ${sample}`);
+}
 assert(mainSource.includes('createSettingsSection(tools, "blank-line-cleanup"'), "blank-line cleanup must be directly available in writing tools");
 
 const usedTranslations = new Set();

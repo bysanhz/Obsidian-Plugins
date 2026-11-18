@@ -1,6 +1,6 @@
 /**
  * Bysan Style Controller
- * Version: 0.17.6
+ * Version: 0.17.7
  *
  * Owns visual presentation and provides switchable, integrated Bysan modules.
  */
@@ -1539,7 +1539,114 @@ class BysanStyleSettingTab extends PluginSettingTab {
 
 
   renderThemeGroups(containerEl, ids, withTitle = true) {
-    for (const id of ids) this.plugin.themeControls.renderGroup(containerEl, id, COMMON_THEME_IDS, withTitle);
+    for (const id of ids) {
+      this.renderThemeSample(containerEl, id);
+      this.plugin.themeControls.renderGroup(containerEl, id, COMMON_THEME_IDS, withTitle,
+        id === "marks" ? panel => this.renderTagSample(panel) : null);
+    }
+  }
+
+  renderTagSample(containerEl) {
+    const zh = this.plugin.language === "zh";
+    this.renderCompactSample(containerEl, "tags", zh ? "标签预览" : "Tag preview", sample => {
+      for (const [type, label] of [
+        ["active", zh ? "当前样式" : "Current style"],
+        ["palette", zh ? "自定义彩色标签" : "Custom colourful tags"]
+      ]) {
+        const line = sample.createDiv({ cls: `bysan-tag-example bysan-tag-example-${type}` });
+        line.createSpan({ cls: "bysan-preview-caption", text: label });
+        const tags = line.createSpan({ cls: "bysan-example-tags" });
+        for (let index = 1; index <= 5; index++) {
+          const tag = tags.createEl("a", { cls: "tag", text: `#${zh ? "标签" : "tag"}${index}` });
+          if (type === "palette") tag.style.setProperty("--bysan-sample-tag-bg", `var(--tag${index})`);
+        }
+        if (type === "active") {
+          const heading = line.createEl("h6", { text: zh ? "标题 " : "Heading " });
+          heading.createEl("a", { cls: "tag", text: zh ? "#上标" : "#superscript" });
+        }
+      }
+    });
+  }
+
+  renderCompactSample(containerEl, id, label, render) {
+    const box = containerEl.createDiv({ cls: "bysan-compact-preview", attr: { "data-bysan-preview": id } });
+    box.createDiv({ cls: "bysan-preview-caption", text: label });
+    const content = box.createDiv({ cls: "markdown-rendered bysan-compact-preview-content" });
+    render(content);
+  }
+
+  renderThemeSample(containerEl, id) {
+    const zh = this.plugin.language === "zh";
+    const tr = (cn, en) => zh ? cn : en;
+    const specs = {
+      tabs: [tr("标题栏与标签页预览", "Title bar and tabs preview"), sample => {
+        const bar = sample.createDiv({ cls: "bysan-sample-tabstrip bysan-example-titlebar workspace-tab-header-container" });
+        for (const [label, active] of [[tr("当前笔记", "Active note"), true], [tr("其他笔记", "Other note"), false]]) {
+          const tab = bar.createDiv({ cls: `workspace-tab-header${active ? " is-active bysan-example-tab" : ""}` });
+          tab.createDiv({ cls: "workspace-tab-header-inner" })
+            .createDiv({ cls: "workspace-tab-header-inner-title", text: label });
+        }
+      }],
+      navigation: [tr("文件树与大纲预览", "File tree and outline preview"), sample => {
+        const row = sample.createDiv({ cls: "bysan-sample-nav" });
+        const tree = row.createDiv({ cls: "bysan-example-left nav-files-container" });
+        tree.createDiv({ cls: "nav-folder-title", text: tr("▾ 示例文件夹", "▾ Sample folder") });
+        tree.createDiv({ cls: "nav-file-title tree-item-self is-active bysan-example-file", text: tr("当前笔记", "Active note") });
+        const outline = row.createDiv({ cls: "bysan-example-right outline" });
+        const item = outline.createDiv({ cls: "tree-item" });
+        item.createDiv({ cls: "tree-item-self" }).createDiv({ cls: "tree-item-inner", text: tr("1. 一级标题", "1. Section") });
+        const child = item.createDiv({ cls: "tree-item-children" });
+        child.createDiv({ cls: "tree-item-self" }).createDiv({ cls: "tree-item-inner", text: tr("1.1 二级标题", "1.1 Subsection") });
+      }],
+      window: [tr("菜单与悬浮预览的样式示意", "Menu and popover style sample"), sample => {
+        const row = sample.createDiv({ cls: "bysan-sample-window" });
+        const menu = row.createDiv({ cls: "bysan-sample-menu" });
+        menu.createDiv({ cls: "menu-item", text: tr("打开笔记", "Open note") });
+        menu.createDiv({ cls: "menu-item selected", text: tr("当前菜单项", "Selected item") });
+        row.createDiv({ cls: "bysan-sample-popover", text: tr("链接悬浮预览", "Link popover") });
+      }],
+      lists: [tr("列表、任务、粗体与分隔线预览", "List, task, bold text and divider preview"), sample => {
+        const line = sample.createDiv({ cls: "bysan-sample-list" });
+        const list = line.createEl("ul", { cls: "has-list-bullet" });
+        const li = list.createEl("li");
+        li.createSpan({ cls: "list-bullet" });
+        li.createEl("strong", { text: tr("列表项", "List item") });
+        li.createEl("ul", { cls: "has-list-bullet" }).createEl("li", { text: tr("子项", "Nested item") });
+        const tasks = line.createEl("ul", { cls: "contains-task-list" });
+        for (const done of [false, true]) {
+          const task = tasks.createEl("li", { cls: `task-list-item${done ? " is-checked" : ""}`, attr: { "data-task": done ? "x" : " " } });
+          const checkbox = task.createEl("input", { cls: "task-list-item-checkbox", attr: { type: "checkbox", tabindex: "-1", "aria-hidden": "true" } });
+          checkbox.checked = done;
+          task.append(done ? tr("已完成", "Completed") : tr("待办任务", "Open task"));
+        }
+        sample.createEl("hr");
+      }],
+      embeds: [tr("图片与嵌入预览", "Image and embed preview"), sample => {
+        const row = sample.createDiv({ cls: "bysan-sample-embeds" });
+        const image = row.createSpan({ cls: "internal-embed image-embed is-loaded" });
+        image.createEl("img", { attr: {
+          alt: tr("图片示例", "Sample image"),
+          src: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 48'%3E%3Crect width='120' height='48' fill='%23d8edf5'/%3E%3Ccircle cx='96' cy='13' r='6' fill='%23edaa4f'/%3E%3Cpath d='M0 48L32 16 52 34 73 12 120 48Z' fill='%23479b89'/%3E%3C/svg%3E"
+        } });
+        const embed = row.createDiv({ cls: "markdown-embed" });
+        embed.createDiv({ cls: "markdown-embed-title", text: tr("嵌入笔记", "Embedded note") });
+        embed.createDiv({ cls: "markdown-embed-content", text: tr("另一篇笔记的内容", "Content from another note") });
+      }],
+      canvas: [tr("白板底色与卡片示意", "Canvas background and cards sample"), sample => {
+        const canvas = sample.createDiv({ cls: "bysan-sample-canvas" });
+        canvas.createSpan({ text: tr("卡片", "Card") });
+        canvas.createSpan({ cls: "bysan-sample-canvas-link", text: "→" });
+        canvas.createSpan({ text: tr("关联笔记", "Linked note") });
+      }],
+      graph: [tr("图谱节点与连线配色示意", "Graph colours sample"), sample => {
+        const graph = sample.createDiv({ cls: "bysan-sample-graph" });
+        for (const [kind, label] of [["circle", tr("笔记", "Note")], ["tag", tr("标签", "Tag")], ["attach", tr("附件", "Attachment")], ["unresolved", tr("未创建", "Unresolved")]]) {
+          const node = graph.createSpan({ cls: "bysan-sample-graph-node", text: label });
+          node.style.setProperty("--bysan-sample-node", `var(--graph-${kind})`);
+        }
+      }]
+    };
+    if (Object.hasOwn(specs, id)) this.renderCompactSample(containerEl, id, ...specs[id]);
   }
 
 

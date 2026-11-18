@@ -884,23 +884,26 @@ class ThemeControls {
   }
 
 
-  renderRegion(containerEl, regionId) {
+  renderRegion(containerEl, regionId, excludedIds = new Set()) {
     if (!this.cachedRegionBuckets) this.beginRegionRender();
     const groups = [...(this.cachedRegionBuckets.get(regionId)?.values() || [])];
     let first = true;
+    let count = 0;
     for (const groupData of groups) {
-      if (!groupData.items.length) continue;
+      const items = groupData.items.filter(item => !excludedIds.has(item.id));
+      if (!items.length) continue;
+      count += items.length;
       if (!groupData.heading) {
-        for (const item of groupData.items) this.renderItem(containerEl, item);
+        for (const item of items) this.renderItem(containerEl, item);
         continue;
       }
       const group = this.createThemeGroup(containerEl, groupData.heading, "minor", first);
       group.details.id = `${this.headingAnchors.get(groupData.heading) || groupData.heading.id}-${regionId}`;
       group.details.dataset.bysanThemeRegion = regionId;
       first = false;
-      for (const item of groupData.items) this.renderItem(group.body, item);
+      for (const item of items) this.renderItem(group.body, item);
     }
-    return groups.reduce((count, group) => count + group.items.length, 0);
+    return count;
   }
 
 
@@ -994,8 +997,8 @@ class ThemeControls {
   }
 
 
-  renderItem(containerEl, item) {
-    const title = localised(item, "title", this.plugin.language) || item.id;
+  renderItem(containerEl, item, presentation = null) {
+    const title = presentation?.name || localised(item, "title", this.plugin.language) || item.id;
     const description = localised(item, "description", this.plugin.language);
     const setting = new Setting(containerEl).setName(title);
     setting.settingEl.addClass("bysan-theme-setting-item");
@@ -1017,8 +1020,13 @@ class ThemeControls {
 
     if (item.type === "info-text") return;
     const controlDescription = this.controlDescription(item, description);
-    setting.setDesc(controlDescription);
+    setting.setDesc(presentation?.scope || controlDescription);
     setting.descEl?.setAttribute("title", controlDescription);
+    if (presentation) {
+      const details = setting.infoEl.createEl("details", { cls: "bysan-setting-explanation" });
+      details.createEl("summary", { text: this.plugin.language === "zh" ? "默认值与标识" : "Default and identifier" });
+      details.createDiv({ text: controlDescription });
+    }
     setting.settingEl.dataset.bysanSearch = `${title} ${item.title || ""} ${controlDescription} ${item.id}`.toLowerCase();
 
     if (item.type === "class-toggle") {
@@ -1056,22 +1064,32 @@ class ThemeControls {
       return;
     }
 
-    if (item.type === "variable-number") {
-      setting.addText((text) => {
-        text.inputEl.type = "number";
-        text.setValue(String(this.displayValueFor(item)));
-        text.onChange((value) => {
-          const number = Number(value);
-          if (Number.isFinite(number)) this.plugin.updateThemeSetting(item.id, number);
+    let input;
+    setting.addText((text) => {
+      input = text;
+      if (item.type === "variable-number") text.inputEl.type = "number";
+      text.setPlaceholder(this.plugin.t("theme.cssValue"))
+        .setValue(String(this.displayValueFor(item) ?? ""))
+        .onChange((value) => {
+          if (item.type !== "variable-number") {
+            this.plugin.updateThemeSetting(item.id, value);
+          } else if (value.trim() && Number.isFinite(Number(value))) {
+            this.plugin.updateThemeSetting(item.id, Number(value));
+          }
         });
+    });
+    if (presentation) {
+      const label = this.plugin.language === "zh" ? "恢复默认值" : "Restore default";
+      const reset = setting.controlEl.createEl("button", {
+        text: "↺",
+        cls: "clickable-icon bysan-color-reset",
+        attr: { type: "button", title: label, "aria-label": label }
       });
-      return;
+      reset.addEventListener("click", async () => {
+        await this.plugin.resetThemeSetting(item.id);
+        input.setValue(String(this.displayValueFor(item) ?? ""));
+      });
     }
-
-    setting.addText((text) => text
-      .setPlaceholder(this.plugin.t("theme.cssValue"))
-      .setValue(String(this.displayValueFor(item) ?? ""))
-      .onChange((value) => this.plugin.updateThemeSetting(item.id, value)));
   }
 
 
@@ -1155,7 +1173,7 @@ class ThemeControls {
 
   filterRows(containerEl, query) {
     const normalized = String(query || "").trim().toLowerCase();
-    const rows = Array.from(containerEl.querySelectorAll(".setting-item"))
+    const rows = Array.from(containerEl.querySelectorAll(".setting-item:not(.setting-item-heading)"))
       .filter((row) => !row.closest(".bysan-settings-nav"));
     const matches = [];
 

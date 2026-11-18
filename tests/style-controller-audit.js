@@ -175,11 +175,12 @@ for (const method of [
 
 assert(!mainSource.includes('createSubarea(content, "palette"'), "legacy standalone dual-mode palette area still rendered");
 assert(!mainSource.includes('createMajorArea(\n      areas,\n      "theme"'), "legacy full-theme major area still rendered");
-assert(mainSource.includes('createSubarea(content, "editor"'), "main editor region is not rendered as a content location");
-for (const objectId of ["code", "inline-code", "tables", "quotes", "text-details"]) {
+assert(mainSource.includes('this.renderEditorRegionSettings(content)'), "note appearance is not rendered in the content tab");
+for (const objectId of ["body-text", "headings", "code", "tables", "quotes"]) {
   assert(mainSource.includes(`createEditorObject(containerEl, "${objectId}"`), `missing editor object group: ${objectId}`);
 }
-assert(mainSource.includes('"advanced-editor"'), "missing advanced editor region group");
+assert(mainSource.includes('createSubarea(styles, "advanced"'), "missing advanced theme settings");
+assert(mainSource.includes('createSubarea(tools, "blank-line-cleanup"'), "blank-line cleanup must live in writing tools");
 
 const usedTranslations = new Set();
 for (const file of ["main.js", "theme-controls.js", "pdf-preview.js"]) {

@@ -840,8 +840,47 @@ body.bysan-style-controller-active
 
 .bysan-major-tabs {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0.55rem;
+}
+
+.bysan-appearance-sample {
+  margin-block: 0.5rem 1rem;
+  padding: 0.7rem 0.9rem;
+  border: 1px solid var(--bysan-settings-border);
+  border-radius: 8px;
+  background: var(--background-primary);
+  overflow: auto;
+}
+
+.bysan-appearance-sample-label,
+.bysan-setting-explanation {
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+}
+
+.bysan-appearance-sample-label {
+  margin-block-end: 0.45rem;
+}
+
+.bysan-appearance-sample .markdown-rendered {
+  color: var(--text-normal);
+}
+
+.bysan-appearance-sample .markdown-preview-section > :first-child {
+  margin-block-start: 0;
+}
+
+.bysan-appearance-sample .markdown-preview-section > :last-child {
+  margin-block-end: 0;
+}
+
+.bysan-setting-explanation summary {
+  cursor: pointer;
+}
+
+.bysan-setting-explanation div {
+  overflow-wrap: anywhere;
 }
 
 .bysan-major-tab {
@@ -1775,10 +1814,14 @@ body.bysan-style-controller-active
 }
 
 @media (max-width: 760px) {
-  .bysan-major-tabs,
   .bysan-theme-group-minor > .bysan-theme-group-body,
   .bysan-feature-group-body {
     grid-template-columns: 1fr;
+  }
+
+  .bysan-major-tab {
+    white-space: normal;
+    padding-inline: 0.25rem;
   }
 
   .bysan-theme-group-minor > .bysan-theme-group-body > :is(.setting-item-heading, .bysan-theme-color-setting, .bysan-theme-group) {

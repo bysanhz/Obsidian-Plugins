@@ -1,6 +1,6 @@
 /**
  * Bysan Style Controller
- * Version: 0.16.9
+ * Version: 0.17.0
  *
  * Owns visual presentation and provides switchable, integrated Bysan modules.
  */
@@ -70,6 +70,22 @@ const INTEGRATED_MODULES = [
 ];
 
 const MODULE_SETTING_KEYS = new Set(INTEGRATED_MODULES.map((module) => module.key));
+
+const NOTE_BODY_CONTROLS = [
+  ["text-normal", "正文文字颜色", "Body text colour"],
+  ["font-text-theme", "正文字体", "Body font"],
+  ["line-height-main", "正文行高", "Body line height"]
+];
+const NOTE_HEADING_CONTROLS = Array.from({ length: 6 }, (_, index) => {
+  const level = index + 1;
+  return [
+    [`print-h${level}-color`, `H${level} 文字颜色`, `H${level} text colour`],
+    [`h${level}-size`, `H${level} 字号`, `H${level} font size`]
+  ];
+});
+const NOTE_APPEARANCE_IDS = new Set(
+  [...NOTE_BODY_CONTROLS, ...NOTE_HEADING_CONTROLS.flat()].map(([id]) => id)
+);
 
 /*
  * ChatGPT-style pasted Markdown commonly has one or more visual blank lines
@@ -637,7 +653,7 @@ module.exports = class BysanStyleController extends Plugin {
       this.register(() => window.clearTimeout(timer));
     }
 
-    console.log(`[Bysan Style Controller] v0.16.9 loaded with ${this.themeControls.count} regional theme controls`);
+    console.log(`[Bysan Style Controller] v${this.manifest.version} loaded with ${this.themeControls.count} regional theme controls`);
   }
 
 
@@ -646,7 +662,19 @@ module.exports = class BysanStyleController extends Plugin {
       new Notice(this.t("pdf.openNote"));
       return;
     }
-    window.setTimeout(() => new BysanPdfPreviewModal(this.app, this, view).open(), 80);
+    const noteDocument = view.containerEl.ownerDocument;
+    window.setTimeout(() => {
+      const noteWindow = noteDocument.defaultView;
+      if (!noteWindow || noteWindow.closed || !view.containerEl.isConnected) return;
+      if (window.activeWindow !== noteWindow) {
+        noteWindow.focus();
+        // Obsidian Modal.open() uses these globals. Closing a pop-out settings
+        // window can leave its last event as the active window until focus changes.
+        window.activeWindow = noteWindow;
+        window.activeDocument = noteDocument;
+      }
+      new BysanPdfPreviewModal(this.app, this, view).open();
+    }, 80);
   }
 
 
@@ -835,6 +863,15 @@ module.exports = class BysanStyleController extends Plugin {
     return true;
   }
 
+  async resetThemeSetting(id) {
+    if (!Object.hasOwn(this.settings.themeSettings || {}, id)) return;
+    this.settings.themeSettings = { ...this.settings.themeSettings };
+    delete this.settings.themeSettings[id];
+    this.settings.stylePresetDirty = true;
+    await this.saveData(this.settings);
+    this.themeControls.applySetting(id);
+  }
+
 
   captureStyleSettings(source = this.settings) {
     return Object.fromEntries(Object.entries(source)
@@ -892,7 +929,9 @@ module.exports = class BysanStyleController extends Plugin {
       label = preset.name;
     }
 
-    this.settings = Object.assign({}, deepClone(DEFAULT_SETTINGS), snapshot, {
+    const preferences = Object.fromEntries(Object.entries(this.settings)
+      .filter(([key]) => PRESET_META_KEYS.has(key)));
+    this.settings = Object.assign({}, deepClone(DEFAULT_SETTINGS), snapshot, preferences, {
       settingsVersion: DEFAULT_SETTINGS.settingsVersion,
       stylePresets: preservedPresets,
       activeStylePreset: presetId,
@@ -1354,33 +1393,47 @@ class BysanStyleSettingTab extends PluginSettingTab {
 
   display() {
     const { containerEl } = this;
+    const zh = this.plugin.language === "zh";
+    const folds = new Map([...containerEl.querySelectorAll("details[id]")].map(el => [el.id, el.open]));
     containerEl.empty();
     containerEl.addClass("bysan-style-settings");
 
     new Setting(containerEl)
       .setName("Bysan Style Controller")
-      .setDesc(this.plugin.t("app.description"))
       .setHeading();
 
-    this.renderLanguageSetting(containerEl);
+    this.plugin.themeControls.beginRegionRender();
     this.renderSectionNavigation(containerEl);
     const areas = containerEl.createDiv({ cls: "bysan-major-areas" });
 
-    const workflow = this.createMajorArea(
-      areas,
-      "workflow",
-      this.plugin.language === "zh" ? "功能与风格" : "Features and styles",
-      this.plugin.language === "zh"
-        ? "管理内置功能模块、完整风格预设和全局恢复。"
-        : "Manage built-in modules, complete style presets and global restore."
-    );
-    this.createSubarea(workflow, "modules", this.plugin.language === "zh" ? "功能模块" : "Feature modules", (body) => {
-      this.renderIntegratedModuleSettings(body);
-    }, true);
-    this.createSubarea(workflow, "preset", this.plugin.t("section.preset"), (body) => {
+    const content = this.createMajorArea(areas, "content", zh ? "笔记外观" : "Note appearance");
+    this.renderEditorRegionSettings(content);
+
+    const tools = this.createMajorArea(areas, "tools", zh ? "写作工具" : "Writing tools");
+    this.renderIntegratedModuleSettings(tools);
+    this.createSubarea(tools, "blank-line-cleanup", zh ? "空行清理" : "Blank-line cleanup", (body) => {
+      this.renderBlankLineCleanupSettings(body);
+    });
+    this.createSubarea(tools, "pdf-export", zh ? "PDF 预览与导出" : "PDF preview and export", (body) => {
+      new Setting(body)
+        .setName(this.plugin.t("pdf.command"))
+        .setDesc(zh
+          ? "在预览窗口调整纸张、页边距、实际缩放和导出范围。也可从左侧工具栏打开。"
+          : "Set paper, margins, output scale and page range inside the preview. Also available in the ribbon.")
+        .addButton((button) => button
+          .setButtonText(zh ? "打开预览" : "Open preview")
+          .onClick(() => {
+            const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+            if (view?.editor) this.app.setting.close();
+            this.plugin.openPdfPreview(view);
+          }));
+    });
+
+    const styles = this.createMajorArea(areas, "styles", zh ? "风格与高级" : "Styles and advanced");
+    this.createSubarea(styles, "preset", this.plugin.t("section.preset"), (body) => {
       this.renderStylePresetSettings(body);
     }, true);
-    this.createSubarea(workflow, "reset", this.plugin.t("section.reset"), (body) => {
+    this.createSubarea(styles, "reset", this.plugin.t("section.reset"), (body) => {
       const resetSetting = new Setting(body)
         .setName(this.plugin.t("section.reset"))
         .setDesc(this.plugin.t("reset.desc"))
@@ -1396,75 +1449,52 @@ class BysanStyleSettingTab extends PluginSettingTab {
       // keyboard focus resolution browser-dependent.
       resetSetting.settingEl.id = "bysan-reset-action";
     });
-
-    const regionStats = this.plugin.themeControls.beginRegionRender();
-    const workspaceUi = this.createMajorArea(
-      areas,
-      "interface",
-      this.plugin.language === "zh" ? "工作区与界面" : "Workspace and interface",
-      this.plugin.language === "zh"
-        ? "按整体工作区、顶部区、左侧区、右侧区和设置系统界面组织。"
-        : "Organised by whole workspace, top, left, right and system/settings surfaces."
-    );
-    this.createSubarea(workspaceUi, "workspace", this.plugin.language === "zh" ? "整体工作区" : "Whole workspace", (body) => {
-      this.renderWorkspaceSettings(body);
-      this.plugin.themeControls.renderRegion(body, "workspace");
-    }, true);
-    this.createSubarea(workspaceUi, "top-area", this.plugin.language === "zh" ? "顶部区" : "Top area", (body) => {
-      this.plugin.themeControls.renderRegion(body, "top");
+    this.createSubarea(styles, "language", zh ? "界面语言" : "Interface language", (body) => {
+      this.renderLanguageSetting(body);
     });
-    this.createSubarea(workspaceUi, "left-area", this.plugin.language === "zh" ? "左侧区" : "Left area", (body) => {
-      this.plugin.themeControls.renderRegion(body, "left");
-    });
-    this.createSubarea(workspaceUi, "right-area", this.plugin.language === "zh" ? "右侧区" : "Right area", (body) => {
-      this.plugin.themeControls.renderRegion(body, "right");
-    });
-    this.createSubarea(workspaceUi, "system-area", this.plugin.language === "zh" ? "设置、菜单与系统界面" : "Settings, menus and system UI", (body) => {
-      this.plugin.themeControls.renderRegion(body, "system");
+    this.advancedArea = this.createSubarea(styles, "advanced", zh ? "高级主题设置" : "Advanced theme settings", () => {});
+    this.advancedArea.addEventListener("toggle", () => {
+      if (this.advancedArea.open) this.renderAdvancedSettings();
     });
 
-    const content = this.createMajorArea(
-      areas,
-      "content",
-      this.plugin.language === "zh" ? "内容与阅读" : "Content and reading",
-      this.plugin.language === "zh"
-        ? "按工作区、代码块、行内代码、表格、引用和正文对象集中管理全部相关设置。"
-        : "All related settings grouped by workspace, code blocks, inline code, tables, quotes and text objects."
-    );
-    this.createSubarea(content, "editor", this.plugin.language === "zh" ? "主编辑区" : "Main editor area", (body) => {
-      this.renderEditorRegionSettings(body);
-    }, true);
-    this.createSubarea(content, "media-area", this.plugin.language === "zh" ? "Canvas、图谱与 PDF" : "Canvas, graph and PDF", (body) => {
-      this.plugin.themeControls.renderRegion(body, "media");
-    });
-
-    const extensions = this.createMajorArea(
-      areas,
-      "extensions",
-      this.plugin.language === "zh" ? "插件与文档样式" : "Plugins and document styles",
-      this.plugin.language === "zh"
-        ? `第三方插件适配与按 cssclasses 启用的文档样式；共 ${regionStats.plugins + regionStats.documents} 项。`
-        : `Third-party integrations and cssclasses-based document styles; ${regionStats.plugins + regionStats.documents} controls.`
-    );
-    this.createSubarea(extensions, "plugin-adapters", this.plugin.language === "zh" ? "第三方插件适配" : "Third-party plugin integrations", (body) => {
-      this.plugin.themeControls.renderRegion(body, "plugins");
-    }, true);
-    this.createSubarea(extensions, "document-styles", this.plugin.language === "zh" ? "文档样式类" : "Document style classes", (body) => {
-      this.plugin.themeControls.renderRegion(body, "documents");
-    });
-
+    if (folds.get(this.advancedArea.id)) this.renderAdvancedSettings();
+    for (const details of containerEl.querySelectorAll("details[id]")) {
+      if (folds.has(details.id)) details.open = folds.get(details.id);
+    }
     this.setActiveMajorArea(containerEl, this.activeMajorArea || "content", false);
   }
 
 
-  createMajorArea(containerEl, id, title, description) {
+  renderAdvancedSettings() {
+    const body = this.advancedArea?.querySelector(":scope > .bysan-subarea-body");
+    if (!body || body.childElementCount) return;
+    const zh = this.plugin.language === "zh";
+    for (const [region, cn, en] of [
+      ["workspace", "整体工作区", "Whole workspace"],
+      ["top", "顶部与标签页", "Top bar and tabs"],
+      ["left", "左侧面板", "Left sidebar"],
+      ["right", "右侧面板", "Right sidebar"],
+      ["system", "设置与菜单", "Settings and menus"],
+      ["editor", "笔记排版细节", "Detailed note typography"],
+      ["media", "Canvas、图谱与 PDF 样式", "Canvas, graph and PDF styles"],
+      ["plugins", "第三方插件适配", "Third-party plugin integrations"],
+      ["documents", "文档样式类", "Document style classes"]
+    ]) {
+      this.createSubarea(body, region, zh ? cn : en, (group) => {
+        if (region === "workspace") this.renderWorkspaceSettings(group);
+        this.plugin.themeControls.renderRegion(group, region, NOTE_APPEARANCE_IDS);
+      });
+    }
+  }
+
+
+  createMajorArea(containerEl, id, title) {
     const area = containerEl.createEl("section", {
       cls: "bysan-major-area",
       attr: { "data-bysan-major-area": id, "aria-label": title }
     });
     const header = area.createDiv({ cls: "bysan-major-area-header" });
     header.createEl("h2", { text: title });
-    header.createEl("p", { text: description });
     return area;
   }
 
@@ -1533,10 +1563,9 @@ class BysanStyleSettingTab extends PluginSettingTab {
 
   renderSectionNavigation(containerEl) {
     const areas = [
-      ["workflow", this.plugin.language === "zh" ? "功能与风格" : "Features and styles"],
-      ["interface", this.plugin.language === "zh" ? "工作区与界面" : "Workspace and interface"],
-      ["content", this.plugin.language === "zh" ? "内容与阅读" : "Content and reading"],
-      ["extensions", this.plugin.language === "zh" ? "插件与文档样式" : "Plugins and document styles"]
+      ["content", this.plugin.language === "zh" ? "笔记外观" : "Note appearance"],
+      ["tools", this.plugin.language === "zh" ? "写作工具" : "Writing tools"],
+      ["styles", this.plugin.language === "zh" ? "风格与高级" : "Styles and advanced"]
     ];
     const navigation = containerEl.createEl("nav", {
       cls: "bysan-settings-nav",
@@ -1567,11 +1596,6 @@ class BysanStyleSettingTab extends PluginSettingTab {
       clearSearch();
       const area = row.closest("[data-bysan-major-area]");
       if (area) this.setActiveMajorArea(containerEl, area.dataset.bysanMajorArea, false);
-      for (const details of row.closest("details")
-        ? [row.closest("details"), ...row.closest("details").querySelectorAll(":scope details")]
-        : []) {
-        if (details.contains(row)) details.open = true;
-      }
       let parent = row.parentElement;
       while (parent) {
         if (parent.matches?.("details")) parent.open = true;
@@ -1584,13 +1608,14 @@ class BysanStyleSettingTab extends PluginSettingTab {
       });
     };
     const renderSearchResults = () => {
-      currentMatches = this.plugin.themeControls.filterRows(containerEl, search.value);
       searchResults.empty();
       const query = search.value.trim();
       if (!query) {
-        searchResults.addClass("is-hidden");
+        clearSearch();
         return;
       }
+      this.renderAdvancedSettings();
+      currentMatches = this.plugin.themeControls.filterRows(containerEl, query);
 
       searchResults.removeClass("is-hidden");
       const chinese = this.plugin.language === "zh";
@@ -1612,6 +1637,19 @@ class BysanStyleSettingTab extends PluginSettingTab {
           attr: { type: "button" }
         });
         button.createSpan({ cls: "bysan-settings-search-result-name", text: name });
+        const path = [];
+        for (let parent = row.parentElement; parent; parent = parent.parentElement) {
+          if (parent.matches("details")) {
+            const summary = parent.querySelector(":scope > summary");
+            const label = summary?.querySelector(".bysan-subarea-title, .bysan-editor-object-title, .bysan-theme-group-title");
+            if (summary) path.unshift((label || summary).textContent.trim());
+          }
+          if (parent.hasAttribute("data-bysan-major-area")) {
+            path.unshift(parent.getAttribute("aria-label"));
+            break;
+          }
+        }
+        if (path.length) button.createSpan({ cls: "bysan-settings-search-result-desc", text: path.join(" › ") });
         if (description) {
           button.createSpan({
             cls: "bysan-settings-search-result-desc",
@@ -1651,41 +1689,29 @@ class BysanStyleSettingTab extends PluginSettingTab {
 
 
   renderIntegratedModuleSettings(containerEl) {
-    const heading = new Setting(containerEl)
-      .setName(this.plugin.language === "zh" ? "功能模块" : "Feature modules")
-      .setDesc(this.plugin.language === "zh"
-        ? "原独立 Bysan 插件已内置为可开关模块；启用内置模块时会自动停用对应旧插件，原数据会迁移后继续使用。"
-        : "Former standalone Bysan plugins are built-in modules. Enabling a module disables its legacy plugin and migrates its data.")
-      .setHeading();
-    heading.settingEl.id = "bysan-section-modules";
-
+    const zh = this.plugin.language === "zh";
     for (const module of INTEGRATED_MODULES) {
-      const setting = new Setting(containerEl)
-        .setName(this.plugin.language === "zh" ? module.nameZh : module.nameEn)
-        .setDesc(this.plugin.language === "zh" ? module.descriptionZh : module.descriptionEn)
-        .addToggle((toggle) => toggle
-          .setValue(Boolean(this.plugin.settings[module.key]))
-          .onChange(async (value) => {
-            toggle.setDisabled(true);
-            try {
-              await this.plugin.updateIntegratedModuleSetting(module.key, value);
-            } finally {
-              toggle.setDisabled(false);
-            }
-      }));
-      setting.settingEl.addClass("bysan-unified-control-setting", "bysan-control-type-toggle");
-      if (module.key === "moduleReviewToolbar") {
-        this.addResettableSlider(
-          containerEl,
-          this.plugin.t("review.badgeSize"),
-          this.plugin.t("review.badgeSizeDesc"),
-          "reviewBadgeSize",
-          12,
-          24,
-          1,
-          "px"
-        );
-      }
+      const name = zh ? module.nameZh : module.nameEn;
+      this.createSubarea(containerEl, module.id, name, (body) => {
+        const setting = new Setting(body)
+          .setName(name)
+          .setDesc(zh ? module.descriptionZh : module.descriptionEn)
+          .addToggle((toggle) => toggle
+            .setValue(Boolean(this.plugin.settings[module.key]))
+            .onChange(async (value) => {
+              toggle.setDisabled(true);
+              try {
+                await this.plugin.updateIntegratedModuleSetting(module.key, value);
+              } finally {
+                toggle.setValue(Boolean(this.plugin.settings[module.key])).setDisabled(false);
+              }
+            }));
+        setting.settingEl.addClass("bysan-unified-control-setting", "bysan-control-type-toggle");
+        if (module.key === "moduleReviewToolbar") {
+          this.addResettableSlider(body, this.plugin.t("review.badgeSize"),
+            this.plugin.t("review.badgeSizeDesc"), "reviewBadgeSize", 12, 24, 1, "px");
+        }
+      });
     }
   }
 
@@ -1834,6 +1860,13 @@ class BysanStyleSettingTab extends PluginSettingTab {
       .setHeading();
     heading.settingEl.id = "bysan-section-code";
 
+    this.renderAppearanceSample(containerEl, sample => {
+      const code = sample.createDiv({ cls: "el-pre" }).createEl("pre").createEl("code", { cls: "language-js" });
+      code.createSpan({ cls: "token keyword", text: "const" });
+      code.append(" total = ");
+      code.createSpan({ cls: "token number", text: "42" });
+      code.append(";\nconsole.log(total);");
+    });
     this.createFeatureGroup(
       containerEl,
       this.plugin.language === "zh" ? "功能与渲染" : "Behaviour and rendering",
@@ -1855,8 +1888,6 @@ class BysanStyleSettingTab extends PluginSettingTab {
         themeSetting.settingEl.dataset.bysanSettingKeys = "codeTheme";
         this.addToggle(body, this.plugin.t("code.lineNumbers"), this.plugin.t("code.lineNumbersDesc"), "codeLineNumbers");
         this.addToggle(body, this.plugin.t("code.wrapReading"), this.plugin.t("code.wrapReadingDesc"), "codeWrapReading");
-        this.addToggle(body, this.plugin.t("code.noWrapLive"), this.plugin.t("code.noWrapLiveDesc"), "codeNoWrapLive");
-        this.addToggle(body, this.plugin.t("code.muteActive"), this.plugin.t("code.muteActiveDesc"), "muteCodeActiveLine");
       }
     );
     this.createFeatureGroup(
@@ -1869,11 +1900,13 @@ class BysanStyleSettingTab extends PluginSettingTab {
         this.addDualColor(body, this.plugin.t("palette.codeBorder"), "codeBorderLight", "codeBorderDark");
       }
     );
-    this.createFeatureGroup(
+    this.createSubarea(
       containerEl,
-      this.plugin.language === "zh" ? "文字、尺寸与间距" : "Typography, size and spacing",
-      this.plugin.language === "zh" ? "字号、行高、字距、圆角和内边距。" : "Font size, line height, letter spacing, radius and padding.",
+      "code-details",
+      this.plugin.language === "zh" ? "代码块尺寸与编辑细节" : "Code block size and editor details",
       (body) => {
+        this.addToggle(body, this.plugin.t("code.noWrapLive"), this.plugin.t("code.noWrapLiveDesc"), "codeNoWrapLive");
+        this.addToggle(body, this.plugin.t("code.muteActive"), this.plugin.t("code.muteActiveDesc"), "muteCodeActiveLine");
         this.addSlider(body, this.plugin.t("code.spacing"), this.plugin.t("code.spacingDesc"), "codeLetterSpacing", 0, 2, 0.1);
         this.addSlider(body, this.plugin.t("code.blur"), this.plugin.t("code.blurDesc"), "codeBlur", 0, 8, 1);
         this.renderGeometryControls(body, "codeBlock");
@@ -1883,38 +1916,64 @@ class BysanStyleSettingTab extends PluginSettingTab {
 
 
   renderEditorRegionSettings(containerEl) {
-    const heading = new Setting(containerEl)
-      .setName(this.plugin.language === "zh" ? "主编辑区" : "Main editor area")
-      .setHeading();
-    heading.settingEl.id = "bysan-section-editor";
-    const description = containerEl.createEl("p", {
-      cls: "bysan-region-description",
-      text: this.plugin.language === "zh"
-        ? "这些对象都显示在笔记的编辑或阅读正文中；每个对象内部再集中设置功能、明暗外观和尺寸。"
-        : "These objects live in the note editor or reading content. Behaviour, light/dark appearance and size stay together for each object."
+    const zh = this.plugin.language === "zh";
+    this.createEditorObject(containerEl, "body-text", zh ? "正文" : "Body text", (body) => {
+      this.renderAppearanceSample(body, sample => {
+        const paragraph = sample.createEl("p", { text: zh
+          ? "这一段展示正文字体、颜色和行高。下方第二行可用于比较行距。"
+          : "This paragraph shows the body font, colour and line height." });
+        paragraph.createEl("br");
+        paragraph.createSpan({ text: zh ? "这是同一段的第二行。" : "This is the second line of the paragraph." });
+      });
+      this.renderNoteThemeControls(body, NOTE_BODY_CONTROLS);
+      this.createSubarea(body, "text-details", zh ? "列表、任务框与分隔线" : "Lists, tasks and dividers",
+        details => this.renderTextDetailSettings(details));
     });
-    description.dataset.bysanSearch = description.textContent.toLowerCase();
-    this.createEditorObject(containerEl, "code", this.plugin.language === "zh" ? "代码块" : "Code blocks", (body) => {
+    this.createEditorObject(containerEl, "headings", zh ? "文内标题" : "Note headings", (body) => {
+      this.renderAppearanceSample(body, sample => {
+        for (let level = 1; level <= 6; level += 1) {
+          sample.createEl(`h${level}`, { text: zh ? `H${level} · 示例标题` : `H${level} · Sample heading` });
+        }
+      });
+      NOTE_HEADING_CONTROLS.forEach((controls, index) => {
+        const level = index + 1;
+        this.createSubarea(body, `appearance-h${level}`, zh ? `H${level} 标题` : `H${level} heading`,
+          group => this.renderNoteThemeControls(group, controls), level === 1);
+      });
+    });
+    this.createEditorObject(containerEl, "code", zh ? "代码块" : "Code blocks", (body) => {
       this.renderCodeSettings(body);
-    }, true);
-    this.createEditorObject(containerEl, "inline-code", this.plugin.language === "zh" ? "行内代码" : "Inline code", (body) => {
-      this.renderInlineCodeSettings(body);
+      this.createSubarea(body, "inline-code", zh ? "行内代码" : "Inline code", (group) => this.renderInlineCodeSettings(group));
     });
-    this.createEditorObject(containerEl, "tables", this.plugin.language === "zh" ? "表格" : "Tables", (body) => {
+    this.createEditorObject(containerEl, "tables", zh ? "表格" : "Tables", (body) => {
       this.renderTableSettings(body);
     });
-    this.createEditorObject(containerEl, "quotes", this.plugin.language === "zh" ? "引用块" : "Blockquotes", (body) => {
+    this.createEditorObject(containerEl, "quotes", zh ? "引用块" : "Blockquotes", (body) => {
       this.renderQuoteSettings(body);
     });
-    this.createEditorObject(containerEl, "text-details", this.plugin.language === "zh" ? "文字、列表与分隔线" : "Text, lists and dividers", (body) => {
-      this.renderTextDetailSettings(body);
+  }
+
+
+  renderNoteThemeControls(containerEl, controls) {
+    const zh = this.plugin.language === "zh";
+    for (const [id, cn, en] of controls) {
+      const item = this.plugin.themeControls.controlItems.find(control => control.id === id);
+      if (item) this.plugin.themeControls.renderItem(containerEl, item, {
+        name: zh ? cn : en,
+        scope: zh ? "编辑与阅读正文" : "Editor and reading view"
+      });
+    }
+  }
+
+
+  renderAppearanceSample(containerEl, render) {
+    const box = containerEl.createDiv({ cls: "bysan-appearance-sample" });
+    box.createDiv({
+      cls: "bysan-appearance-sample-label",
+      text: this.plugin.language === "zh" ? "阅读样例 · 当前明暗模式" : "Reading sample · Current light or dark mode"
     });
-    this.createEditorObject(
-      containerEl,
-      "advanced-editor",
-      this.plugin.language === "zh" ? "标题、正文与其他编辑元素" : "Headings, body text and other editor elements",
-      (body) => this.plugin.themeControls.renderRegion(body, "editor")
-    );
+    const content = box.createDiv({ cls: "markdown-rendered" });
+    render(content.createDiv({ cls: "markdown-preview-section" }));
   }
 
 
@@ -1928,6 +1987,7 @@ class BysanStyleSettingTab extends PluginSettingTab {
     summary.createSpan({ cls: "bysan-subarea-chevron", text: "›" });
     summary.createSpan({ cls: "bysan-editor-object-title", text: title });
     const body = details.createDiv({ cls: "bysan-editor-object-body" });
+    details.id = `bysan-section-${id}`;
     render(body);
     const internalHeading = body.querySelector(":scope > .setting-item-heading:first-child");
     if (internalHeading) {
@@ -1956,6 +2016,10 @@ class BysanStyleSettingTab extends PluginSettingTab {
       .setName(this.plugin.language === "zh" ? "行内代码" : "Inline code")
       .setHeading();
     heading.settingEl.id = "bysan-section-inline-code";
+    this.renderAppearanceSample(containerEl, sample => {
+      const paragraph = sample.createEl("p", { text: this.plugin.language === "zh" ? "行内代码示例 " : "Inline code sample " });
+      paragraph.createEl("code", { text: "np.arange()" });
+    });
     this.createFeatureGroup(
       containerEl,
       this.plugin.language === "zh" ? "明暗外观" : "Light and dark appearance",
@@ -1966,20 +2030,33 @@ class BysanStyleSettingTab extends PluginSettingTab {
         this.addDualColor(body, this.plugin.language === "zh" ? "行内代码阴影" : "Inline-code shadow", "inlineShadowLight", "inlineShadowDark");
       }
     );
-    this.createFeatureGroup(
+    this.createSubarea(
       containerEl,
-      this.plugin.language === "zh" ? "文字、尺寸与间距" : "Typography, size and spacing",
-      this.plugin.language === "zh" ? "字号、圆角、内外边距和阴影尺寸。" : "Font size, radius, padding, margin and shadow size.",
+      "inline-code-details",
+      this.plugin.language === "zh" ? "行内代码尺寸与间距" : "Inline code size and spacing",
       (body) => this.renderGeometryControls(body, "inlineCode")
     );
   }
 
 
   renderTableSettings(containerEl) {
+    const zh = this.plugin.language === "zh";
     const heading = new Setting(containerEl)
       .setName(this.plugin.language === "zh" ? "表格" : "Tables")
       .setHeading();
     heading.settingEl.id = "bysan-section-tables";
+    this.renderAppearanceSample(containerEl, sample => {
+      const table = sample.createDiv({ cls: "el-table" }).createEl("table");
+      const header = table.createEl("thead").createEl("tr");
+      header.createEl("th", { text: zh ? "样本" : "Sample" });
+      header.createEl("th", { text: zh ? "结果" : "Result" });
+      const rows = table.createEl("tbody");
+      for (const [name, value] of [["A", "0.82"], ["B", "0.91"]]) {
+        const row = rows.createEl("tr");
+        row.createEl("td", { text: name });
+        row.createEl("td", { text: value });
+      }
+    });
     this.createFeatureGroup(
       containerEl,
       this.plugin.language === "zh" ? "功能" : "Behaviour",
@@ -2000,16 +2077,20 @@ class BysanStyleSettingTab extends PluginSettingTab {
       this.plugin.language === "zh" ? "表头、斑马纹、悬停和边框颜色。" : "Header, stripe, hover and border colours.",
       (body) => {
         this.addDualColor(body, this.plugin.t("palette.tableHead"), "tableHeadLight", "tableHeadDark");
-        this.addDualColor(body, this.plugin.t("palette.tableStripe"), "tableStripeLight", "tableStripeDark");
-        this.addDualColor(body, this.plugin.t("palette.tableHover"), "tableHoverLight", "tableHoverDark");
-        this.addDualColor(body, this.plugin.t("palette.tableBorder"), "tableBorderLight", "tableBorderDark");
+        this.addDualColor(body, zh ? "表格偶数行背景（斑马纹）" : "Even table row background (zebra stripes)",
+          "tableStripeLight", "tableStripeDark", null, null,
+          zh ? "启用斑马纹后生效。编辑预览与阅读模式。" : "Shown when zebra stripes are enabled. Live Preview and reading view.");
       }
     );
-    this.createFeatureGroup(
+    this.createSubarea(
       containerEl,
-      this.plugin.language === "zh" ? "文字、尺寸与间距" : "Typography, size and spacing",
-      this.plugin.language === "zh" ? "表头字重、单元格内边距、边框和外边距。" : "Header weight, cell padding, border and margin.",
-      (body) => this.renderGeometryControls(body, "table")
+      "table-details",
+      zh ? "表格边框、悬停与尺寸" : "Table borders, hover and sizing",
+      (body) => {
+        this.addDualColor(body, this.plugin.t("palette.tableHover"), "tableHoverLight", "tableHoverDark");
+        this.addDualColor(body, this.plugin.t("palette.tableBorder"), "tableBorderLight", "tableBorderDark");
+        this.renderGeometryControls(body, "table");
+      }
     );
   }
 
@@ -2019,6 +2100,11 @@ class BysanStyleSettingTab extends PluginSettingTab {
       .setName(this.plugin.language === "zh" ? "引用块" : "Blockquotes")
       .setHeading();
     heading.settingEl.id = "bysan-section-quotes";
+    this.renderAppearanceSample(containerEl, sample => {
+      sample.createDiv({ cls: "el-blockquote" }).createEl("blockquote").createEl("p", {
+        text: this.plugin.language === "zh" ? "一段引用文字，用于比较边框、背景和字体。" : "A blockquote for comparing border, background and font."
+      });
+    });
     this.createFeatureGroup(
       containerEl,
       this.plugin.language === "zh" ? "文字功能" : "Text behaviour",
@@ -2034,22 +2120,22 @@ class BysanStyleSettingTab extends PluginSettingTab {
         this.addDualColor(body, this.plugin.t("palette.quoteBorder"), "quoteBorderLight", "quoteBorderDark");
       }
     );
-    this.createFeatureGroup(
+    this.createSubarea(
       containerEl,
-      this.plugin.language === "zh" ? "文字、尺寸与间距" : "Typography, size and spacing",
-      this.plugin.language === "zh" ? "字号、边框宽度、圆角和内边距。" : "Font size, border width, radius and padding.",
+      "quote-details",
+      this.plugin.language === "zh" ? "引用块尺寸与间距" : "Blockquote size and spacing",
       (body) => this.renderGeometryControls(body, "quote")
     );
   }
 
 
-  renderTextDetailSettings(containerEl) {
+  renderBlankLineCleanupSettings(containerEl) {
     const zh = this.plugin.language === 'zh';
-    this.createFeatureGroup(containerEl, zh ? '空行清理' : 'Blank-line cleanup',
-      zh ? '开启：保留该类型前后一行；关闭：删除。相邻任一类型要求保留时保留一行。模块内部及防止误变标题的必要空行始终受保护。' : 'On: keep one surrounding blank line; off: remove. Either neighbouring type can preserve the gap. Block contents and heading safety are always protected.',
+    this.createFeatureGroup(containerEl, zh ? '保留规则' : 'Preservation rules',
+      zh ? '从左侧工具栏运行空行清理。开启某一项会保留该类型前后的一行空行。' : 'Run blank-line cleanup from the ribbon. Enabling a rule keeps one blank line around that type.',
       body => {
         for (const [key, cn, en, fallback] of BLANK_LINE_OPTIONS) {
-          new Setting(body).setName(zh ? cn : en).addToggle(toggle => toggle
+          new Setting(body).setName(zh ? `保留${cn}前后空行` : `Keep blank lines around ${en.toLowerCase()}`).addToggle(toggle => toggle
             .setValue(this.plugin.settings.blankLinePreservation?.[key] ?? fallback)
             .onChange(value => this.plugin.updateSetting('blankLinePreservation', {
               ...this.plugin.settings.blankLinePreservation, [key]: value
@@ -2065,6 +2151,10 @@ class BysanStyleSettingTab extends PluginSettingTab {
             this.display();
           }));
       });
+  }
+
+
+  renderTextDetailSettings(containerEl) {
     const heading = new Setting(containerEl)
       .setName(this.plugin.language === "zh" ? "文字、列表与分隔线" : "Text, lists and dividers")
       .setHeading();
@@ -2114,8 +2204,9 @@ class BysanStyleSettingTab extends PluginSettingTab {
   }
 
 
-  addDualColor(containerEl, name, lightKey, darkKey, lightOpacityKey = null, darkOpacityKey = null) {
-    const setting = new Setting(containerEl).setName(name);
+  addDualColor(containerEl, name, lightKey, darkKey, lightOpacityKey = null, darkOpacityKey = null, description = "") {
+    const setting = new Setting(containerEl).setName(name).setDesc(description || (this.plugin.language === "zh"
+      ? "编辑预览与阅读模式。" : "Live Preview and reading view."));
     const addMode = (mode, colorKey, opacityKey) => {
       let pickerComponent;
       let colorValue;
@@ -2202,16 +2293,17 @@ class BysanStyleSettingTab extends PluginSettingTab {
       return key.startsWith(groupId);
     });
     for (const [key, property, unit, minimum, maximum, step, controlZh, controlEn] of entries) {
-      this.addResettableSlider(
+      const setting = this.addResettableSlider(
         containerEl,
         this.plugin.language === "zh" ? controlZh : controlEn,
-        `${property} · ${minimum}–${maximum}${unit}`,
+        this.plugin.language === "zh" ? "编辑预览与阅读模式。" : "Live Preview and reading view.",
         key,
         minimum,
         maximum,
         step,
         unit
       );
+      setting.descEl.title = `${property} · ${minimum}–${maximum}${unit}`;
     }
   }
 
@@ -2273,7 +2365,7 @@ class BysanStyleSettingTab extends PluginSettingTab {
     resetButton.addEventListener("click", async () => {
       if (!await this.plugin.resetSetting(key)) return;
       sliderComponent.setValue(this.plugin.settings[key]);
-      valueEl.setText(formatValue(this.plugin.settings[key]));
+      valueEl?.setText(formatValue(this.plugin.settings[key]));
     });
     setting.settingEl.addClass(
       "bysan-unified-control-setting",
@@ -2281,5 +2373,6 @@ class BysanStyleSettingTab extends PluginSettingTab {
       "bysan-resettable-slider"
     );
     setting.settingEl.dataset.bysanSettingKeys = key;
+    return setting;
   }
 }

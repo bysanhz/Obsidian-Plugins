@@ -655,7 +655,7 @@ class ThemeControls {
 
   resolvedProbeColor(item, probeDocument, body) {
     const bodyStyle = probeDocument.defaultView.getComputedStyle(body);
-    const fallbackVariable = COLOR_FALLBACK_VARIABLES.get(item.id);
+    const fallbackVariable = item.fallbackVariable || COLOR_FALLBACK_VARIABLES.get(item.id);
     const expression = item.format === "hsl-split"
       ? `hsla(var(--${item.id}-h), var(--${item.id}-s), var(--${item.id}-l), var(--${item.id}-a, 1))`
       : INDIRECT_COLOR_VARIABLES.has(item.id)
@@ -1160,6 +1160,8 @@ class ThemeControls {
       };
       let pickerComponent;
       let valueLabel;
+      let sliderComponent;
+      let syncingControls = false;
       const updateValueLabel = (hex, alpha) => {
         const value = colorWithAlpha(hex, item.opacity ? alpha : 1).toUpperCase();
         valueLabel.setText(value);
@@ -1170,22 +1172,33 @@ class ThemeControls {
         picker.setValue(parsed.hex);
         picker.colorPickerEl?.setAttribute("title", this.plugin.t("theme.colorTitle", { mode: label }));
         picker.onChange((hex) => {
+          if (syncingControls) return;
           const current = parseColor(this.displayValueFor(item, mode));
-          updateValueLabel(hex, current.alpha);
-          this.updateThemedColor(item, mode, hex, current.alpha);
+          const inheritedTransparent = current.alpha === 0 && !isDefined(this.stored[item.id]?.[mode]);
+          const alpha = inheritedTransparent ? 1 : current.alpha;
+          if (inheritedTransparent && sliderComponent) {
+            syncingControls = true;
+            try {
+              sliderComponent.setValue(alpha);
+            } finally {
+              syncingControls = false;
+            }
+          }
+          updateValueLabel(hex, alpha);
+          this.updateThemedColor(item, mode, hex, alpha);
         });
       }));
       valueLabel = group.createSpan({
         cls: "bysan-theme-color-value"
       });
       updateValueLabel(parsed.hex, parsed.alpha);
-      let sliderComponent;
       if (item.opacity) {
         appendNewControls(() => setting.addSlider((slider) => {
           sliderComponent = slider;
           slider.setLimits(0, 1, 0.01).setDynamicTooltip().setValue(parsed.alpha);
           slider.sliderEl?.setAttribute("title", this.plugin.t("theme.opacityTitle", { mode: label }));
           slider.onChange((alpha) => {
+            if (syncingControls) return;
             const current = parseColor(this.displayValueFor(item, mode));
             updateValueLabel(current.hex, alpha);
             this.updateThemedColor(item, mode, current.hex, alpha);
@@ -1200,9 +1213,14 @@ class ThemeControls {
             await this.plugin.clearThemeColorMode(item.id, mode);
             this.refreshDisplayDefaults();
             const restored = parseColor(this.displayValueFor(item, mode));
-            pickerComponent?.setValue(restored.hex);
-            sliderComponent?.setValue(restored.alpha);
-            updateValueLabel(restored.hex, restored.alpha);
+            syncingControls = true;
+            try {
+              pickerComponent?.setValue(restored.hex);
+              sliderComponent?.setValue(restored.alpha);
+              updateValueLabel(restored.hex, restored.alpha);
+            } finally {
+              syncingControls = false;
+            }
           });
         button.extraSettingsEl?.addClass("bysan-color-reset");
       }));

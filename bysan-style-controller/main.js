@@ -1,6 +1,6 @@
 /**
  * Bysan Style Controller
- * Version: 0.17.2
+ * Version: 0.17.3
  *
  * Owns visual presentation and provides switchable, integrated Bysan modules.
  */
@@ -79,6 +79,40 @@ const NOTE_BODY_CONTROLS = [
   ["font-text-theme", "正文字体", "Body font"],
   ["line-height-main", "正文行高", "Body line height"]
 ];
+const NOTE_BACKGROUND_CONTROLS = [
+  ["bysan-note-page-bg", "笔记页面底色", "Note page colour", "编辑与阅读正文。可与现有点阵、网格或条纹一起使用。", "Editor and reading view. Keeps the current dot, grid or stripe pattern."],
+  ["background-notebook-liked-switch", "开启笔记纸纹理", "Enable notebook pattern"],
+  ["notebook-liked-markdown-page-options", "笔记纸纹理", "Notebook pattern"],
+  ["activeline-background", "当前编辑行背景", "Active editor line background", "关闭「隐藏当前行背景」后生效。", "Turn off “Hide active line background” to show this colour."],
+  ["muted-activeline-bg", "隐藏当前行背景", "Hide active line background"],
+  ["text-selection", "鼠标选中文字的背景", "Selected text background", "开启「显示编辑器选区背景」后生效。", "Turn on “Show editor selection background” to show this colour."],
+  ["remove-selectionbackground", "显示编辑器选区背景", "Show editor selection background"],
+  ["bysan-mark-bg", "Markdown 高亮背景", "Markdown highlight background", "用于 ==文字==。", "Used for ==text==."],
+  ["text-highlight", "Markdown 高亮文字颜色", "Markdown highlight text colour"],
+  ["admonition-bg-color", "提示框内容背景", "Callout body background"],
+  ["admonition-bg-color-same", "提示框内容沿用标题配色", "Use callout title colours for the body"],
+  ["internal-link-color", "笔记内链颜色", "Internal link colour"],
+  ["external-link-color", "外部链接颜色", "External link colour"]
+];
+const INTERFACE_COLOR_CONTROLS = [
+  ["bysan-left-pane-bg", "左侧栏底色", "Left sidebar background"],
+  ["bysan-right-pane-bg", "右侧栏底色", "Right sidebar background"],
+  ["bysan-active-tab-bg", "当前标签页背景", "Active tab background"],
+  ["bysan-active-file-bg", "文件树当前文件背景", "Active file background in the file tree"],
+  ["bt-background-split-container", "侧栏共用底色", "Shared sidebar background", "工作区背景开启时使用。独立设置可覆盖对应侧栏。", "Used with workspace background enabled. A sidebar override takes priority."],
+  ["background-titlebar-inner", "窗口标题栏背景", "Window title bar background", "开启下方的标题栏自定义背景后生效。", "Enable the custom title bar background below to use this colour."],
+  ["bt-colorful-titlebar", "开启标题栏自定义背景", "Enable custom title bar background"],
+  ["status-bar-bg", "底部状态栏背景", "Status bar background"],
+  ["interactive-accent", "界面强调色", "Interface accent colour"]
+];
+const SURFACE_COLORS = [
+  ["bysan-note-page-bg", "background-primary"],
+  ["bysan-mark-bg", "text-highlight-bg"],
+  ["bysan-left-pane-bg", "bt-background-split-container"],
+  ["bysan-right-pane-bg", "bt-background-split-container"],
+  ["bysan-active-tab-bg", "tab-background-active"],
+  ["bysan-active-file-bg", "nav-item-background-active"]
+];
 const NOTE_HEADING_CONTROLS = Array.from({ length: 6 }, (_, index) => {
   const level = index + 1;
   return [
@@ -86,8 +120,22 @@ const NOTE_HEADING_CONTROLS = Array.from({ length: 6 }, (_, index) => {
     [`h${level}-size`, `H${level} 字号`, `H${level} font size`]
   ];
 });
-const NOTE_APPEARANCE_IDS = new Set(
-  [...NOTE_BODY_CONTROLS, ...NOTE_HEADING_CONTROLS.flat(), ["font-size-latex"]].map(([id]) => id)
+const HEADING_BACKGROUND_CONTROLS = NOTE_HEADING_CONTROLS.map((_, index) => {
+  const level = index + 1;
+  return [
+    [`h${level}-bg-color`, `H${level} 背景颜色`, `H${level} background colour`],
+    [`header-${level}-background`, `显示 H${level} 背景`, `Show H${level} background`]
+  ];
+});
+const PAGE_TITLE_CONTROLS = [
+  ["inline-title-color", "页面标题文字颜色", "Page title text colour"],
+  ["inline-title-size", "页面标题字号", "Page title font size"],
+  ["inline-title-bg-color", "页面标题背景", "Page title background", "开启下方的「显示页面标题背景」后生效。", "Turn on “Show page title background” below to use this colour."],
+  ["toggle-inline-title-background", "显示页面标题背景", "Show page title background"]
+];
+const COMMON_THEME_IDS = new Set(
+  [...NOTE_BODY_CONTROLS, ...NOTE_BACKGROUND_CONTROLS, ...INTERFACE_COLOR_CONTROLS, ...PAGE_TITLE_CONTROLS,
+    ...NOTE_HEADING_CONTROLS.flat(), ...HEADING_BACKGROUND_CONTROLS.flat(), ["font-size-latex"]].map(([id]) => id)
 );
 
 /*
@@ -1053,6 +1101,12 @@ module.exports = class BysanStyleController extends Plugin {
       this.themeCatalog = { settings: [] };
       new Notice(this.t("notice.catalogError"));
     }
+    for (const [id, fallbackVariable] of SURFACE_COLORS) {
+      this.themeCatalog.settings.push({
+        id, title: id, type: "variable-themed-color", format: "hex", opacity: true,
+        fallbackVariable, "default-light": "#00000000", "default-dark": "#00000000"
+      });
+    }
   }
 
 
@@ -1448,6 +1502,8 @@ class BysanStyleSettingTab extends PluginSettingTab {
     });
 
     const styles = this.createMajorArea(areas, "styles", zh ? "风格与高级" : "Styles and advanced");
+    this.createSettingsSection(styles, "interface-colors", zh ? "常用界面配色" : "Common interface colours",
+      body => this.renderInterfaceColors(body));
     this.createSettingsSection(styles, "preset", this.plugin.t("section.preset"), (body) => {
       this.renderStylePresetSettings(body);
     });
@@ -1500,7 +1556,7 @@ class BysanStyleSettingTab extends PluginSettingTab {
       picker.addOption(region, zh ? cn : en);
       const section = this.createSettingsSection(body, region, zh ? cn : en, (group) => {
         if (region === "workspace") this.renderWorkspaceSettings(group);
-        this.plugin.themeControls.renderRegion(group, region, NOTE_APPEARANCE_IDS);
+        this.plugin.themeControls.renderRegion(group, region, COMMON_THEME_IDS);
       });
       section.dataset.bysanAdvancedRegion = region;
     }
@@ -1642,6 +1698,8 @@ class BysanStyleSettingTab extends PluginSettingTab {
       clearSearch();
       const area = row.closest("[data-bysan-major-area]");
       if (area) this.setActiveMajorArea(containerEl, area.dataset.bysanMajorArea, false);
+      const headingMode = row.closest("[data-bysan-heading-mode]");
+      if (headingMode) this.selectHeadingColorMode(headingMode.dataset.bysanHeadingMode);
       const region = row.closest("[data-bysan-advanced-region]");
       if (region) this.selectAdvancedRegion(region.dataset.bysanAdvancedRegion);
       let parent = row.parentElement;
@@ -1740,7 +1798,8 @@ class BysanStyleSettingTab extends PluginSettingTab {
       attr: { "aria-label": zh ? "笔记外观分组" : "Note appearance sections" }
     });
     for (const [id, cn, en] of [
-      ["headings", "标题", "Headings"], ["body-text", "正文", "Body"], ["text-details", "列表", "Lists"],
+      ["note-colors", "背景与标记", "Background and marks"], ["headings", "标题", "Headings"],
+      ["body-text", "正文", "Body"], ["text-details", "列表", "Lists"],
       ["code", "代码", "Code"], ["inline-code", "行内代码", "Inline code"],
       ["tables", "表格", "Tables"], ["quotes", "引用", "Quotes"], ["math", "公式", "Math"]
     ]) {
@@ -1979,7 +2038,23 @@ class BysanStyleSettingTab extends PluginSettingTab {
 
   renderEditorRegionSettings(containerEl) {
     const zh = this.plugin.language === "zh";
+    this.createSettingsSection(containerEl, "note-colors", zh ? "笔记背景与标记" : "Note background and marks",
+      body => this.renderNoteBackgroundColors(body));
+    this.createSettingsSection(containerEl, "page-title", zh ? "页面标题" : "Page title", body => {
+      const controls = this.createAppearanceLayout(body, sample => {
+        sample.createDiv({ cls: "inline-title", text: zh ? "笔记名称" : "Note name" });
+      });
+      this.renderNoteThemeControls(controls, PAGE_TITLE_CONTROLS);
+    });
     this.createSettingsSection(containerEl, "headings", zh ? "文内标题" : "Note headings", (body) => {
+      new Setting(body)
+        .setName(zh ? "调整标题的" : "Heading controls")
+        .addDropdown(dropdown => {
+          this.headingColorPicker = dropdown
+            .addOption("text", zh ? "文字颜色与字号" : "Text colour and font size")
+            .addOption("background", zh ? "背景颜色" : "Background colour")
+            .onChange(value => this.selectHeadingColorMode(value));
+        });
       NOTE_HEADING_CONTROLS.forEach((controls, index) => {
         const level = index + 1;
         const row = body.createDiv({
@@ -1989,8 +2064,14 @@ class BysanStyleSettingTab extends PluginSettingTab {
         this.renderAppearanceSample(row, sample => {
           sample.createEl(`h${level}`, { text: `H${level}` });
         }, false);
-        this.renderNoteThemeControls(row, controls, true);
+        for (const [mode, entries] of [["text", controls], ["background", HEADING_BACKGROUND_CONTROLS[index]]]) {
+          this.renderNoteThemeControls(row, entries, true);
+          for (const entry of row.querySelectorAll(".setting-item:not([data-bysan-heading-mode])")) {
+            entry.dataset.bysanHeadingMode = mode;
+          }
+        }
       });
+      this.selectHeadingColorMode(this.headingColorMode || "text");
     });
     this.createSettingsSection(containerEl, "body-text", zh ? "正文" : "Body text", (body) => {
       const controls = this.createAppearanceLayout(body, sample => {
@@ -2037,14 +2118,57 @@ class BysanStyleSettingTab extends PluginSettingTab {
     });
   }
 
+  selectHeadingColorMode(mode) {
+    this.headingColorMode = mode;
+    this.headingColorPicker.setValue(mode);
+    for (const row of this.containerEl.querySelectorAll("[data-bysan-heading-mode]")) {
+      row.hidden = row.dataset.bysanHeadingMode !== mode;
+    }
+  }
 
-  renderNoteThemeControls(containerEl, controls, compact = false) {
+  renderNoteBackgroundColors(containerEl) {
     const zh = this.plugin.language === "zh";
-    for (const [id, cn, en] of controls) {
+    const controls = this.createAppearanceLayout(containerEl, sample => {
+      const page = sample.createDiv({ cls: "bysan-note-colors-example" });
+      page.createEl("p", { text: zh ? "笔记页面底色" : "Note page colour" });
+      page.createDiv({ cls: "cm-line cm-active", text: zh ? "当前编辑行" : "Active editor line" });
+      page.createEl("p").createSpan({ cls: "bysan-selection-example", text: zh ? "鼠标选中的文字" : "Selected text" });
+      page.createEl("p").createEl("mark", { text: zh ? "Markdown 高亮" : "Markdown highlight", attr: { "data-highlight": "" } });
+      const callout = page.createDiv({ cls: "callout", attr: { "data-callout": "note" } });
+      callout.createDiv({ cls: "callout-title", text: zh ? "提示框" : "Callout" });
+      callout.createDiv({ cls: "callout-content", text: zh ? "提示框内容" : "Callout body" });
+      const links = page.createEl("p");
+      links.createEl("a", { cls: "internal-link", text: zh ? "内链" : "Internal link" });
+      links.append(" · ");
+      links.createEl("a", { cls: "external-link", text: zh ? "外链" : "External link" });
+    });
+    this.renderNoteThemeControls(controls, NOTE_BACKGROUND_CONTROLS);
+  }
+
+  renderInterfaceColors(containerEl) {
+    const zh = this.plugin.language === "zh";
+    const controls = this.createAppearanceLayout(containerEl, sample => {
+      const frame = sample.createDiv({ cls: "bysan-interface-example" });
+      frame.createDiv({ cls: "bysan-example-titlebar", text: zh ? "标题栏" : "Title bar" });
+      const pane = frame.createDiv({ cls: "bysan-example-workspace" });
+      pane.createDiv({ cls: "bysan-example-left" }).createSpan({
+        cls: "bysan-example-file", text: zh ? "当前文件" : "Active file"
+      });
+      pane.createDiv({ cls: "bysan-example-tab", text: zh ? "当前标签" : "Active tab" });
+      pane.createDiv({ cls: "bysan-example-right", text: zh ? "右栏" : "Right" });
+      frame.createDiv({ cls: "bysan-example-status", text: zh ? "状态栏" : "Status bar" });
+      frame.createDiv({ cls: "bysan-example-accent", text: zh ? "强调色" : "Accent" });
+    });
+    this.renderNoteThemeControls(controls, INTERFACE_COLOR_CONTROLS, false, zh ? "Obsidian 工作区界面" : "Obsidian workspace");
+  }
+
+  renderNoteThemeControls(containerEl, controls, compact = false, scope = null) {
+    const zh = this.plugin.language === "zh";
+    for (const [id, cn, en, descZh, descEn] of controls) {
       const item = this.plugin.themeControls.controlItems.find(control => control.id === id);
       if (item) this.plugin.themeControls.renderItem(containerEl, item, {
         name: zh ? cn : en,
-        scope: zh ? "编辑与阅读正文" : "Editor and reading view",
+        scope: (zh ? descZh : descEn) || scope || (zh ? "编辑与阅读正文" : "Editor and reading view"),
         compact
       });
     }

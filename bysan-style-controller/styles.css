@@ -65,6 +65,39 @@ body.bysan-style-controller-active .workspace {
   isolation: isolate;
 }
 
+/* Overrides are written only for the mode the user customized. Existing
+ * theme backgrounds and textures keep their original rules on reset. */
+body.bysan-style-controller-active[style*="--bysan-note-page-bg:"]
+.workspace-leaf-content[data-type="markdown"] :is(.cm-scroller, .markdown-preview-view) {
+  background-color: var(--bysan-note-page-bg) !important;
+}
+
+body.bysan-style-controller-active.toggle-inline-title-background .inline-title {
+  background-color: var(--inline-title-bg-color);
+}
+
+body.bysan-style-controller-active[style*="--bysan-mark-bg:"] .markdown-rendered mark[data-highlight],
+body.bysan-style-controller-active[style*="--bysan-mark-bg:"] .markdown-source-view
+  .cm-highlight:not(.cm-em, .cm-strong, [class*="code"]) {
+  background-color: var(--bysan-mark-bg);
+}
+
+body.bysan-style-controller-active[style*="--bysan-left-pane-bg:"] .mod-left-split .workspace-tab-container {
+  background-color: var(--bysan-left-pane-bg) !important;
+}
+
+body.bysan-style-controller-active[style*="--bysan-right-pane-bg:"] .mod-right-split .workspace-tab-container {
+  background-color: var(--bysan-right-pane-bg) !important;
+}
+
+body.bysan-style-controller-active[style*="--bysan-active-tab-bg:"] .workspace-tab-header.is-active {
+  background-color: var(--bysan-active-tab-bg) !important;
+}
+
+body.bysan-style-controller-active[style*="--bysan-active-file-bg:"] .nav-files-container .nav-file-title.is-active {
+  background-color: var(--bysan-active-file-bg) !important;
+}
+
 /* ------------------------- inline code ------------------------- */
 
 :is(.markdown-preview-view, .markdown-rendered) :not(pre) > code,
@@ -876,6 +909,83 @@ body.bysan-style-controller-active
   color: var(--text-normal);
 }
 
+.bysan-note-colors-example {
+  padding: 0.4rem;
+  border-radius: 5px;
+  background-color: var(--bysan-note-page-bg, var(--bysan-example-note-bg, var(--background-primary)));
+}
+
+body.background-notebook-liked-switch .bysan-note-colors-example {
+  --bysan-example-note-bg: var(--bg-color-notebook);
+}
+
+body.muted-activeline-bg .bysan-note-colors-example .cm-active {
+  background-color: transparent !important;
+}
+
+body.remove-selectionbackground .bysan-selection-example {
+  background-color: var(--text-selection);
+}
+
+.bysan-interface-example {
+  display: grid;
+  gap: 0.3rem;
+  font-size: var(--font-ui-smaller);
+}
+
+.bysan-interface-example div {
+  border-radius: 4px;
+  overflow-wrap: anywhere;
+}
+
+.bysan-example-titlebar,
+.bysan-example-status,
+.bysan-example-accent,
+.bysan-example-workspace > div {
+  padding: 0.35rem;
+  border: 1px solid var(--background-modifier-border);
+}
+
+.bysan-example-titlebar {
+  background-color: var(--background-secondary);
+}
+
+body.bt-colorful-titlebar .bysan-example-titlebar {
+  background-color: var(--background-titlebar-inner);
+}
+
+.bysan-example-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr) minmax(0, 0.85fr);
+  gap: 0.2rem;
+  min-height: 3.2rem;
+}
+
+.bysan-example-left {
+  background-color: var(--bysan-left-pane-bg, var(--bt-background-split-container, var(--background-secondary)));
+}
+
+.bysan-example-right {
+  background-color: var(--bysan-right-pane-bg, var(--bt-background-split-container, var(--background-secondary)));
+}
+
+.bysan-example-tab {
+  background-color: var(--bysan-active-tab-bg, var(--tab-background-active, var(--background-primary)));
+}
+
+.bysan-example-file {
+  background-color: var(--bysan-active-file-bg, var(--nav-item-background-active));
+}
+
+.bysan-example-status {
+  background-color: var(--status-bar-bg, var(--background-secondary));
+}
+
+.bysan-example-accent {
+  background-color: var(--interactive-accent);
+  color: var(--text-on-accent);
+}
+
 body.bysan-note-font-size-set :is(.markdown-source-view, .markdown-preview-view, .bysan-appearance-sample .markdown-rendered, .bysan-pdf-preview-page-content) {
   --font-text-size: var(--bysan-note-font-size);
   font-size: var(--font-text-size);
@@ -1050,6 +1160,14 @@ table:not(.dataview) :is(th, td) {
 
 .bysan-heading-row .bysan-control-type-variable-text {
   grid-area: size;
+}
+
+.bysan-heading-row .bysan-control-type-class-toggle {
+  grid-area: size;
+}
+
+.bysan-style-settings .bysan-heading-row > .setting-item[hidden] {
+  display: none !important;
 }
 
 .bysan-style-settings .bysan-heading-row .setting-item > :is(.setting-item-control, .setting-item-info) {

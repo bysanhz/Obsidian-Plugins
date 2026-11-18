@@ -1,6 +1,6 @@
 /**
  * Bysan Style Controller
- * Version: 0.17.3
+ * Version: 0.17.4
  *
  * Owns visual presentation and provides switchable, integrated Bysan modules.
  */
@@ -1470,7 +1470,8 @@ class BysanStyleSettingTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName("Bysan Style Controller")
-      .setHeading();
+      .setHeading()
+      .settingEl.addClass("bysan-settings-title");
 
     this.plugin.themeControls.beginRegionRender();
     this.renderSectionNavigation(containerEl);
@@ -1984,9 +1985,9 @@ class BysanStyleSettingTab extends PluginSettingTab {
     const controls = this.createAppearanceLayout(containerEl, sample => {
       const code = sample.createDiv({ cls: "el-pre" }).createEl("pre").createEl("code", { cls: "language-js" });
       code.createSpan({ cls: "token keyword", text: "const" });
-      code.append(" total = ");
+      code.append(" n = ");
       code.createSpan({ cls: "token number", text: "42" });
-      code.append(";\nconsole.log(total);");
+      code.append(";\nconsole.log(n);");
     });
     this.createFeatureGroup(
       controls,
@@ -2159,16 +2160,16 @@ class BysanStyleSettingTab extends PluginSettingTab {
       frame.createDiv({ cls: "bysan-example-status", text: zh ? "状态栏" : "Status bar" });
       frame.createDiv({ cls: "bysan-example-accent", text: zh ? "强调色" : "Accent" });
     });
-    this.renderNoteThemeControls(controls, INTERFACE_COLOR_CONTROLS, false, zh ? "Obsidian 工作区界面" : "Obsidian workspace");
+    this.renderNoteThemeControls(controls, INTERFACE_COLOR_CONTROLS);
   }
 
-  renderNoteThemeControls(containerEl, controls, compact = false, scope = null) {
+  renderNoteThemeControls(containerEl, controls, compact = false) {
     const zh = this.plugin.language === "zh";
     for (const [id, cn, en, descZh, descEn] of controls) {
       const item = this.plugin.themeControls.controlItems.find(control => control.id === id);
       if (item) this.plugin.themeControls.renderItem(containerEl, item, {
         name: zh ? cn : en,
-        scope: (zh ? descZh : descEn) || scope || (zh ? "编辑与阅读正文" : "Editor and reading view"),
+        scope: (zh ? descZh : descEn) || "",
         compact
       });
     }
@@ -2372,6 +2373,7 @@ class BysanStyleSettingTab extends PluginSettingTab {
     const group = setting.controlEl.createDiv({
       cls: `bysan-mode-control bysan-mode-control-${kind}`
     });
+    if (kind === "color") group.addClass("bysan-color-mode");
     group.createSpan({
       cls: `bysan-mode-label bysan-mode-label-${mode}`,
       text: this.plugin.t(mode === "light" ? "theme.light" : "theme.dark")
@@ -2399,8 +2401,7 @@ class BysanStyleSettingTab extends PluginSettingTab {
 
 
   addDualColor(containerEl, name, lightKey, darkKey, lightOpacityKey = null, darkOpacityKey = null, description = "") {
-    const setting = new Setting(containerEl).setName(name).setDesc(description || (this.plugin.language === "zh"
-      ? "编辑预览与阅读模式。" : "Live Preview and reading view."));
+    const setting = new Setting(containerEl).setName(name).setDesc(description);
     const addMode = (mode, colorKey, opacityKey) => {
       let pickerComponent;
       let colorValue;
@@ -2414,7 +2415,8 @@ class BysanStyleSettingTab extends PluginSettingTab {
           picker.setValue(this.plugin.settings[colorKey])
             .onChange((value) => {
               this.plugin.settings[colorKey] = value;
-              colorValue?.setText(displayColor());
+              colorValue.setText(displayColor());
+              colorValue.title = colorValue.textContent;
               this.plugin.updateSetting(colorKey, value);
             });
         });
@@ -2422,6 +2424,7 @@ class BysanStyleSettingTab extends PluginSettingTab {
           cls: "bysan-theme-color-value",
           text: displayColor()
         });
+        colorValue.title = colorValue.textContent;
         if (opacityKey) {
           setting.addSlider((slider) => {
             opacitySlider = slider;
@@ -2429,7 +2432,8 @@ class BysanStyleSettingTab extends PluginSettingTab {
               .setValue(this.plugin.settings[opacityKey])
               .onChange((value) => {
                 this.plugin.settings[opacityKey] = value;
-                colorValue?.setText(displayColor());
+                colorValue.setText(displayColor());
+                colorValue.title = colorValue.textContent;
                 this.plugin.updateSetting(opacityKey, value);
               });
           });
@@ -2440,12 +2444,13 @@ class BysanStyleSettingTab extends PluginSettingTab {
         pickerComponent.setValue(this.plugin.settings[colorKey]);
         opacitySlider?.setValue(this.plugin.settings[opacityKey]);
         colorValue?.setText(displayColor());
+        colorValue.title = colorValue.textContent;
       });
       if (opacityKey) group.addClass("bysan-mode-control-has-opacity");
     };
     addMode("light", lightKey, lightOpacityKey);
     addMode("dark", darkKey, darkOpacityKey);
-    setting.settingEl.addClass("bysan-dual-mode-setting");
+    setting.settingEl.addClass("bysan-dual-mode-setting", "bysan-color-row");
     setting.settingEl.dataset.bysanSettingKeys = [lightKey, darkKey, lightOpacityKey, darkOpacityKey]
       .filter(Boolean)
       .join(" ");
@@ -2490,14 +2495,14 @@ class BysanStyleSettingTab extends PluginSettingTab {
       const setting = this.addNumberSetting(
         containerEl,
         this.plugin.language === "zh" ? controlZh : controlEn,
-        this.plugin.language === "zh" ? "编辑预览与阅读模式。" : "Live Preview and reading view.",
+        "",
         key,
         minimum,
         maximum,
         step,
         unit
       );
-      setting.descEl.title = `${property} · ${minimum}–${maximum}${unit}`;
+      setting.infoEl.title = `${property} · ${minimum}–${maximum}${unit}`;
     }
   }
 

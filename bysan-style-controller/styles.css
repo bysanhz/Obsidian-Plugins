@@ -1176,43 +1176,6 @@ table:not(.dataview) :is(th, td) {
   margin: 0;
 }
 
-.bysan-heading-row .bysan-control-type-variable-text .setting-item-control {
-  gap: 0.25rem;
-}
-
-.bysan-style-settings .bysan-heading-row input[type="text"] {
-  min-width: 0;
-  padding-inline: 0.35rem;
-}
-
-.bysan-heading-row .bysan-theme-color-setting .setting-item-control {
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 9.65rem), 1fr));
-  gap: 0.25rem;
-}
-
-.bysan-style-settings .bysan-heading-row .bysan-theme-color-mode {
-  grid-template-columns: max-content 1.45rem minmax(0, 1fr) 1.45rem;
-  column-gap: 0.25rem;
-  padding: 0.2rem 0.3rem;
-}
-
-.bysan-style-settings .bysan-heading-row .bysan-theme-color-mode input[type="color"] {
-  width: 1.45rem;
-  min-width: 0;
-  height: 1.45rem;
-}
-
-.bysan-heading-row .bysan-theme-color-value {
-  font-size: 0.7rem;
-  letter-spacing: -0.02em;
-}
-
-.bysan-style-settings .bysan-heading-row .bysan-color-reset {
-  width: 1.45rem !important;
-  min-width: 0 !important;
-  height: 1.45rem !important;
-}
-
 .bysan-appearance-layout {
   display: grid;
   gap: 0.5rem;
@@ -1839,33 +1802,6 @@ table:not(.dataview) :is(th, td) {
   gap: 0.5rem;
 }
 
-.bysan-resettable-slider .setting-item-control {
-  grid-template-columns: minmax(0, 1fr) 4.5rem 2rem;
-}
-
-.bysan-resettable-slider .setting-item-control > .slider {
-  grid-column: 1;
-  grid-row: 1;
-}
-
-.bysan-resettable-slider .setting-item-control > .slider-value {
-  grid-column: 2;
-  grid-row: 1;
-}
-
-.bysan-resettable-slider .setting-item-control > .bysan-color-reset {
-  grid-column: 3;
-  grid-row: 1;
-}
-
-.bysan-slider-value {
-  min-width: 0;
-  text-align: right;
-  color: var(--text-muted);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-
 .bysan-control-type-slider .setting-item-control .slider,
 .bysan-control-type-variable-number-slider .setting-item-control .slider {
   width: 100%;
@@ -1892,44 +1828,6 @@ table:not(.dataview) :is(th, td) {
   background: color-mix(in srgb, var(--background-secondary) 72%, transparent);
 }
 
-.bysan-mode-control-color {
-  grid-template-columns: max-content 1.7rem minmax(0, 1fr) 1.55rem;
-}
-
-.bysan-mode-control-has-opacity,
-.bysan-theme-color-mode-has-opacity {
-  grid-template-rows: auto auto;
-  row-gap: 0.45rem;
-}
-
-.bysan-mode-control-has-opacity > .slider-value {
-  grid-column: 1 / 3;
-  grid-row: 2;
-  color: var(--text-muted);
-  font-variant-numeric: tabular-nums;
-  text-align: left;
-}
-
-.bysan-mode-control-has-opacity > .bysan-color-reset,
-.bysan-theme-color-mode-has-opacity > .bysan-color-reset {
-  grid-column: 4;
-  grid-row: 1;
-}
-
-.bysan-mode-control-has-opacity > .slider {
-  grid-column: 3 / 5;
-  grid-row: 2;
-  width: 100% !important;
-  min-width: 0 !important;
-  max-width: none !important;
-  margin: 0 !important;
-}
-
-.bysan-mode-control-color input[type="color"] {
-  width: 1.7rem;
-  min-width: 1.7rem;
-}
-
 .bysan-color-reset {
   flex: 0 0 auto;
   width: 1.8rem !important;
@@ -1942,21 +1840,6 @@ table:not(.dataview) :is(th, td) {
   color: var(--text-muted) !important;
   opacity: 1 !important;
   box-shadow: none !important;
-}
-
-.bysan-mode-control-color .bysan-color-reset {
-  width: 1.55rem !important;
-  min-width: 1.55rem !important;
-  height: 1.55rem !important;
-  font-size: 0.88em;
-}
-
-.bysan-mode-control-color .bysan-theme-color-value {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 0.72rem;
-  letter-spacing: -0.025em;
 }
 
 .bysan-color-reset:hover,
@@ -1979,48 +1862,6 @@ table:not(.dataview) :is(th, td) {
   width: 100%;
 }
 
-.bysan-theme-color-mode {
-  display: grid;
-  grid-template-columns: max-content 2rem minmax(0, 1fr) max-content;
-  align-items: center;
-  gap: 0.45rem;
-  min-width: 0;
-  padding: 0.35rem 0.45rem;
-  border: 1px solid var(--background-modifier-border);
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--background-secondary) 72%, transparent);
-}
-
-.bysan-theme-color-mode > .bysan-mode-label {
-  grid-column: 1;
-  grid-row: 1;
-}
-
-.bysan-theme-color-mode-has-opacity > .slider-value {
-  grid-column: 1 / 2;
-  grid-row: 2;
-  color: var(--text-muted);
-  font-variant-numeric: tabular-nums;
-}
-
-.bysan-theme-color-mode-has-opacity > .slider {
-  grid-column: 2 / 5;
-  grid-row: 2;
-  width: 100% !important;
-  min-width: 0 !important;
-  max-width: none !important;
-  margin: 0 !important;
-}
-
-.bysan-theme-color-mode input[type="color"] {
-  grid-column: 2;
-  grid-row: 1;
-  width: 2rem;
-  min-width: 2rem;
-  height: 1.75rem;
-  padding: 0.1rem;
-}
-
 .bysan-theme-color-value {
   grid-column: 3;
   grid-row: 1;
@@ -2031,32 +1872,6 @@ table:not(.dataview) :is(th, td) {
   font-variant-numeric: tabular-nums;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.bysan-theme-color-mode > .slider-value {
-  grid-column: 1;
-  grid-row: 2;
-  min-width: 0;
-  text-align: center;
-}
-
-.bysan-theme-color-mode .slider {
-  grid-column: 2 / 5;
-  grid-row: 2;
-  width: 100% !important;
-  min-width: 0 !important;
-  max-width: none !important;
-  margin: 0 !important;
-}
-
-.bysan-theme-color-mode .slider input[type="range"] {
-  width: 100% !important;
-  max-width: none !important;
-}
-
-.bysan-theme-color-mode > .bysan-color-reset {
-  grid-column: 4;
-  grid-row: 1;
 }
 
 .bysan-mode-control-slider {
@@ -2141,10 +1956,6 @@ table:not(.dataview) :is(th, td) {
     width: 100%;
   }
 
-  .bysan-theme-color-mode {
-    grid-template-columns: max-content 2rem minmax(0, 1fr) max-content;
-  }
-
   .bysan-dual-mode-setting {
     align-items: flex-start;
     flex-direction: column;
@@ -2168,6 +1979,187 @@ table:not(.dataview) :is(th, td) {
   .bysan-mode-control select {
     width: 100%;
     max-width: none;
+  }
+}
+
+/* All built-in setting sections share the same row and control layout. */
+.bysan-style-settings.vertical-tab-content {
+  padding-block-start: 0 !important;
+}
+
+.bysan-style-settings > .bysan-settings-title {
+  margin-block-start: 0.6rem;
+}
+
+.bysan-style-settings .bysan-settings-section {
+  padding: 0.75rem;
+}
+
+.bysan-style-settings .bysan-settings-section-title {
+  padding-inline: 0;
+  padding-block-end: 0.5rem;
+  border-bottom: 1px solid var(--bysan-settings-border);
+}
+
+.bysan-style-settings .bysan-appearance-controls {
+  container-type: inline-size;
+}
+
+.bysan-style-settings .bysan-settings-section-body .bysan-feature-group {
+  margin: 0 0 0.65rem;
+  border: 0;
+  background: transparent;
+}
+
+.bysan-style-settings .bysan-settings-section-body .bysan-feature-group-header {
+  padding: 0.45rem 0 0.2rem;
+  border: 0;
+  background: transparent;
+}
+
+.bysan-style-settings .bysan-settings-section-body :is(.bysan-feature-group-header, .bysan-advanced-group) > h4 {
+  padding-inline: 0;
+}
+
+.bysan-style-settings .bysan-settings-section-body .bysan-feature-group-body {
+  display: block;
+  padding: 0;
+}
+
+.bysan-style-settings .bysan-settings-section-body .setting-item:not(.setting-item-heading) {
+  display: grid;
+  grid-template-columns: minmax(6.5rem, 1fr) minmax(9rem, 1.45fr);
+  align-items: center;
+  gap: 0.4rem 0.65rem;
+  min-height: 2.6rem;
+  padding: 0.4rem 0;
+  border: 0;
+  border-bottom: 1px solid var(--bysan-settings-border);
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.bysan-style-settings .bysan-settings-section-body .setting-item > :is(.setting-item-info, .setting-item-control) {
+  min-width: 0;
+  width: 100%;
+  margin: 0;
+}
+
+.bysan-style-settings .bysan-settings-section-body .setting-item-control {
+  justify-content: flex-end;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+.bysan-style-settings .bysan-settings-section-body .setting-item-control > :is(select, input[type="text"], input[type="number"]) {
+  flex: 1 1 7rem;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.bysan-style-settings .bysan-settings-section-body .setting-item-description {
+  margin-top: 0.1rem;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+}
+
+.bysan-style-settings .bysan-settings-section-body .setting-item-description:empty {
+  display: none;
+}
+
+.bysan-style-settings .bysan-settings-section-body .bysan-color-row.setting-item,
+.bysan-style-settings .bysan-settings-section-body .bysan-heading-row > .setting-item {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.bysan-style-settings .bysan-settings-section-body .bysan-heading-row > .setting-item {
+  align-content: center;
+  border-bottom: 0;
+}
+
+.bysan-style-settings .bysan-settings-section-body .bysan-color-row .setting-item-control {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 10.6rem), 1fr));
+  align-items: stretch;
+}
+
+.bysan-style-settings .bysan-color-mode {
+  display: grid;
+  grid-template-columns: 2.55rem 1.45rem minmax(0, 1fr) 1.55rem;
+  align-items: center;
+  gap: 0.25rem 0.3rem;
+  min-width: 0;
+  padding: 0.25rem 0.35rem;
+  border: 1px solid var(--bysan-settings-border);
+  border-radius: 6px;
+  background: var(--bysan-settings-surface-secondary);
+}
+
+.bysan-style-settings .bysan-color-mode > .bysan-mode-label {
+  grid-area: 1 / 1;
+  justify-content: center;
+  min-height: 1.32rem;
+  padding-inline: 0.12rem;
+  font-size: 0.69rem;
+}
+
+.bysan-style-settings .bysan-color-mode > input[type="color"] {
+  grid-area: 1 / 2;
+  width: 1.45rem;
+  min-width: 0;
+  height: 1.45rem;
+  padding: 0.04rem;
+}
+
+.bysan-style-settings .bysan-color-mode > .bysan-theme-color-value {
+  grid-area: 1 / 3;
+  font-size: 0.7rem;
+  letter-spacing: -0.015em;
+}
+
+.bysan-style-settings .bysan-color-mode > .bysan-color-reset {
+  grid-area: 1 / 4;
+  width: 1.55rem !important;
+  min-width: 1.55rem !important;
+  height: 1.55rem !important;
+  font-size: 0.85rem;
+}
+
+.bysan-style-settings .bysan-color-mode > .slider-value {
+  grid-area: 2 / 1;
+  min-width: 0;
+  text-align: center;
+  font-size: 0.72rem;
+}
+
+.bysan-style-settings .bysan-color-mode > .slider {
+  grid-area: 2 / 2 / 3 / 5;
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  margin: 0 !important;
+}
+
+.bysan-style-settings .bysan-color-mode .slider input[type="range"] {
+  width: 100% !important;
+  min-width: 0 !important;
+}
+
+.bysan-style-settings .bysan-stepper-unit {
+  flex: 0 0 1.3rem;
+  text-align: center;
+}
+
+@container (min-width: 39rem) {
+  .bysan-heading-row {
+    grid-template-columns: minmax(4.2rem, 0.65fr) minmax(22.2rem, 2.5fr) minmax(9.1rem, 1fr);
+  }
+}
+
+@container (max-width: 19rem) {
+  .bysan-style-settings .bysan-settings-section-body .setting-item:not(.setting-item-heading) {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 

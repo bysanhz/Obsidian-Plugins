@@ -68,11 +68,20 @@ const sandbox = {
 vm.runInNewContext(
   themeSource.replace(
     "module.exports = { ThemeControls, addValueStepper, ADVANCED_THEME_TOPICS };",
-    "module.exports = { ThemeControls, parseColor, colorWithAlpha, ADVANCED_MODE_PAIRS };"
+    "module.exports = { ThemeControls, parseColor, colorWithAlpha, ADVANCED_MODE_PAIRS, COMPATIBILITY_ONLY_IDS, optionLabel };"
   ),
   sandbox
 );
 const { ThemeControls, parseColor, colorWithAlpha } = sandbox.module.exports;
+const { optionLabel, COMPATIBILITY_ONLY_IDS } = sandbox.module.exports;
+assert.equal(optionLabel("Grid notebook 1 (@CZ-15/YZ-10)", "zh"), "均匀网格");
+for (const item of controls) {
+  for (const option of (item.options || []).filter(option => option.value != null)) {
+    for (const lang of ["zh", "en"]) {
+      assert(!/\(@|adapted from @/i.test(optionLabel(option.label, lang)), `credit leaking into option label: ${item.id}`);
+    }
+  }
+}
 const reviewSandbox = {
   module: { exports: {} },
   exports: {},
@@ -110,6 +119,24 @@ for (const region of ["workspace", "editor", "media", "extensions"]) {
   assert(regionStats[region] > 0, `empty interface region: ${region}`);
 }
 const byId = new Map(themeControls.controlItems.map(item => [item.id, item]));
+assert.deepEqual([...themeControls.colorModeKeys("bysan-note-page-bg")],
+  ["bysan-note-page-bg", "bg-color-notebook", "stripe-notebook-stripe-color"], "unified reset must also clear legacy colours for that mode");
+for (const id of themeControls.colorModeKeys("bysan-note-page-bg").slice(1)) {
+  assert(COMPATIBILITY_ONLY_IDS.has(id) && byId.has(id), `legacy background field must stay compatible without a duplicate control: ${id}`);
+}
+const noteColour = { id: "bysan-note-page-bg", type: "variable-themed-color", "default-light": "#ffffff" };
+plugin.settings.themeSettings = {
+  "background-notebook-liked-switch": true,
+  "notebook-liked-markdown-page-options": "notebook-liked-markdown-page-dotted-notebook-1",
+  "bg-color-notebook": { light: "#334455" },
+  "stripe-notebook-stripe-color": { light: "#667788" }
+};
+assert.equal(themeControls.displayValueFor(noteColour, "light"), "#334455");
+plugin.settings.themeSettings["notebook-liked-markdown-page-options"] = "notebook-liked-markdown-page-stripe-notebook-1";
+assert.equal(themeControls.displayValueFor(noteColour, "light"), "#667788");
+plugin.settings.themeSettings["bysan-note-page-bg"] = { light: "#112233" };
+assert.equal(themeControls.displayValueFor(noteColour, "light"), "#112233");
+plugin.settings.themeSettings = {};
 for (const id of ["background-notebook-liked-switch", "notebook-liked-markdown-page-options",
   "bg-color-notebook", "dotted-notebook-dot-color", "grid-notebook-line-color-1", "grid-notebook-line-color-2",
   "stripe-notebook-stripe-color", "toggle-fixed-pattern", "toggle-split-note-background",

@@ -70,6 +70,18 @@ const HIDDEN_CATALOG_IDS = new Set([
   "bt-github"
 ]);
 
+// These fields remain valid CSS inputs when loading old profiles, but their
+// effects are already owned by the unified surface controls.
+const COMPATIBILITY_ONLY_IDS = new Set([
+  "bg-color-notebook",
+  "stripe-notebook-stripe-color",
+  "bt-background-split-container",
+  "show-border-table"
+]);
+
+const NOTE_PAPER_COLOR_IDS = ["bysan-note-page-bg", "bg-color-notebook", "stripe-notebook-stripe-color"];
+const NOTE_PAPER_PATTERN_IDS = ["background-notebook-liked-switch", "notebook-liked-markdown-page-options"];
+
 const COLOR_FALLBACK_VARIABLES = new Map([
   ["print-h1-color", "h1-color"],
   ["print-h2-color", "h2-color"],
@@ -356,11 +368,36 @@ function chineseTitle(text) {
 }
 
 const CONTROL_COPY = {
-  "bg-color-notebook": {
-    "title.zh": "点阵与网格纸面底色",
-    title: "Dotted and grid paper colour",
-    "description.zh": "随纸纹理开启；「覆盖笔记底色」设值时优先显示覆盖色。",
-    description: "Used when a dotted or grid pattern is enabled. The note base-colour override takes priority."
+  "color-scheme-options": { "title.zh": "整体配色方案", title: "Colour scheme" },
+  "toggle-fixed-pattern": { "title.zh": "滚动时固定纸纹理", title: "Keep paper pattern fixed while scrolling" },
+  "toggle-split-note-background": { "title.zh": "侧栏笔记不使用纸纹理", title: "Hide paper pattern in sidebar notes" },
+  "grid-notebook-line-color-1": { "title.zh": "网格线颜色", title: "Grid-line colour" },
+  "grid-notebook-line-color-2": { "title.zh": "双层网格的粗线颜色", title: "Coarse-line colour for double grid" },
+  "dotted-notebook-dot-color": { "title.zh": "点阵圆点颜色", title: "Dot colour" },
+  "toggle-nonoverlapping-bg": { "title.zh": "笔记底层与工作区分离", title: "Separate note and workspace backgrounds" },
+  "toggle-table-transition": { "title.zh": "悬停时放大表格单元格", title: "Enlarge table cells on hover" },
+  "list-ul-marker-color": { "title.zh": "普通列表符号颜色", title: "Standard bullet colour" },
+  "list-ul-marker-color-1": { "title.zh": "自定义一级列表符号颜色", title: "Custom level-one bullet colour" },
+  "bt-colorful-indentation-line-options": { "title.zh": "阅读视图层级线样式", title: "Reading-view indent guide style" },
+  "cloze-decoration-3": { "title.zh": "挖空样式三下划线", title: "Cloze style three underline" },
+  "font-family-vault": { "title.zh": "库名称字体", title: "Vault name font" },
+  "font-size-vault-name": { "title.zh": "库名称字号", title: "Vault name font size" },
+  "hr-color-numbers-color": { "title.zh": "编号分隔线数字颜色", title: "Numbered-divider digit colour" },
+  "hr-numbers-text-fill": { "title.zh": "空心数字填充颜色", title: "Hollow-digit fill colour" },
+  "font-size-loading-diy-text": { "title.zh": "加载主文字字号", title: "Loading main text size" },
+  "font-size-loading-add": { "title.zh": "加载附加文字字号", title: "Loading supplementary text size" },
+  "loading-diy-text-color": { "title.zh": "加载主文字颜色", title: "Loading main text colour" },
+  "loading-add-text-color": { "title.zh": "加载附加文字颜色", title: "Loading supplementary text colour" },
+  "loading-add-text-color-alt": { "title.zh": "加载附加文字动画终点颜色", title: "Loading supplementary animation end colour" },
+  "loading-page-custom-gif-caption": { "title.zh": "自定义加载动图说明", title: "Custom loading animation caption" },
+  "loading-page-custom-gif-caption-alt": { "title.zh": "形状动图加载说明", title: "Shaped loading animation caption" },
+  "popover-width-factor": { "title.zh": "悬浮预览宽度倍率", title: "Popover width multiplier" },
+  "popover-height-factor": { "title.zh": "悬浮预览高度倍率", title: "Popover height multiplier" },
+  "checkbox-size": {
+    "title.zh": "普通复选框尺寸",
+    title: "Standard checkbox size",
+    "description.zh": "用于普通复选框；Markdown 任务框使用「任务框尺寸」。",
+    description: "For standard checkboxes. Markdown tasks use the task-checkbox size."
   },
   "background-image-settings-switch": {
     "title.zh": "启用背景图或透明底层",
@@ -389,21 +426,48 @@ const CONTROL_COPY = {
 };
 
 function localised(item, key, language) {
+  if (key === "title") {
+    const match = /^hr-color-(icon|numbers-line)-([1-4])$/.exec(item.id);
+    if (match) {
+      const [, kind, side] = match;
+      return language === "zh"
+        ? `${kind === "icon" ? "图标" : "编号"}分隔线颜色 ${side}`
+        : `${kind === "icon" ? "Icon" : "Numbered"} divider line colour ${side}`;
+    }
+    const marker = /^list-(ul|ol)-marker-([1-4])$/.exec(item.id);
+    if (marker) {
+      const [, type, level] = marker;
+      return language === "zh"
+        ? `${type === "ul" ? "无序" : "有序"}列表 ${level} 级符号`
+        : `${type === "ul" ? "Unordered" : "Ordered"} list level ${level} marker`;
+    }
+  }
   const copy = CONTROL_COPY[item.id]?.[language === "en" ? key : `${key}.zh`];
   if (copy) return copy;
   if (language === "en") return item[key] || "";
   if (key === "description") return item[`${key}.zh`] || "";
-  return chineseTitle(item[`${key}.zh`] || item[key] || "");
+  return chineseTitle(item[`${key}.zh`] || item[key] || "").replace(/\bh([1-6])\b/g, "H$1");
 }
 
 function optionLabel(label, language) {
+  const original = String(label || "");
+  const text = original.replace(/\s*\((?:@|adapted from @)[^)]*\)\s*$/i, "").trim();
+  const paperLabels = {
+    "Grid notebook 1": ["均匀网格", "Uniform grid"],
+    "Grid notebook 2": ["双层网格", "Double grid"],
+    "Dotted notebook 1": ["规则点阵", "Aligned dots"],
+    "Dotted notebook 2": ["交错点阵", "Staggered dots"],
+    "Stripe notebook 1": ["斜条纹", "Diagonal stripes"],
+    "Stripe notebook 2": ["交叉条纹", "Crossed stripes"]
+  };
+  if (Object.hasOwn(paperLabels, text)) return paperLabels[text][language === "en" ? 1 : 0];
   if (language === "en") {
-    return String(label || "")
+    return text
       .replace(/^榛子巧克力\s*/, "")
-      .replace(/^魔方\s*/, "");
+      .replace(/^魔方\s*/, "")
+      .replace(/^Defaut table$/, "Default table");
   }
-  const text = String(label || "");
-  if (ZH_OPTION[text]) return ZH_OPTION[text];
+  if (ZH_OPTION[original] || ZH_OPTION[text]) return ZH_OPTION[original] || ZH_OPTION[text];
   return text
     .replace(/^auto$/i, "自动")
     .replace(/^Logseq$/i, "Logseq 样式")
@@ -625,8 +689,12 @@ class ThemeControls {
     return this.plugin.settings.themeSettings || {};
   }
 
+  colorModeKeys(id) {
+    return id === NOTE_PAPER_COLOR_IDS[0] ? NOTE_PAPER_COLOR_IDS : [id];
+  }
 
   valueFor(item, mode) {
+    if (!item) return undefined;
     const storedValue = this.stored[item.id];
     if (item.type === "variable-themed-color") {
       if (storedValue && typeof storedValue === "object" && isDefined(storedValue[mode])) {
@@ -643,6 +711,12 @@ class ThemeControls {
     if (item.type === "variable-themed-color") {
       if (storedValue && typeof storedValue === "object" && isDefined(storedValue[mode])) {
         return storedValue[mode];
+      }
+      if (item.id === NOTE_PAPER_COLOR_IDS[0]) {
+        const [enabled, pattern] = NOTE_PAPER_PATTERN_IDS.map(id => this.valueFor(this.items.find(entry => entry.id === id)));
+        const legacyId = enabled && (String(pattern).includes("-stripe-") ? NOTE_PAPER_COLOR_IDS[2] : NOTE_PAPER_COLOR_IDS[1]);
+        const legacy = legacyId && this.controlItems.find(entry => entry.id === legacyId);
+        if (legacy) return this.displayValueFor(legacy, mode);
       }
       return this.displayDefaults.get(`${item.id}:${mode}`) ?? item[`default-${mode}`];
     }
@@ -794,6 +868,7 @@ class ThemeControls {
     this.probeFrame = null;
     this.displayDefaults.clear();
     this.baseDefaults.clear();
+    this.refreshNotePaperControl = null;
   }
 
 
@@ -870,12 +945,18 @@ class ThemeControls {
     if (!item) return;
     if (item.type === "class-toggle") {
       document.body.classList.toggle(item.id, Boolean(this.valueFor(item)));
+      if (NOTE_PAPER_PATTERN_IDS.includes(id)) this.refreshNotePaperControl?.();
       return;
     }
     if (item.type === "class-select") {
       const selected = this.valueFor(item);
       for (const option of item.options || []) {
         if (option?.value) document.body.classList.toggle(option.value, option.value === selected);
+      }
+      if (NOTE_PAPER_PATTERN_IDS.includes(id)) this.refreshNotePaperControl?.();
+      if (id === "color-scheme-options" && this.refreshNotePaperControl) {
+        this.refreshDisplayDefaults();
+        this.refreshNotePaperControl();
       }
       return;
     }
@@ -937,6 +1018,7 @@ class ThemeControls {
 
 
   beginRegionRender() {
+    this.refreshNotePaperControl = null;
     this.refreshDisplayDefaults();
     this.cachedRegionBuckets = this.buildRegionBuckets();
   }
@@ -1009,7 +1091,7 @@ class ThemeControls {
     if (!this.cachedRegionBuckets) this.beginRegionRender();
     const group = [...this.cachedRegionBuckets.values()].flat().find(entry => entry.id === groupId);
     if (!group) return;
-    const items = group.items.filter(item => !excludedIds.has(item.id) && include(item.id));
+    const items = group.items.filter(item => !COMPATIBILITY_ONLY_IDS.has(item.id) && !excludedIds.has(item.id) && include(item.id));
     if (!items.length) return;
     const title = this.plugin.language === "zh" ? group.zh : group.en;
     const wrapper = containerEl.createDiv({
@@ -1288,6 +1370,7 @@ class ThemeControls {
   addThemedColorControls(setting, item) {
     setting.settingEl.addClass("bysan-theme-color-setting", "bysan-color-row");
     setting.settingEl.dataset.bysanSettingId = item.id;
+    const refreshers = [];
     for (const mode of ["light", "dark"]) {
       const label = mode === "light" ? this.plugin.t("theme.light") : this.plugin.t("theme.dark");
       const parsed = parseColor(this.displayValueFor(item, mode));
@@ -1355,9 +1438,7 @@ class ThemeControls {
         cls: "clickable-icon bysan-color-reset", text: "↺",
         attr: { type: "button", "aria-label": resetLabel, title: resetLabel }
       });
-      reset.addEventListener("click", async () => {
-        await this.plugin.clearThemeColorMode(item.id, mode);
-        this.refreshDisplayDefaults();
+      const syncControls = () => {
         const restored = parseColor(this.displayValueFor(item, mode));
         syncingControls = true;
         try {
@@ -1367,7 +1448,18 @@ class ThemeControls {
         } finally {
           syncingControls = false;
         }
+      };
+      refreshers.push(syncControls);
+      reset.addEventListener("click", async () => {
+        await this.plugin.clearThemeColorMode(item.id, mode);
+        this.refreshDisplayDefaults();
+        syncControls();
       });
+    }
+    if (item.id === NOTE_PAPER_COLOR_IDS[0]) {
+      this.refreshNotePaperControl = () => {
+        if (setting.settingEl.isConnected) refreshers.forEach(sync => sync());
+      };
     }
   }
 

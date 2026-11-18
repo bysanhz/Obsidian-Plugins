@@ -2046,10 +2046,10 @@ table:not(.dataview) :is(th, td) {
   display: none;
 }
 
-.bysan-theme-grid .setting-item-description {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.bysan-style-settings .bysan-settings-section-body .setting-item-info :is(.setting-item-name, .setting-item-description) {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  min-width: 0;
 }
 
 .bysan-style-settings .bysan-theme-grid > .bysan-control-type-class-toggle.setting-item {

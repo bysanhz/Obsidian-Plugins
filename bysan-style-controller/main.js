@@ -1,6 +1,6 @@
 /**
  * Bysan Style Controller
- * Version: 0.18.0
+ * Version: 0.18.1
  *
  * Owns visual presentation and provides switchable, integrated Bysan modules.
  */
@@ -77,7 +77,7 @@ const NOTE_BODY_CONTROLS = [
   ["line-height-main", "正文行高", "Body line height"]
 ];
 const NOTE_BACKGROUND_CONTROLS = [
-  ["bysan-note-page-bg", "覆盖笔记底色", "Override note base colour", "只覆盖底色，不移除纹理。恢复后使用主题或纸面底色。", "Replaces the base colour without removing the pattern. Reset to use the theme or paper colour."],
+  ["bysan-note-page-bg", "笔记底色", "Note background colour"],
   ["background-notebook-liked-switch", "开启笔记纸纹理", "Enable notebook pattern"],
   ["notebook-liked-markdown-page-options", "笔记纸纹理", "Notebook pattern"]
 ];
@@ -100,8 +100,7 @@ const CALLOUT_CONTROLS = [
 const NAVIGATION_COLOR_CONTROLS = [
   ["bysan-left-pane-bg", "左侧栏底色", "Left sidebar background"],
   ["bysan-right-pane-bg", "右侧栏底色", "Right sidebar background"],
-  ["bysan-active-file-bg", "文件树当前文件背景", "Active file background in the file tree"],
-  ["bt-background-split-container", "侧栏共用底色", "Shared sidebar background", "工作区背景开启时使用。独立设置可覆盖对应侧栏。", "Used with workspace background enabled. A sidebar override takes priority."]
+  ["bysan-active-file-bg", "文件树当前文件背景", "Active file background in the file tree"]
 ];
 const TAB_COLOR_CONTROLS = [
   ["bysan-active-tab-bg", "当前标签页背景", "Active tab background"],
@@ -915,16 +914,22 @@ module.exports = class BysanStyleController extends Plugin {
 
 
   async clearThemeColorMode(id, mode) {
-    const stored = this.settings.themeSettings?.[id];
-    if (!stored || typeof stored !== "object") return false;
-    const next = { ...stored };
-    delete next[mode];
-    this.settings.themeSettings = { ...(this.settings.themeSettings || {}) };
-    if (Object.keys(next).length) this.settings.themeSettings[id] = next;
-    else delete this.settings.themeSettings[id];
+    const nextSettings = { ...(this.settings.themeSettings || {}) };
+    const changed = [];
+    for (const key of this.themeControls.colorModeKeys(id)) {
+      const stored = nextSettings[key];
+      if (!stored || typeof stored !== "object" || !Object.hasOwn(stored, mode)) continue;
+      const next = { ...stored };
+      delete next[mode];
+      if (Object.keys(next).length) nextSettings[key] = next;
+      else delete nextSettings[key];
+      changed.push(key);
+    }
+    if (!changed.length) return false;
+    this.settings.themeSettings = nextSettings;
     this.settings.stylePresetDirty = true;
     await this.saveData(this.settings);
-    this.themeControls.applySetting(id);
+    for (const key of changed) this.themeControls.applySetting(key);
     return true;
   }
 

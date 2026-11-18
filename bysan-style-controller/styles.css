@@ -827,8 +827,8 @@ body.bysan-style-controller-active
   position: sticky;
   top: 0;
   z-index: 20;
-  margin: 0.8rem 0 1.1rem;
-  padding: 0.7rem 0.8rem;
+  margin: 0.45rem 0 0.65rem;
+  padding: 0.48rem 0.52rem;
   border: 1px solid var(--bysan-settings-border);
   border-radius: 10px;
   background: var(--bysan-settings-surface) !important;
@@ -844,27 +844,41 @@ body.bysan-style-controller-active
   gap: 0.55rem;
 }
 
+.bysan-section-shortcuts:not([hidden]) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  margin-top: 0.28rem;
+}
+
+.bysan-settings-nav .bysan-section-shortcuts button {
+  min-height: 1.65rem;
+  padding: 0.15rem 0.55rem;
+  font-size: var(--font-ui-small);
+}
+
 .bysan-appearance-sample {
-  margin-block: 0.5rem 1rem;
-  padding: 0.7rem 0.9rem;
+  min-width: 0;
+  padding: 0.5rem 0.65rem;
   border: 1px solid var(--bysan-settings-border);
   border-radius: 8px;
   background: var(--background-primary);
   overflow: auto;
 }
 
-.bysan-appearance-sample-label,
-.bysan-setting-explanation {
+.bysan-appearance-sample-label {
   color: var(--text-muted);
   font-size: var(--font-ui-smaller);
-}
-
-.bysan-appearance-sample-label {
-  margin-block-end: 0.45rem;
+  margin-block-end: 0.25rem;
 }
 
 .bysan-appearance-sample .markdown-rendered {
   color: var(--text-normal);
+}
+
+/* Obsidian hides h1 in .vertical-tab-content, including embedded samples. */
+.bysan-style-settings .bysan-appearance-sample h1 {
+  display: block;
 }
 
 .bysan-appearance-sample .markdown-preview-section > :first-child {
@@ -875,18 +889,10 @@ body.bysan-style-controller-active
   margin-block-end: 0;
 }
 
-.bysan-setting-explanation summary {
-  cursor: pointer;
-}
-
-.bysan-setting-explanation div {
-  overflow-wrap: anywhere;
-}
-
 .bysan-major-tab {
   min-width: 0;
-  min-height: 2.8rem;
-  padding: 0.55rem 0.7rem;
+  min-height: 2.1rem;
+  padding: 0.3rem 0.55rem;
   border: 1px solid var(--bysan-settings-border) !important;
   border-radius: 9px !important;
   background: var(--bysan-settings-surface-secondary) !important;
@@ -908,43 +914,165 @@ body.bysan-style-controller-active
 }
 
 .bysan-major-areas {
-  scroll-margin-top: 8rem;
+  container-type: inline-size;
 }
 
 .bysan-major-area[hidden] {
   display: none !important;
 }
 
-.bysan-major-area {
-  margin-top: 1rem;
-  padding: 0.85rem;
-  border: 1px solid color-mix(in srgb, var(--bysan-settings-cta) 36%, var(--bysan-settings-border));
-  border-radius: 14px;
-  background: color-mix(in srgb, var(--bysan-settings-surface-secondary) 76%, transparent);
+.bysan-settings-section {
+  margin-block: 0.65rem;
+  padding: 0.6rem;
+  border: 1px solid var(--bysan-settings-border);
+  border-radius: 9px;
+  background: var(--bysan-settings-surface);
 }
 
-.bysan-major-area-header {
-  margin: -0.85rem -0.85rem 0.85rem;
-  padding: 1rem 1.1rem;
-  border-radius: 14px 14px 0 0;
-  background: linear-gradient(
-    100deg,
-    color-mix(in srgb, var(--bysan-settings-cta) 18%, var(--bysan-settings-surface)),
-    color-mix(in srgb, var(--bysan-settings-cta) 5%, var(--bysan-settings-surface))
-  );
-  border-bottom: 1px solid color-mix(in srgb, var(--bysan-settings-cta) 32%, var(--bysan-settings-border));
-}
-
-.bysan-major-area-header h2 {
-  margin: 0;
+.bysan-settings-section > .bysan-settings-section-title {
+  margin: 0 0 0.45rem;
   color: var(--bysan-settings-cta);
-  font-size: 1.2rem;
+  font-size: 1rem;
 }
 
-.bysan-major-area-header p {
-  margin: 0.25rem 0 0;
-  color: var(--text-muted);
-  font-size: var(--font-ui-small);
+.bysan-style-settings .bysan-settings-section-body .setting-item:not(.setting-item-heading) {
+  margin: 0;
+  padding: 0.38rem 0.45rem;
+  gap: 0.35rem;
+}
+
+.bysan-heading-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(6.25rem, 28%);
+  grid-template-areas: "sample size" "colour colour";
+  align-items: center;
+  gap: 0.25rem 0.55rem;
+  padding: 0.35rem 0;
+  border-top: 1px solid var(--bysan-settings-border);
+}
+
+.bysan-heading-row .bysan-appearance-sample {
+  grid-area: sample;
+  padding: 0.35rem 0.5rem;
+}
+
+.bysan-style-settings .bysan-heading-row > .bysan-theme-setting-item:not(.setting-item-heading) {
+  display: flex;
+  align-items: stretch;
+  flex-direction: column;
+  min-width: 0;
+  border: 0;
+  background: transparent !important;
+}
+
+.bysan-heading-row .bysan-theme-color-setting {
+  grid-area: colour;
+}
+
+.bysan-heading-row .bysan-control-type-variable-text {
+  grid-area: size;
+}
+
+.bysan-style-settings .bysan-heading-row .setting-item > :is(.setting-item-control, .setting-item-info) {
+  min-width: 0;
+  width: 100%;
+  margin: 0;
+}
+
+.bysan-heading-row .bysan-control-type-variable-text .setting-item-control {
+  gap: 0.25rem;
+}
+
+.bysan-style-settings .bysan-heading-row input[type="text"] {
+  min-width: 0;
+  padding-inline: 0.35rem;
+}
+
+.bysan-heading-row .bysan-theme-color-setting .setting-item-control {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 9.65rem), 1fr));
+  gap: 0.25rem;
+}
+
+.bysan-style-settings .bysan-heading-row .bysan-theme-color-mode {
+  grid-template-columns: max-content 1.45rem minmax(0, 1fr) 1.45rem;
+  column-gap: 0.25rem;
+  padding: 0.2rem 0.3rem;
+}
+
+.bysan-style-settings .bysan-heading-row .bysan-theme-color-mode input[type="color"] {
+  width: 1.45rem;
+  min-width: 0;
+  height: 1.45rem;
+}
+
+.bysan-heading-row .bysan-theme-color-value {
+  font-size: 0.7rem;
+  letter-spacing: -0.02em;
+}
+
+.bysan-style-settings .bysan-heading-row .bysan-color-reset {
+  width: 1.45rem !important;
+  min-width: 0 !important;
+  height: 1.45rem !important;
+}
+
+.bysan-appearance-layout {
+  display: grid;
+  gap: 0.5rem;
+  align-items: start;
+}
+
+.bysan-appearance-controls {
+  min-width: 0;
+}
+
+.bysan-appearance-controls > .bysan-feature-group {
+  margin: 0 0 0.25rem;
+  border: 0;
+  background: transparent;
+}
+
+.bysan-appearance-controls > .bysan-feature-group > .bysan-feature-group-header {
+  padding: 0.25rem 0.45rem;
+  border: 0;
+  background: transparent;
+}
+
+.bysan-appearance-controls > .bysan-feature-group > .bysan-feature-group-body {
+  padding: 0;
+  gap: 0.3rem;
+}
+
+@container (min-width: 37rem) {
+  .bysan-appearance-layout {
+    grid-template-columns: minmax(8.7rem, 0.84fr) minmax(0, 2.16fr);
+  }
+
+  .bysan-heading-row {
+    grid-template-columns: minmax(6.5rem, 1fr) minmax(20.6rem, 2.5fr) minmax(6.25rem, 0.9fr);
+    grid-template-areas: "sample colour size";
+  }
+}
+
+@container (max-width: 32rem) {
+  .bysan-style-settings .bysan-settings-section .setting-item:not(.setting-item-heading) {
+    grid-template-columns: minmax(0, 1fr);
+    flex-wrap: wrap;
+  }
+
+  .bysan-style-settings .bysan-settings-section .setting-item :is(input:not([type="color"]), select) {
+    min-width: 0;
+  }
+
+  .bysan-style-settings .bysan-settings-section .setting-item-control {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .bysan-style-settings .bysan-settings-section .bysan-appearance-controls .bysan-theme-color-setting .setting-item-control,
+  .bysan-style-settings .bysan-settings-section .bysan-appearance-controls .bysan-dual-mode-setting .setting-item-control {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 10.1rem), 1fr));
+  }
 }
 
 .bysan-subarea,
@@ -1018,52 +1146,6 @@ body.bysan-style-controller-active
   margin: 0.1rem 0.2rem 0.8rem;
   color: var(--text-muted);
   font-size: var(--font-ui-small);
-}
-
-.bysan-editor-object {
-  margin: 0.75rem 0;
-  overflow: clip;
-  border: 1px solid color-mix(in srgb, var(--bysan-settings-cta) 28%, var(--bysan-settings-border));
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--bysan-settings-surface-secondary) 62%, var(--bysan-settings-surface));
-}
-
-.bysan-editor-object-summary {
-  display: flex;
-  align-items: center;
-  gap: 0.55rem;
-  min-height: 2.7rem;
-  padding: 0.55rem 0.75rem;
-  cursor: pointer;
-  list-style: none;
-  user-select: none;
-}
-
-.bysan-editor-object-summary::-webkit-details-marker {
-  display: none;
-}
-
-.bysan-editor-object-summary:hover {
-  background: var(--background-modifier-hover);
-}
-
-.bysan-editor-object[open] > .bysan-editor-object-summary {
-  border-bottom: 1px solid var(--bysan-settings-border);
-  background: color-mix(in srgb, var(--bysan-settings-cta) 11%, var(--bysan-settings-surface));
-}
-
-.bysan-editor-object[open] > summary .bysan-subarea-chevron {
-  transform: rotate(90deg);
-}
-
-.bysan-editor-object-title {
-  color: var(--bysan-settings-cta);
-  font-size: 1.02rem;
-  font-weight: 760;
-}
-
-.bysan-editor-object-body {
-  padding: 0.7rem;
 }
 
 .bysan-feature-group {

@@ -167,7 +167,7 @@ for (const method of [
   "renderCodeSettings", "renderEditorRegionSettings", "renderInlineCodeSettings",
   "renderTableSettings", "renderQuoteSettings", "renderTextDetailSettings", "openPdfPreview",
   "renderIntegratedModuleSettings", "syncIntegratedModules", "addResettableSlider",
-  "createMajorArea", "createSubarea", "createEditorObject", "createFeatureGroup",
+  "createMajorArea", "createSubarea", "createSettingsSection", "createFeatureGroup",
   "setActiveMajorArea", "renderGeometryControls"
 ]) {
   assert(mainSource.includes(`${method}(`), `missing plugin feature: ${method}`);
@@ -176,11 +176,11 @@ for (const method of [
 assert(!mainSource.includes('createSubarea(content, "palette"'), "legacy standalone dual-mode palette area still rendered");
 assert(!mainSource.includes('createMajorArea(\n      areas,\n      "theme"'), "legacy full-theme major area still rendered");
 assert(mainSource.includes('this.renderEditorRegionSettings(content)'), "note appearance is not rendered in the content tab");
-for (const objectId of ["body-text", "headings", "code", "tables", "quotes"]) {
-  assert(mainSource.includes(`createEditorObject(containerEl, "${objectId}"`), `missing editor object group: ${objectId}`);
+for (const objectId of ["body-text", "headings", "code", "inline-code", "tables", "quotes"]) {
+  assert(mainSource.includes(`createSettingsSection(containerEl, "${objectId}"`), `missing editor object group: ${objectId}`);
 }
 assert(mainSource.includes('createSubarea(styles, "advanced"'), "missing advanced theme settings");
-assert(mainSource.includes('createSubarea(tools, "blank-line-cleanup"'), "blank-line cleanup must live in writing tools");
+assert(mainSource.includes('createSettingsSection(tools, "blank-line-cleanup"'), "blank-line cleanup must be directly available in writing tools");
 
 const usedTranslations = new Set();
 for (const file of ["main.js", "theme-controls.js", "pdf-preview.js"]) {

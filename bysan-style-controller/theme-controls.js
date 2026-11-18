@@ -1020,13 +1020,8 @@ class ThemeControls {
 
     if (item.type === "info-text") return;
     const controlDescription = this.controlDescription(item, description);
-    setting.setDesc(presentation?.scope || controlDescription);
-    setting.descEl?.setAttribute("title", controlDescription);
-    if (presentation) {
-      const details = setting.infoEl.createEl("details", { cls: "bysan-setting-explanation" });
-      details.createEl("summary", { text: this.plugin.language === "zh" ? "默认值与标识" : "Default and identifier" });
-      details.createDiv({ text: controlDescription });
-    }
+    if (!presentation?.compact) setting.setDesc(presentation?.scope || controlDescription);
+    setting.infoEl.setAttribute("title", controlDescription);
     setting.settingEl.dataset.bysanSearch = `${title} ${item.title || ""} ${controlDescription} ${item.id}`.toLowerCase();
 
     if (item.type === "class-toggle") {
@@ -1115,20 +1110,25 @@ class ThemeControls {
       };
       let pickerComponent;
       let valueLabel;
+      const updateValueLabel = (hex, alpha) => {
+        const value = colorWithAlpha(hex, item.opacity ? alpha : 1).toUpperCase();
+        valueLabel.setText(value);
+        valueLabel.title = value;
+      };
       appendNewControls(() => setting.addColorPicker((picker) => {
         pickerComponent = picker;
         picker.setValue(parsed.hex);
         picker.colorPickerEl?.setAttribute("title", this.plugin.t("theme.colorTitle", { mode: label }));
         picker.onChange((hex) => {
           const current = parseColor(this.displayValueFor(item, mode));
-          valueLabel?.setText(colorWithAlpha(hex, item.opacity ? current.alpha : 1).toUpperCase());
+          updateValueLabel(hex, current.alpha);
           this.updateThemedColor(item, mode, hex, current.alpha);
         });
       }));
       valueLabel = group.createSpan({
-        cls: "bysan-theme-color-value",
-        text: colorWithAlpha(parsed.hex, item.opacity ? parsed.alpha : 1).toUpperCase()
+        cls: "bysan-theme-color-value"
       });
+      updateValueLabel(parsed.hex, parsed.alpha);
       let sliderComponent;
       if (item.opacity) {
         appendNewControls(() => setting.addSlider((slider) => {
@@ -1137,7 +1137,7 @@ class ThemeControls {
           slider.sliderEl?.setAttribute("title", this.plugin.t("theme.opacityTitle", { mode: label }));
           slider.onChange((alpha) => {
             const current = parseColor(this.displayValueFor(item, mode));
-            valueLabel?.setText(colorWithAlpha(current.hex, alpha).toUpperCase());
+            updateValueLabel(current.hex, alpha);
             this.updateThemedColor(item, mode, current.hex, alpha);
           });
         }));
@@ -1152,7 +1152,7 @@ class ThemeControls {
             const restored = parseColor(this.displayValueFor(item, mode));
             pickerComponent?.setValue(restored.hex);
             sliderComponent?.setValue(restored.alpha);
-            valueLabel?.setText(colorWithAlpha(restored.hex, item.opacity ? restored.alpha : 1).toUpperCase());
+            updateValueLabel(restored.hex, restored.alpha);
           });
         button.extraSettingsEl?.addClass("bysan-color-reset");
       }));

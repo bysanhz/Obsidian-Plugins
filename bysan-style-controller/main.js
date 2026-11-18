@@ -1,6 +1,6 @@
 /**
  * Bysan Style Controller
- * Version: 0.17.4
+ * Version: 0.17.5
  *
  * Owns visual presentation and provides switchable, integrated Bysan modules.
  */
@@ -21,7 +21,7 @@ const {
 /* Obsidian evaluates main.js without a plugin-local CommonJS base path. Resolve
  * the helper through the active vault so the plugin remains portable. */
 globalThis.__bysanObsidianSetting = Setting;
-const { ThemeControls, addValueStepper } = require(app.vault.adapter.getFullPath(
+const { ThemeControls, addValueStepper, ADVANCED_THEME_TOPICS } = require(app.vault.adapter.getFullPath(
   ".obsidian/plugins/bysan-style-controller/theme-controls.js"
 ));
 const { resolveLanguage, translate } = require(app.vault.adapter.getFullPath(
@@ -1539,38 +1539,50 @@ class BysanStyleSettingTab extends PluginSettingTab {
     const body = this.advancedArea?.querySelector(":scope > .bysan-subarea-body");
     if (!body || body.childElementCount) return;
     const zh = this.plugin.language === "zh";
-    let picker;
-    new Setting(body).setName(zh ? "界面区域" : "Interface area").addDropdown(dropdown => {
-      picker = dropdown;
+    const navigation = body.createDiv({ cls: "bysan-advanced-navigation" });
+    new Setting(navigation).setName(zh ? "主题区域" : "Theme area").addDropdown(dropdown => {
+      this.advancedRegionPicker = dropdown;
+      for (const [topic, cn, en] of ADVANCED_THEME_TOPICS) dropdown.addOption(topic, zh ? cn : en);
+      dropdown.onChange(topic => this.selectAdvancedRegion(topic));
     });
-    for (const [region, cn, en] of [
-      ["workspace", "整体工作区", "Whole workspace"],
-      ["top", "顶部与标签页", "Top bar and tabs"],
-      ["left", "左侧面板", "Left sidebar"],
-      ["right", "右侧面板", "Right sidebar"],
-      ["system", "设置与菜单", "Settings and menus"],
-      ["editor", "笔记排版细节", "Detailed note typography"],
-      ["media", "Canvas、图谱与 PDF 样式", "Canvas, graph and PDF styles"],
-      ["plugins", "第三方插件适配", "Third-party plugin integrations"],
-      ["documents", "文档样式类", "Document style classes"]
-    ]) {
-      picker.addOption(region, zh ? cn : en);
-      const section = this.createSettingsSection(body, region, zh ? cn : en, (group) => {
-        if (region === "workspace") this.renderWorkspaceSettings(group);
-        this.plugin.themeControls.renderRegion(group, region, COMMON_THEME_IDS);
+    new Setting(navigation).setName(zh ? "功能组" : "Feature group").addDropdown(dropdown => {
+      this.advancedGroupPicker = dropdown;
+      dropdown.onChange(group => this.selectAdvancedGroup(group));
+    });
+    for (const [topic, cn, en] of ADVANCED_THEME_TOPICS) {
+      const section = this.createSettingsSection(body, `advanced-${topic}`, zh ? cn : en, (group) => {
+        this.plugin.themeControls.renderRegion(group, topic, COMMON_THEME_IDS);
+        if (topic === "workspace") {
+          const background = group.querySelector('[data-bysan-advanced-group="workspace-background"]');
+          if (background) this.renderWorkspaceSettings(background);
+        }
       });
-      section.dataset.bysanAdvancedRegion = region;
+      section.dataset.bysanAdvancedRegion = topic;
     }
-    this.advancedRegionPicker = picker;
-    picker.onChange(region => this.selectAdvancedRegion(region));
-    this.selectAdvancedRegion(this.activeAdvancedRegion || "workspace");
+    this.selectAdvancedRegion(this.activeAdvancedRegion || "workspace", this.activeAdvancedGroup);
   }
 
-  selectAdvancedRegion(region) {
+  selectAdvancedRegion(region, group = "") {
+    const zh = this.plugin.language === "zh";
     this.activeAdvancedRegion = region;
     this.advancedRegionPicker.setValue(region);
-    for (const section of this.advancedArea.querySelectorAll("[data-bysan-advanced-region]")) {
-      section.hidden = section.dataset.bysanAdvancedRegion !== region;
+    const sections = [...this.advancedArea.querySelectorAll("[data-bysan-advanced-region]")];
+    for (const section of sections) section.hidden = section.dataset.bysanAdvancedRegion !== region;
+    const active = sections.find(section => !section.hidden);
+    this.advancedGroupPicker.selectEl.replaceChildren();
+    this.advancedGroupPicker.addOption("", zh ? "全部功能组" : "All feature groups");
+    for (const item of active.querySelectorAll("[data-bysan-advanced-group]")) {
+      this.advancedGroupPicker.addOption(item.dataset.bysanAdvancedGroup, item.dataset.bysanSectionLabel);
+    }
+    this.selectAdvancedGroup(group || "");
+  }
+
+  selectAdvancedGroup(group) {
+    this.activeAdvancedGroup = group;
+    this.advancedGroupPicker.setValue(group);
+    const section = this.advancedArea.querySelector("[data-bysan-advanced-region]:not([hidden])");
+    for (const item of section.querySelectorAll("[data-bysan-advanced-group]")) {
+      item.hidden = Boolean(group) && item.dataset.bysanAdvancedGroup !== group;
     }
   }
 
@@ -1702,7 +1714,8 @@ class BysanStyleSettingTab extends PluginSettingTab {
       const headingMode = row.closest("[data-bysan-heading-mode]");
       if (headingMode) this.selectHeadingColorMode(headingMode.dataset.bysanHeadingMode);
       const region = row.closest("[data-bysan-advanced-region]");
-      if (region) this.selectAdvancedRegion(region.dataset.bysanAdvancedRegion);
+      const group = row.closest("[data-bysan-advanced-group]");
+      if (region) this.selectAdvancedRegion(region.dataset.bysanAdvancedRegion, group?.dataset.bysanAdvancedGroup);
       let parent = row.parentElement;
       while (parent) {
         if (parent.matches?.("details")) parent.open = true;

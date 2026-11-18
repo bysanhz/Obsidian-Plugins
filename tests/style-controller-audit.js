@@ -67,8 +67,8 @@ const sandbox = {
 };
 vm.runInNewContext(
   themeSource.replace(
-    "module.exports = { ThemeControls, addValueStepper };",
-    "module.exports = { ThemeControls, parseColor, colorWithAlpha };"
+    "module.exports = { ThemeControls, addValueStepper, ADVANCED_THEME_TOPICS };",
+    "module.exports = { ThemeControls, parseColor, colorWithAlpha, ADVANCED_MODE_PAIRS };"
   ),
   sandbox
 );
@@ -106,8 +106,15 @@ const themeControls = new ThemeControls(plugin, catalog);
 assert.equal(themeControls.controlItems.length, renderedControls.length, "every non-manual control must be owned");
 const regionStats = themeControls.regionStats();
 assert.equal(Object.values(regionStats).reduce((sum, count) => sum + count, 0), renderedControls.length, "every theme control must belong to exactly one interface region");
-for (const region of ["workspace", "top", "left", "right", "system", "editor", "media", "plugins", "documents"]) {
+for (const region of ["workspace", "editor", "media", "extensions"]) {
   assert(regionStats[region] > 0, `empty interface region: ${region}`);
+}
+const byId = new Map(themeControls.controlItems.map(item => [item.id, item]));
+for (const [lightId, darkId] of sandbox.module.exports.ADVANCED_MODE_PAIRS) {
+  const light = byId.get(lightId);
+  const dark = byId.get(darkId);
+  assert(light && dark && light.type === dark.type, `invalid advanced mode pair: ${lightId} / ${darkId}`);
+  assert.equal(themeControls.advancedGroupFor(light), themeControls.advancedGroupFor(dark), `split mode pair: ${lightId} / ${darkId}`);
 }
 assert.equal(colorWithAlpha("#123456", 0.5), "#12345680");
 for (const [input, expectedHex, expectedAlpha] of [

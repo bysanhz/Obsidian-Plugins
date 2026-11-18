@@ -12,16 +12,48 @@ const MANUAL_SETTING_IDS = new Set([
   "resizable-mermaid"
 ]);
 
-const THEME_REGION_IDS = [
-  "workspace",
-  "top",
-  "left",
-  "right",
-  "system",
-  "editor",
-  "media",
-  "plugins",
-  "documents"
+const ADVANCED_THEME_TOPICS = [
+  ["workspace", "工作区与界面", "Workspace and interface"],
+  ["editor", "笔记外观与排版", "Note appearance and typography"],
+  ["media", "白板、图谱与 PDF", "Canvas, graph and PDF"],
+  ["extensions", "插件与文档样式", "Plugins and document styles"]
+];
+
+// Keep original control IDs. These rules only determine which controls share
+// a page and are based on stable catalogue IDs rather than translated labels.
+const ADVANCED_THEME_GROUPS = [
+  ["general", "workspace", "全局配色与布局", "Global colours and layout"],
+  ["workspace-background", "workspace", "工作区背景", "Workspace background"],
+  ["tabs", "workspace", "标题栏与标签页", "Title bar and tabs"],
+  ["navigation", "workspace", "侧栏、文件树与大纲", "Sidebars, file tree and outline"],
+  ["window", "workspace", "设置、菜单与弹窗", "Settings, menus and popovers"],
+  ["note-background", "editor", "笔记背景与纸张纹理", "Note background and patterns"],
+  ["headings", "editor", "页面标题与 H1–H6", "Page title and H1–H6"],
+  ["typography", "editor", "正文、字体与编辑器", "Body text, fonts and editor"],
+  ["lists", "editor", "列表、任务与缩进", "Lists, tasks and indentation"],
+  ["blocks", "editor", "表格、引用、提示框与分隔线", "Tables, quotes, callouts and dividers"],
+  ["marks", "editor", "链接、标签与高亮", "Links, tags and highlights"],
+  ["embeds", "editor", "图片、嵌入与 Mermaid", "Images, embeds and Mermaid"],
+  ["canvas", "media", "白板", "Canvas"],
+  ["graph", "media", "图谱", "Graph"],
+  ["pdf", "media", "PDF 阅读与导出", "PDF reading and export"],
+  ["plugins", "extensions", "第三方插件", "Third-party plugins"],
+  ["documents", "extensions", "文档样式类", "Document style classes"]
+];
+
+const ADVANCED_MODE_PAIRS = [
+  ["background-settings-workplace-theme-light-custom", "background-settings-workplace-theme-dark-custom", "工作区背景图片", "Workspace background images"],
+  ["background-markdown-page-theme-light-custom", "background-markdown-page-theme-dark-custom", "笔记背景图片", "Note background images"],
+  ["background-command-palette-theme-light-custom", "background-command-palette-theme-dark-custom", "命令面板背景图片", "Command palette background images"],
+  ["bg-panel-page-option", "bg-panel-page-option-dark", "文件栏背景类型", "File sidebar background type"],
+  ["background-panel-page-theme-light-custom", "background-panel-page-theme-dark-custom", "文件栏背景图片", "File sidebar background images"],
+  ["ob-pdf-style-selection-light", "ob-pdf-style-selection-dark", "PDF 阅读配色", "PDF reader colours"],
+  ["text-highlight-bg-h-light", "text-highlight-bg-h-dark", "主题高亮色相", "Theme highlight hue"],
+  ["text-highlight-bg-s-light", "text-highlight-bg-s-dark", "主题高亮饱和度", "Theme highlight saturation"],
+  ["text-highlight-bg-l-light", "text-highlight-bg-l-dark", "主题高亮亮度", "Theme highlight lightness"],
+  ["text-highlight-bg-a-light", "text-highlight-bg-a-dark", "主题高亮透明度", "Theme highlight opacity"],
+  ["thino-background-light-custom", "thino-background-dark-custom", "Thino 背景图片", "Thino background images"],
+  ["share-thino-background-light-custom", "share-thino-background-dark-custom", "Thino 分享卡片背景", "Thino share card background"]
 ];
 
 /* Attribution remains in THIRD_PARTY_NOTICES.md. Promotional footer entries
@@ -868,89 +900,125 @@ class ThemeControls {
   beginRegionRender() {
     this.refreshDisplayDefaults();
     this.cachedRegionBuckets = this.buildRegionBuckets();
-    return this.regionStats();
   }
 
 
-  regionFor(item) {
-    const headings = this.scopeHeadings.get(item) || [];
-    const headingText = headings.map((heading) => [
-      heading.id,
-      heading.title,
-      heading.titleZh,
-      heading["title.zh"]
-    ].filter(Boolean).join(" ")).join(" ").toLowerCase();
-    const itemText = [item.id, item.title, item.titleZh, item["title.zh"], item.description]
-      .filter(Boolean)
-      .join(" ")
-      .toLowerCase();
-    const context = `${headingText} ${itemText}`;
-    const rootId = String(headings.find((heading) => Number(heading.level || 2) === 1)?.id || "");
-
-    if (/(outline|backlink|backlinks|right-sidebar|right sidebar|侧边栏大纲|反链)/i.test(context)) return "right";
-    if (rootId === "build-in-style-folder") return "documents";
-    if (rootId === "style-options-for-other-plugins") return "plugins";
-    if (/(pdf-style|export-pdf|ob-pdf|canvas|graph-view|graph view|白板|图谱|pdf)/i.test(context)) return "media";
-    if (/(titlebar|tabs-settings|stack-settings|tab-stack|workspace-tab|标题栏|堆叠标签页|\btabs?\b)/i.test(context)) return "top";
-    if (/(setting-etc|command-palette|prompt-settings|loading-page|loading-|settings-pane|menu-style|设置、菜单|命令面板|提示框|加载页面)/i.test(context)) return "system";
-    if (/(folder-style|folder-color|folder-file|file-browser|file-explorer|file-tree|file-bar|vault-name|font-family-vault|font-size-vault|文件栏|文件夹|左侧边栏|库名)/i.test(context)) return "left";
-    if (/(markdown-page|notebook|header-settings|h[1-6]-settings|inline-title|typography|font-settings|font-size-settings|fancy-hr|list-style|indentation|blockquote|embed-folder|table-styles|cloze-style|link-style|cursor-style|checkbox-style|image caption|icons-style-folder|tag-color|highlight|mermaid|正文|笔记背景|排版|文内标题|页面内标题|分割线|列表|引用框|嵌入|表格|挖空|链接|输入光标|勾选框|图片|标签|高亮)/i.test(context)) return "editor";
-    return "workspace";
-  }
-
-
-  groupHeadingFor(item) {
-    const headings = this.scopeHeadings.get(item) || [];
-    return [...headings]
-      .reverse()
-      .find((heading) => Number(heading.level || 2) >= 3)
-      || [...headings].reverse().find((heading) => Number(heading.level || 2) >= 2)
-      || headings[0]
-      || null;
+  advancedGroupFor(item) {
+    const { id } = item;
+    const path = (this.scopeHeadings.get(item) || []).map(heading => heading.id);
+    const isIn = pattern => path.some(heading => pattern.test(heading));
+    if (path.includes("build-in-style-folder")) return "documents";
+    if (path.includes("style-options-for-other-plugins")) {
+      return /^(?:admonition-|.*callout)/i.test(id) ? "blocks" : "plugins";
+    }
+    if (isIn(/canvas/)) return "canvas";
+    if (isIn(/graph-view/) || /^graph-/.test(id)) return "graph";
+    if (isIn(/pdf/) || /^(?:ob-pdf|pdf-|all-dark-pdf)/.test(id)) return "pdf";
+    if (isIn(/background-settings-workplace/) || /^background-(?:settings-workplace|waves)/.test(id)) return "workspace-background";
+    if (isIn(/command-palette|setting-etc|prompt-settings|loading-page/) || /^(?:background-command-palette|background-popover|loading-|setting-style)/.test(id)) return "window";
+    if (/^(?:toggle-bg-panel|bg-panel-page|background-panel-page)/.test(id) ||
+        isIn(/outline-settings|folder-style|file-browser|file-tree/) ||
+        /(?:outline|backlink|folder-file|folder-and-file|vault-name|font-.*-vault|split-note|font-size-split|line-height-split|letter-space-split)/.test(id)) return "navigation";
+    if (isIn(/titlebar|tabs-settings|stack-settings|tab-stack/) ||
+        /^(?:tab-|stack-tab|titlebar-|background-titlebar|font-size-file-header-title)/.test(id)) return "tabs";
+    if (isIn(/markdown-page|notebook/) || /^(?:bg-markdown|bg-color-notebook|dotted-notebook|grid-notebook|stripe-notebook)/.test(id)) return "note-background";
+    if (isIn(/^(?:header-settings|h[1-6]-settings|inline-title-settings)$/) || /^(?:print-h[1-6]|inline-title|header-[1-6]|h[1-6]-)/.test(id)) return "headings";
+    if (isIn(/list-style|checkbox-style|indentation-line/) || /^(?:list-|checklist-|indentation-guide)/.test(id)) return "lists";
+    if (isIn(/fancy-hr|blockquote|table-styles/) || /^(?:admonition-|.*callout|table-)/.test(id)) return "blocks";
+    // The imported catalogue reuses heading IDs for popovers and settings.
+    if (/(?:popover|setting-pane|settings-pane|settings-panel|menu-style)/.test(id)) return "window";
+    if (isIn(/link-style|tag-color|highlight-bg-color|cloze-style/) || /^(?:text-highlight|bg-color-highlight|color-highlight)/.test(id)) return "marks";
+    if (isIn(/embed-folder|icons-style-folder|mermaid/) || /^(?:image-|mermaid)/.test(id)) return "embeds";
+    if (isIn(/typography|font-settings|font-size-settings|cursor-style/) ||
+        /^(?:text-normal|text-selection|activeline|muted-activeline|font-)/.test(id)) return "typography";
+    return "general";
   }
 
 
   buildRegionBuckets() {
-    const buckets = new Map(THEME_REGION_IDS.map((id) => [id, new Map()]));
-    for (const item of this.controlItems) {
-      const region = this.regionFor(item);
-      const heading = this.groupHeadingFor(item);
-      const key = heading || `__${region}`;
-      const groups = buckets.get(region);
-      if (!groups.has(key)) groups.set(key, { heading, items: [] });
-      groups.get(key).items.push(item);
-    }
-    return buckets;
+    const topics = new Map(ADVANCED_THEME_TOPICS.map(([id]) => [id, []]));
+    const groups = new Map(ADVANCED_THEME_GROUPS.map(([id, topic, zh, en]) => {
+      const group = { id, zh, en, items: [] };
+      topics.get(topic).push(group);
+      return [id, group];
+    }));
+    for (const item of this.controlItems) groups.get(this.advancedGroupFor(item)).items.push(item);
+    return topics;
   }
 
 
   regionStats() {
     const buckets = this.cachedRegionBuckets || this.buildRegionBuckets();
-    return Object.fromEntries(THEME_REGION_IDS.map((id) => [
-      id,
-      [...(buckets.get(id)?.values() || [])].reduce((count, group) => count + group.items.length, 0)
-    ]));
+    return Object.fromEntries([...buckets].map(([id, groups]) =>
+      [id, groups.reduce((count, group) => count + group.items.length, 0)]));
   }
 
 
   renderRegion(containerEl, regionId, excludedIds = new Set()) {
     if (!this.cachedRegionBuckets) this.beginRegionRender();
-    const groups = [...(this.cachedRegionBuckets.get(regionId)?.values() || [])];
-    let count = 0;
-    for (const groupData of groups) {
-      const items = groupData.items.filter(item => !excludedIds.has(item.id));
+    const groups = this.cachedRegionBuckets.get(regionId) || [];
+    for (const group of groups) {
+      const items = group.items.filter(item => !excludedIds.has(item.id));
       if (!items.length) continue;
-      count += items.length;
-      if (!groupData.heading) {
-        for (const item of items) this.renderItem(containerEl, item);
-        continue;
-      }
-      const title = localised(groupData.heading, "title", this.plugin.language) || groupData.heading.id;
-      const parent = containerEl.createDiv({ cls: "bysan-advanced-group", attr: { "data-bysan-section-label": title } });
+      const title = this.plugin.language === "zh" ? group.zh : group.en;
+      const parent = containerEl.createDiv({
+        cls: "bysan-advanced-group",
+        attr: { "data-bysan-section-label": title, "data-bysan-advanced-group": group.id }
+      });
       parent.createEl("h4", { text: title });
-      for (const item of items) this.renderItem(parent, item);
+      this.renderAdvancedGroup(parent, items);
     }
-    return count;
+  }
+
+
+  renderAdvancedGroup(parent, items) {
+    const itemById = new Map(items.map(item => [item.id, item]));
+    const pairById = new Map();
+    for (const pair of ADVANCED_MODE_PAIRS) {
+      if (itemById.has(pair[0]) && itemById.has(pair[1])) {
+        pairById.set(pair[0], pair);
+        pairById.set(pair[1], pair);
+      }
+    }
+    const rendered = new Set();
+    for (const item of items) {
+      if (rendered.has(item.id)) continue;
+      const pair = pairById.get(item.id);
+      if (pair) {
+        const [light, dark, zh, en] = pair;
+        this.renderModePair(parent, itemById.get(light), itemById.get(dark), this.plugin.language === "zh" ? zh : en);
+        rendered.add(light);
+        rendered.add(dark);
+      } else {
+        this.renderItem(parent, item);
+      }
+    }
+  }
+
+
+  renderModePair(parent, light, dark, title) {
+    const setting = new Setting(parent).setName(title);
+    setting.settingEl.addClass("bysan-dual-mode-setting", "bysan-advanced-pair");
+    const details = [light, dark].map(item =>
+      [item.id, item.title, localised(item, "title", this.plugin.language), this.controlDescription(item, "")]
+        .filter(Boolean).join(" "));
+    setting.settingEl.dataset.bysanSearch = [title, ...details].join(" ").toLowerCase();
+    for (const [mode, item] of [["light", light], ["dark", dark]]) {
+      const label = this.plugin.t(mode === "light" ? "theme.light" : "theme.dark");
+      const group = setting.controlEl.createDiv({
+        cls: "bysan-advanced-mode-card",
+        attr: { "data-bysan-setting-id": item.id }
+      });
+      group.createSpan({ cls: `bysan-mode-label bysan-mode-label-${mode}`, text: label });
+      const previous = new Set(setting.controlEl.children);
+      this.renderControl(setting, item, `${title} · ${label}`);
+      for (const child of [...setting.controlEl.children]) {
+        if (previous.has(child)) continue;
+        if (child.matches("input, select")) child.setAttribute("aria-label", `${title} · ${label}`);
+        group.appendChild(child);
+      }
+      group.title = this.controlDescription(item, localised(item, "description", this.plugin.language));
+    }
   }
 
 
@@ -1044,10 +1112,16 @@ class ThemeControls {
 
     if (item.type === "info-text") return;
     const controlDescription = this.controlDescription(item, description);
-    if (!presentation?.compact) setting.setDesc(presentation?.scope ?? controlDescription);
+    if (!presentation?.compact) {
+      const userDescription = /^--[\w-]+$/.test(description.trim()) ? "" : description;
+      setting.setDesc(presentation?.scope ?? userDescription);
+    }
     setting.infoEl.setAttribute("title", controlDescription);
     setting.settingEl.dataset.bysanSearch = `${title} ${item.title || ""} ${controlDescription} ${item.id}`.toLowerCase();
+    this.renderControl(setting, item, title, presentation);
+  }
 
+  renderControl(setting, item, title, presentation = null) {
     if (item.type === "class-toggle") {
       setting.addToggle((toggle) => toggle
         .setValue(Boolean(this.valueFor(item)))
@@ -1258,4 +1332,4 @@ class ThemeControls {
 }
 
 
-module.exports = { ThemeControls, addValueStepper };
+module.exports = { ThemeControls, addValueStepper, ADVANCED_THEME_TOPICS };

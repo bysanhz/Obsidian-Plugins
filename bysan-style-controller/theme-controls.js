@@ -954,24 +954,23 @@ class ThemeControls {
   }
 
 
-  renderRegion(containerEl, regionId, excludedIds = new Set()) {
+  renderGroup(containerEl, groupId, excludedIds, withTitle) {
     if (!this.cachedRegionBuckets) this.beginRegionRender();
-    const groups = this.cachedRegionBuckets.get(regionId) || [];
-    for (const group of groups) {
-      const items = group.items.filter(item => !excludedIds.has(item.id));
-      if (!items.length) continue;
-      const title = this.plugin.language === "zh" ? group.zh : group.en;
-      const parent = containerEl.createDiv({
-        cls: "bysan-advanced-group",
-        attr: { "data-bysan-section-label": title, "data-bysan-advanced-group": group.id }
-      });
-      parent.createEl("h4", { text: title });
-      this.renderAdvancedGroup(parent, items);
-    }
+    const group = [...this.cachedRegionBuckets.values()].flat().find(entry => entry.id === groupId);
+    if (!group) return;
+    const items = group.items.filter(item => !excludedIds.has(item.id));
+    if (!items.length) return;
+    const title = this.plugin.language === "zh" ? group.zh : group.en;
+    const wrapper = containerEl.createDiv({
+      cls: "bysan-theme-group-panel",
+      attr: { "data-bysan-group": groupId }
+    });
+    if (withTitle) wrapper.createEl("h4", { text: title });
+    this.renderGroupedItems(wrapper.createDiv({ cls: "bysan-theme-grid" }), items);
   }
 
 
-  renderAdvancedGroup(parent, items) {
+  renderGroupedItems(parent, items) {
     const itemById = new Map(items.map(item => [item.id, item]));
     const pairById = new Map();
     for (const pair of ADVANCED_MODE_PAIRS) {
@@ -998,7 +997,7 @@ class ThemeControls {
 
   renderModePair(parent, light, dark, title) {
     const setting = new Setting(parent).setName(title);
-    setting.settingEl.addClass("bysan-dual-mode-setting", "bysan-advanced-pair");
+    setting.settingEl.addClass("bysan-dual-mode-setting", "bysan-theme-pair");
     const details = [light, dark].map(item =>
       [item.id, item.title, localised(item, "title", this.plugin.language), this.controlDescription(item, "")]
         .filter(Boolean).join(" "));
@@ -1006,7 +1005,7 @@ class ThemeControls {
     for (const [mode, item] of [["light", light], ["dark", dark]]) {
       const label = this.plugin.t(mode === "light" ? "theme.light" : "theme.dark");
       const group = setting.controlEl.createDiv({
-        cls: "bysan-advanced-mode-card",
+        cls: "bysan-theme-mode-card",
         attr: { "data-bysan-setting-id": item.id }
       });
       group.createSpan({ cls: `bysan-mode-label bysan-mode-label-${mode}`, text: label });

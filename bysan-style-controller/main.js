@@ -1,6 +1,6 @@
 /**
  * Bysan Style Controller
- * Version: 0.17.5
+ * Version: 0.17.6
  *
  * Owns visual presentation and provides switchable, integrated Bysan modules.
  */
@@ -21,7 +21,7 @@ const {
 /* Obsidian evaluates main.js without a plugin-local CommonJS base path. Resolve
  * the helper through the active vault so the plugin remains portable. */
 globalThis.__bysanObsidianSetting = Setting;
-const { ThemeControls, addValueStepper, ADVANCED_THEME_TOPICS } = require(app.vault.adapter.getFullPath(
+const { ThemeControls, addValueStepper } = require(app.vault.adapter.getFullPath(
   ".obsidian/plugins/bysan-style-controller/theme-controls.js"
 ));
 const { resolveLanguage, translate } = require(app.vault.adapter.getFullPath(
@@ -1464,7 +1464,6 @@ class BysanStyleSettingTab extends PluginSettingTab {
   display() {
     const { containerEl } = this;
     const zh = this.plugin.language === "zh";
-    const folds = new Map([...containerEl.querySelectorAll("details[id]")].map(el => [el.id, el.open]));
     containerEl.empty();
     containerEl.addClass("bysan-style-settings");
 
@@ -1477,10 +1476,26 @@ class BysanStyleSettingTab extends PluginSettingTab {
     this.renderSectionNavigation(containerEl);
     const areas = containerEl.createDiv({ cls: "bysan-major-areas" });
 
-    const content = this.createMajorArea(areas, "content", zh ? "笔记外观" : "Note appearance");
+    const content = this.createMajorArea(areas, "content", zh ? "笔记样式" : "Notes");
     this.renderEditorRegionSettings(content);
 
-    const tools = this.createMajorArea(areas, "tools", zh ? "写作工具" : "Writing tools");
+    const styles = this.createMajorArea(areas, "styles", zh ? "界面样式" : "Interface");
+    this.createSettingsSection(styles, "interface-colors", zh ? "界面配色与布局" : "Interface colours and layout", body => {
+      this.renderInterfaceColors(body);
+      this.renderThemeGroups(body, ["general"]);
+    });
+    this.createSettingsSection(styles, "workspace-background", zh ? "工作区背景" : "Workspace background", body => {
+      this.renderWorkspaceSettings(body);
+      this.renderThemeGroups(body, ["workspace-background"], false);
+    });
+    this.createSettingsSection(styles, "workspace-navigation", zh ? "标签页、侧栏与大纲" : "Tabs, sidebars and outline",
+      body => this.renderThemeGroups(body, ["tabs", "navigation"]));
+    this.createSettingsSection(styles, "workspace-windows", zh ? "窗口、菜单与弹窗" : "Windows, menus and popovers",
+      body => this.renderThemeGroups(body, ["window"], false));
+    this.createSettingsSection(styles, "canvas-graph", zh ? "白板与图谱" : "Canvas and graph",
+      body => this.renderThemeGroups(body, ["canvas", "graph"]));
+
+    const tools = this.createMajorArea(areas, "tools", zh ? "工具与预设" : "Tools and presets");
     this.createSettingsSection(tools, "modules", zh ? "功能开关" : "Feature switches", body => {
       this.renderIntegratedModuleSettings(body);
     });
@@ -1500,15 +1515,10 @@ class BysanStyleSettingTab extends PluginSettingTab {
             if (view?.editor) this.app.setting.close();
             this.plugin.openPdfPreview(view);
           }));
+      this.renderThemeGroups(body, ["pdf"], false);
     });
-
-    const styles = this.createMajorArea(areas, "styles", zh ? "风格与高级" : "Styles and advanced");
-    this.createSettingsSection(styles, "interface-colors", zh ? "常用界面配色" : "Common interface colours",
-      body => this.renderInterfaceColors(body));
-    this.createSettingsSection(styles, "preset", this.plugin.t("section.preset"), (body) => {
+    this.createSettingsSection(tools, "preset", zh ? "风格预设与偏好" : "Presets and preferences", (body) => {
       this.renderStylePresetSettings(body);
-    });
-    this.createSettingsSection(styles, "preferences", zh ? "偏好设置" : "Preferences", (body) => {
       this.renderLanguageSetting(body);
       const resetSetting = new Setting(body)
         .setName(this.plugin.t("section.reset"))
@@ -1522,68 +1532,14 @@ class BysanStyleSettingTab extends PluginSettingTab {
           }));
       resetSetting.settingEl.id = "bysan-reset-action";
     });
-    this.advancedArea = this.createSubarea(styles, "advanced", zh ? "高级主题设置" : "Advanced theme settings", () => {});
-    this.advancedArea.addEventListener("toggle", () => {
-      if (this.advancedArea.open) this.renderAdvancedSettings();
-    });
-
-    if (folds.get(this.advancedArea.id)) this.renderAdvancedSettings();
-    for (const details of containerEl.querySelectorAll("details[id]")) {
-      if (folds.has(details.id)) details.open = folds.get(details.id);
-    }
+    this.createSettingsSection(tools, "extensions", zh ? "插件与文档样式" : "Plugins and document styles",
+      body => this.renderThemeGroups(body, ["plugins", "documents"]));
     this.setActiveMajorArea(containerEl, this.activeMajorArea || "content", false);
   }
 
 
-  renderAdvancedSettings() {
-    const body = this.advancedArea?.querySelector(":scope > .bysan-subarea-body");
-    if (!body || body.childElementCount) return;
-    const zh = this.plugin.language === "zh";
-    const navigation = body.createDiv({ cls: "bysan-advanced-navigation" });
-    new Setting(navigation).setName(zh ? "主题区域" : "Theme area").addDropdown(dropdown => {
-      this.advancedRegionPicker = dropdown;
-      for (const [topic, cn, en] of ADVANCED_THEME_TOPICS) dropdown.addOption(topic, zh ? cn : en);
-      dropdown.onChange(topic => this.selectAdvancedRegion(topic));
-    });
-    new Setting(navigation).setName(zh ? "功能组" : "Feature group").addDropdown(dropdown => {
-      this.advancedGroupPicker = dropdown;
-      dropdown.onChange(group => this.selectAdvancedGroup(group));
-    });
-    for (const [topic, cn, en] of ADVANCED_THEME_TOPICS) {
-      const section = this.createSettingsSection(body, `advanced-${topic}`, zh ? cn : en, (group) => {
-        this.plugin.themeControls.renderRegion(group, topic, COMMON_THEME_IDS);
-        if (topic === "workspace") {
-          const background = group.querySelector('[data-bysan-advanced-group="workspace-background"]');
-          if (background) this.renderWorkspaceSettings(background);
-        }
-      });
-      section.dataset.bysanAdvancedRegion = topic;
-    }
-    this.selectAdvancedRegion(this.activeAdvancedRegion || "workspace", this.activeAdvancedGroup);
-  }
-
-  selectAdvancedRegion(region, group = "") {
-    const zh = this.plugin.language === "zh";
-    this.activeAdvancedRegion = region;
-    this.advancedRegionPicker.setValue(region);
-    const sections = [...this.advancedArea.querySelectorAll("[data-bysan-advanced-region]")];
-    for (const section of sections) section.hidden = section.dataset.bysanAdvancedRegion !== region;
-    const active = sections.find(section => !section.hidden);
-    this.advancedGroupPicker.selectEl.replaceChildren();
-    this.advancedGroupPicker.addOption("", zh ? "全部功能组" : "All feature groups");
-    for (const item of active.querySelectorAll("[data-bysan-advanced-group]")) {
-      this.advancedGroupPicker.addOption(item.dataset.bysanAdvancedGroup, item.dataset.bysanSectionLabel);
-    }
-    this.selectAdvancedGroup(group || "");
-  }
-
-  selectAdvancedGroup(group) {
-    this.activeAdvancedGroup = group;
-    this.advancedGroupPicker.setValue(group);
-    const section = this.advancedArea.querySelector("[data-bysan-advanced-region]:not([hidden])");
-    for (const item of section.querySelectorAll("[data-bysan-advanced-group]")) {
-      item.hidden = Boolean(group) && item.dataset.bysanAdvancedGroup !== group;
-    }
+  renderThemeGroups(containerEl, ids, withTitle = true) {
+    for (const id of ids) this.plugin.themeControls.renderGroup(containerEl, id, COMMON_THEME_IDS, withTitle);
   }
 
 
@@ -1612,29 +1568,6 @@ class BysanStyleSettingTab extends PluginSettingTab {
   }
 
 
-  createSubarea(containerEl, id, title, render, open = false) {
-    const details = containerEl.createEl("details", {
-      cls: "bysan-subarea",
-      attr: { "data-bysan-subarea": id }
-    });
-    details.open = open;
-    const summary = details.createEl("summary", { cls: "bysan-subarea-summary" });
-    summary.createSpan({ cls: "bysan-subarea-chevron", text: "›" });
-    summary.createSpan({ cls: "bysan-subarea-title", text: title });
-    const body = details.createDiv({ cls: "bysan-subarea-body" });
-    render(body);
-    const internalHeading = body.querySelector(":scope > .setting-item-heading:first-child");
-    if (internalHeading) {
-      details.id = internalHeading.id || `bysan-section-${id}`;
-      internalHeading.removeAttribute("id");
-      internalHeading.addClass("bysan-subarea-internal-heading");
-    } else {
-      details.id = `bysan-section-${id}`;
-    }
-    return details;
-  }
-
-
   setActiveMajorArea(containerEl, id, scroll = true) {
     const available = [...containerEl.querySelectorAll("[data-bysan-major-area]")];
     const selected = available.some((area) => area.dataset.bysanMajorArea === id)
@@ -1651,10 +1584,17 @@ class BysanStyleSettingTab extends PluginSettingTab {
       button.classList.toggle("is-active", active);
       button.setAttribute("aria-selected", String(active));
     }
-    const shortcuts = containerEl.querySelector(".bysan-section-shortcuts");
-    if (shortcuts) shortcuts.hidden = selected !== "content";
+    const jump = containerEl.querySelector(".bysan-settings-jump");
+    const zh = this.plugin.language === "zh";
+    if (jump) {
+      jump.empty();
+      jump.createEl("option", { text: zh ? "跳到分组" : "Jump to section", attr: { value: "" } });
+      for (const section of available.find(area => !area.hidden).querySelectorAll(":scope > .bysan-settings-section")) {
+        jump.createEl("option", { text: section.dataset.bysanSectionLabel, attr: { value: section.id } });
+      }
+    }
     if (scroll) {
-      containerEl.querySelector(".bysan-settings-nav")?.scrollIntoView({ behavior: "auto", block: "start" });
+      containerEl.scrollTop = 0;
     }
   }
 
@@ -1678,16 +1618,15 @@ class BysanStyleSettingTab extends PluginSettingTab {
 
   renderSectionNavigation(containerEl) {
     const areas = [
-      ["content", this.plugin.language === "zh" ? "笔记外观" : "Note appearance"],
-      ["tools", this.plugin.language === "zh" ? "写作工具" : "Writing tools"],
-      ["styles", this.plugin.language === "zh" ? "风格与高级" : "Styles and advanced"]
+      ["content", this.plugin.language === "zh" ? "笔记样式" : "Notes"],
+      ["styles", this.plugin.language === "zh" ? "界面样式" : "Interface"],
+      ["tools", this.plugin.language === "zh" ? "工具与预设" : "Tools and presets"]
     ];
     const navigation = containerEl.createEl("nav", {
       cls: "bysan-settings-nav",
       attr: { "aria-label": this.plugin.t("nav.title") }
     });
     const header = navigation.createDiv({ cls: "bysan-settings-nav-header" });
-    header.createDiv({ cls: "bysan-settings-nav-title", text: this.plugin.t("nav.title") });
     const search = header.createEl("input", {
       cls: "bysan-settings-nav-search",
       attr: {
@@ -1695,6 +1634,14 @@ class BysanStyleSettingTab extends PluginSettingTab {
         placeholder: this.plugin.t("theme.searchPlaceholder"),
         "aria-label": this.plugin.t("theme.search")
       }
+    });
+    const jump = header.createEl("select", {
+      cls: "bysan-settings-jump",
+      attr: { "aria-label": this.plugin.language === "zh" ? "跳到分组" : "Jump to section" }
+    });
+    jump.addEventListener("change", () => {
+      if (jump.value) this.jumpToSection(containerEl, jump.value);
+      jump.value = "";
     });
     const searchResults = navigation.createDiv({
       cls: "bysan-settings-search-results is-hidden"
@@ -1713,14 +1660,6 @@ class BysanStyleSettingTab extends PluginSettingTab {
       if (area) this.setActiveMajorArea(containerEl, area.dataset.bysanMajorArea, false);
       const headingMode = row.closest("[data-bysan-heading-mode]");
       if (headingMode) this.selectHeadingColorMode(headingMode.dataset.bysanHeadingMode);
-      const region = row.closest("[data-bysan-advanced-region]");
-      const group = row.closest("[data-bysan-advanced-group]");
-      if (region) this.selectAdvancedRegion(region.dataset.bysanAdvancedRegion, group?.dataset.bysanAdvancedGroup);
-      let parent = row.parentElement;
-      while (parent) {
-        if (parent.matches?.("details")) parent.open = true;
-        parent = parent.parentElement;
-      }
       window.requestAnimationFrame(() => {
         row.scrollIntoView({ behavior: "auto", block: "center" });
         row.classList.add("bysan-search-target");
@@ -1734,7 +1673,6 @@ class BysanStyleSettingTab extends PluginSettingTab {
         clearSearch();
         return;
       }
-      this.renderAdvancedSettings();
       currentMatches = this.plugin.themeControls.filterRows(containerEl, query);
 
       searchResults.removeClass("is-hidden");
@@ -1759,11 +1697,6 @@ class BysanStyleSettingTab extends PluginSettingTab {
         button.createSpan({ cls: "bysan-settings-search-result-name", text: name });
         const path = [];
         for (let parent = row.parentElement; parent; parent = parent.parentElement) {
-          if (parent.matches("details")) {
-            const summary = parent.querySelector(":scope > summary");
-            const label = summary?.querySelector(".bysan-subarea-title");
-            if (summary) path.unshift((label || summary).textContent.trim());
-          }
           if (parent.dataset.bysanSectionLabel) path.unshift(parent.dataset.bysanSectionLabel);
           if (parent.hasAttribute("data-bysan-major-area")) {
             path.unshift(parent.getAttribute("aria-label"));
@@ -1805,20 +1738,6 @@ class BysanStyleSettingTab extends PluginSettingTab {
         attr: { type: "button", role: "tab", "data-area": id }
       });
       button.addEventListener("click", () => this.setActiveMajorArea(containerEl, id));
-    }
-    const zh = this.plugin.language === "zh";
-    const shortcuts = navigation.createDiv({
-      cls: "bysan-section-shortcuts",
-      attr: { "aria-label": zh ? "笔记外观分组" : "Note appearance sections" }
-    });
-    for (const [id, cn, en] of [
-      ["note-colors", "背景与标记", "Background and marks"], ["headings", "标题", "Headings"],
-      ["body-text", "正文", "Body"], ["text-details", "列表", "Lists"],
-      ["code", "代码", "Code"], ["inline-code", "行内代码", "Inline code"],
-      ["tables", "表格", "Tables"], ["quotes", "引用", "Quotes"], ["math", "公式", "Math"]
-    ]) {
-      const shortcut = shortcuts.createEl("button", { text: zh ? cn : en, attr: { type: "button" } });
-      shortcut.addEventListener("click", () => this.jumpToSection(containerEl, `bysan-section-${id}`));
     }
   }
 
@@ -2052,15 +1971,17 @@ class BysanStyleSettingTab extends PluginSettingTab {
 
   renderEditorRegionSettings(containerEl) {
     const zh = this.plugin.language === "zh";
-    this.createSettingsSection(containerEl, "note-colors", zh ? "笔记背景与标记" : "Note background and marks",
-      body => this.renderNoteBackgroundColors(body));
-    this.createSettingsSection(containerEl, "page-title", zh ? "页面标题" : "Page title", body => {
-      const controls = this.createAppearanceLayout(body, sample => {
-        sample.createDiv({ cls: "inline-title", text: zh ? "笔记名称" : "Note name" });
-      });
-      this.renderNoteThemeControls(controls, PAGE_TITLE_CONTROLS);
+    this.createSettingsSection(containerEl, "note-colors", zh ? "背景、颜色与标记" : "Background, colours and marks", body => {
+      this.renderNoteBackgroundColors(body);
+      this.renderThemeGroups(body, ["note-background", "marks"]);
     });
-    this.createSettingsSection(containerEl, "headings", zh ? "文内标题" : "Note headings", (body) => {
+    this.createSettingsSection(containerEl, "headings", zh ? "页面标题与文内标题" : "Page title and headings", (body) => {
+      this.createFeatureGroup(body, zh ? "页面标题" : "Page title", "", group => {
+        const controls = this.createAppearanceLayout(group, sample => {
+          sample.createDiv({ cls: "inline-title", text: zh ? "笔记名称" : "Note name" });
+        });
+        this.renderNoteThemeControls(controls, PAGE_TITLE_CONTROLS);
+      });
       new Setting(body)
         .setName(zh ? "调整标题的" : "Heading controls")
         .addDropdown(dropdown => {
@@ -2086,8 +2007,9 @@ class BysanStyleSettingTab extends PluginSettingTab {
         }
       });
       this.selectHeadingColorMode(this.headingColorMode || "text");
+      this.renderThemeGroups(body, ["headings"], false);
     });
-    this.createSettingsSection(containerEl, "body-text", zh ? "正文" : "Body text", (body) => {
+    this.createSettingsSection(containerEl, "body-text", zh ? "正文、字体与公式" : "Text, fonts and math", (body) => {
       const controls = this.createAppearanceLayout(body, sample => {
         const paragraph = sample.createEl("p", { text: zh
           ? "这一段展示正文字体、颜色和行高。下方第二行可用于比较行距。"
@@ -2100,36 +2022,39 @@ class BysanStyleSettingTab extends PluginSettingTab {
         "noteFontSize", 8, 48, 1, "px",
         () => parseFloat(getComputedStyle(document.body).getPropertyValue("--font-text-size")) || 16);
       this.renderNoteThemeControls(controls, NOTE_BODY_CONTROLS);
+      this.createFeatureGroup(body, zh ? "块公式" : "Display math", "", group => this.renderMathSettings(group));
+      this.renderThemeGroups(body, ["typography"], false);
     });
     this.createSettingsSection(containerEl, "text-details", zh ? "列表、粗体与分隔线" : "Lists, bold text and dividers", (body) => {
       this.renderTextDetailSettings(body);
+      this.renderThemeGroups(body, ["lists"], false);
     });
-    this.createSettingsSection(containerEl, "code", zh ? "代码块" : "Code blocks", (body) => {
-      this.renderCodeSettings(body);
+    this.createSettingsSection(containerEl, "code", zh ? "代码" : "Code", (body) => {
+      this.createFeatureGroup(body, zh ? "代码块" : "Code block", "", group => this.renderCodeSettings(group));
+      this.createFeatureGroup(body, zh ? "行内代码" : "Inline code", "", group => this.renderInlineCodeSettings(group));
     });
-    this.createSettingsSection(containerEl, "inline-code", zh ? "行内代码" : "Inline code", (body) => {
-      this.renderInlineCodeSettings(body);
+    this.createSettingsSection(containerEl, "blocks", zh ? "表格、引用与提示框" : "Tables, quotes and callouts", (body) => {
+      this.createFeatureGroup(body, zh ? "表格" : "Tables", "", group => this.renderTableSettings(group));
+      this.createFeatureGroup(body, zh ? "引用块" : "Blockquotes", "", group => this.renderQuoteSettings(group));
+      this.renderThemeGroups(body, ["blocks"], false);
     });
-    this.createSettingsSection(containerEl, "tables", zh ? "表格" : "Tables", (body) => {
-      this.renderTableSettings(body);
+    this.createSettingsSection(containerEl, "embeds", zh ? "图片、嵌入与 Mermaid" : "Images, embeds and Mermaid",
+      body => this.renderThemeGroups(body, ["embeds"], false));
+  }
+
+  renderMathSettings(containerEl) {
+    const controls = this.createAppearanceLayout(containerEl, sample => {
+      const math = sample.createDiv({ cls: "math math-block" });
+      const fallback = math.createSpan({ cls: "bysan-math-sample-fallback", text: "E = mc²" });
+      void loadMathJax().then(async () => {
+        if (!math.isConnected) return;
+        const equation = renderMath("E = mc^2", true);
+        math.appendChild(equation);
+        await finishRenderMath();
+        fallback.remove();
+      }).catch(error => console.warn("[Bysan Style Controller] Math preview unavailable", error));
     });
-    this.createSettingsSection(containerEl, "quotes", zh ? "引用块" : "Blockquotes", (body) => {
-      this.renderQuoteSettings(body);
-    });
-    this.createSettingsSection(containerEl, "math", zh ? "块公式" : "Display math", (body) => {
-      const controls = this.createAppearanceLayout(body, sample => {
-        const math = sample.createDiv({ cls: "math math-block" });
-        const fallback = math.createSpan({ cls: "bysan-math-sample-fallback", text: "E = mc²" });
-        void loadMathJax().then(async () => {
-          if (!math.isConnected) return;
-          const equation = renderMath("E = mc^2", true);
-          math.appendChild(equation);
-          await finishRenderMath();
-          fallback.remove();
-        }).catch(error => console.warn("[Bysan Style Controller] Math preview unavailable", error));
-      });
-      this.renderNoteThemeControls(controls, [["font-size-latex", "块公式字号", "Display math font size"]]);
-    });
+    this.renderNoteThemeControls(controls, [["font-size-latex", "块公式字号", "Display math font size"]]);
   }
 
   selectHeadingColorMode(mode) {

@@ -174,8 +174,8 @@ for (const method of [
   "renderCodeSettings", "renderEditorRegionSettings", "renderInlineCodeSettings",
   "renderTableSettings", "renderQuoteSettings", "renderTextDetailSettings", "openPdfPreview",
   "renderIntegratedModuleSettings", "syncIntegratedModules", "addNumberSetting",
-  "createMajorArea", "createSubarea", "createSettingsSection", "createFeatureGroup",
-  "setActiveMajorArea", "renderGeometryControls"
+  "createMajorArea", "createSettingsSection", "createFeatureGroup",
+  "setActiveMajorArea", "renderGeometryControls", "renderThemeGroups"
 ]) {
   assert(mainSource.includes(`${method}(`), `missing plugin feature: ${method}`);
 }
@@ -183,10 +183,18 @@ for (const method of [
 assert(!mainSource.includes('createSubarea(content, "palette"'), "legacy standalone dual-mode palette area still rendered");
 assert(!mainSource.includes('createMajorArea(\n      areas,\n      "theme"'), "legacy full-theme major area still rendered");
 assert(mainSource.includes('this.renderEditorRegionSettings(content)'), "note appearance is not rendered in the content tab");
-for (const objectId of ["body-text", "headings", "code", "inline-code", "tables", "quotes"]) {
+for (const objectId of ["body-text", "headings", "code", "blocks", "text-details", "embeds"]) {
   assert(mainSource.includes(`createSettingsSection(containerEl, "${objectId}"`), `missing editor object group: ${objectId}`);
 }
-assert(mainSource.includes('createSubarea(styles, "advanced"'), "missing advanced theme settings");
+assert(!mainSource.includes('createSubarea('), "legacy nested settings navigation is still rendered");
+const mountedGroups = [...mainSource.matchAll(/this\.renderThemeGroups\(body, \[([^\]]*)\]/g)]
+  .flatMap(match => [...match[1].matchAll(/"([^"]+)"/g)].map(entry => entry[1]));
+const expectedGroups = [
+  "general", "workspace-background", "tabs", "navigation", "window", "canvas", "graph",
+  "pdf", "plugins", "documents", "note-background", "marks", "headings", "typography",
+  "lists", "blocks", "embeds"
+];
+assert.deepStrictEqual(mountedGroups.sort(), expectedGroups.sort(), "every theme group must be mounted exactly once");
 assert(mainSource.includes('createSettingsSection(tools, "blank-line-cleanup"'), "blank-line cleanup must be directly available in writing tools");
 
 const usedTranslations = new Set();

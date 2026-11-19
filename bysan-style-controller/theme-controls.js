@@ -533,7 +533,10 @@ const CONTROL_COPY = {
   "list-ul-marker-color": { "title.zh": "普通列表符号颜色", title: "Standard bullet colour" },
   "list-ul-marker-color-1": { "title.zh": "自定义一级列表符号颜色", title: "Custom level-one bullet colour" },
   "bt-colorful-indentation-line-options": { "title.zh": "阅读视图层级线样式", title: "Reading-view indent guide style" },
-  "cloze-decoration-3": { "title.zh": "挖空样式三下划线", title: "Cloze style three underline" },
+  "head-tag-style": {
+    "title.zh": "标题内的标签上标显示", title: "Superscript tags in headings",
+    "description.zh": "见标签预览中的「标题 #上标」。", description: "See “Heading #superscript” in the tag preview."
+  },
   "font-family-vault": { "title.zh": "库名称字体", title: "Vault name font" },
   "font-size-vault-name": { "title.zh": "库名称字号", title: "Vault name font size" },
   "hr-color-numbers-color": { "title.zh": "编号分隔线数字颜色", title: "Numbered-divider digit colour" },
@@ -1478,9 +1481,10 @@ class ThemeControls {
       return;
     }
     if (item.type === "class-toggle") {
+      const invert = value => Boolean(value) !== Boolean(presentation?.invertToggle);
       setting.addToggle((toggle) => toggle
-        .setValue(Boolean(this.valueFor(item)))
-        .onChange((value) => this.plugin.updateThemeSetting(item.id, value)));
+        .setValue(invert(this.valueFor(item)))
+        .onChange((value) => this.plugin.updateThemeSetting(item.id, invert(value))));
       return;
     }
 

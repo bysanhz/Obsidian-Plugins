@@ -1,6 +1,6 @@
 /**
  * Bysan Style Controller
- * Version: 0.18.6
+ * Version: 0.18.7
  *
  * Owns visual presentation and provides switchable, integrated Bysan modules.
  */
@@ -97,8 +97,46 @@ const NOTE_MARK_CONTROLS = [
   ["bysan-mark-bg", "Markdown 高亮背景", "Markdown highlight background", "用于 ==文字==。", "Used for ==text==."],
   ["text-highlight", "Markdown 高亮文字颜色", "Markdown highlight text colour"],
   ["internal-link-color", "笔记内链颜色", "Internal link colour"],
-  ["external-link-color", "外部链接颜色", "External link colour"]
+  ["external-link-color", "外部链接颜色", "External link colour"],
+  ["link-underline-internal", "显示内链下划线", "Underline internal links"],
+  ["link-underline-external", "显示外链下划线", "Underline external links", "", "", { invertToggle: true }],
+  ["link-underline-unresolved", "显示未创建链接下划线", "Underline uncreated links", "", "", { invertToggle: true }]
 ];
+const CLOZE_SWITCH = ["remove-cloze-style", "启用答案遮挡", "Hide answers", "", "", { invertToggle: true }];
+const CLOZE_VARIANTS = [
+  { name: ["色块遮挡", "Colour block"], reveal: ["悬停查看答案", "Hover to reveal"], syntax: "==~~答案~~==",
+    italic: false, highlight: true, controls: [
+      ["cloze-bg-color", "遮挡色块", "Cover colour"],
+      ["cloze-decoration", "色块下划线线型", "Cover underline style"],
+      ["cloze-decoration-color", "色块下划线颜色", "Cover underline colour"]
+    ] },
+  { name: ["按住显示", "Hold to reveal"], reveal: ["按住鼠标显示答案", "Hold the mouse button to reveal"], syntax: "*==~~答案~~==*",
+    italic: true, highlight: true, controls: [
+      ["cloze-decoration-2", "按住显示的下划线线型", "Hold-to-reveal underline style"],
+      ["cloze-decoration-color-2", "按住显示的下划线颜色", "Hold-to-reveal underline colour"]
+    ] },
+  { name: ["留空遮挡", "Blank answer"], reveal: ["悬停查看答案", "Hover to reveal"], syntax: "*~~答案~~*",
+    italic: true, highlight: false, controls: [
+      ["cloze-decoration-3", "留空遮挡的下划线线型", "Blank-answer underline style"],
+      ["cloze-decoration-color-3", "留空遮挡的下划线颜色", "Blank-answer underline colour"]
+    ] }
+];
+const COLOUR_HIGHLIGHT_SWITCH = ["remove-colorful-highlight-bg", "启用彩色高亮变体", "Enable coloured highlight variants",
+  "开启后，加了斜体或粗体的高亮使用各自的配色。", "Emphasised highlights use their own palettes when enabled.",
+  { invertToggle: true }];
+const COLOUR_HIGHLIGHT_VARIANTS = [
+  { name: ["斜体高亮", "Italic highlight"], syntax: "*==文字==*", tags: ["em"] },
+  { name: ["粗体高亮", "Bold highlight"], syntax: "**==文字==**", tags: ["strong"] },
+  { name: ["粗斜体高亮", "Bold italic highlight"], syntax: "***==文字==***", tags: ["strong", "em"] }
+].map((variant, index) => {
+  const number = index + 1;
+  const [zh, en] = variant.name;
+  return { ...variant, controls: [
+    [`bg-color-highlight-${number}`, `${zh}背景`, `${en} background`],
+    [`color-highlight-${number}`, `${zh}文字颜色`, `${en} text colour`],
+    [`font-weight-highlight-${number}`, `${zh}字重`, `${en} font weight`]
+  ] };
+});
 const CALLOUT_CONTROLS = [
   ["admonition-bg-color", "提示框内容背景", "Callout body background"],
   ["admonition-bg-color-same", "提示框内容沿用标题配色", "Use callout title colours for the body"]
@@ -168,6 +206,8 @@ const COMMON_THEME_IDS = new Set(
   [...NOTE_BODY_CONTROLS, ...NOTE_BACKGROUND_CONTROLS, ...EDITOR_MARK_CONTROLS, ...NOTE_MARK_CONTROLS,
     ...CALLOUT_CONTROLS, ...INTERFACE_COLOR_CONTROLS, ...NAVIGATION_COLOR_CONTROLS, ...TAB_COLOR_CONTROLS, ...PAGE_TITLE_CONTROLS,
     ...NOTE_HEADING_CONTROLS.flat(), ...HEADING_BACKGROUND_CONTROLS.flat(), ...HEADING_NUMBER_CONTROLS, ...REVIEW_PANEL_CONTROLS, ["font-size-latex"],
+    CLOZE_SWITCH, ...CLOZE_VARIANTS.flatMap(variant => variant.controls),
+    COLOUR_HIGHLIGHT_SWITCH, ...COLOUR_HIGHLIGHT_VARIANTS.flatMap(variant => variant.controls),
     ["bysan-inline-code-border"], ["bysan-code-block-font"], ["bysan-inline-code-font"]].map(([id]) => id)
 );
 
@@ -1636,7 +1676,36 @@ class BysanStyleSettingTab extends PluginSettingTab {
     });
     this.createSettingsSection(tools, "extensions", zh ? "插件与文档样式" : "Plugins and document styles",
       body => this.renderThemeGroups(body, ["plugins", "documents"]));
+    this.balanceControlGrids(containerEl);
     this.setActiveMajorArea(containerEl, this.activeMajorArea || "content", false);
+  }
+
+  balanceControlGrids(containerEl) {
+    for (const grid of containerEl.querySelectorAll(".bysan-theme-grid, .bysan-feature-group-body:has(> .setting-item)")) {
+      const themeGrid = grid.classList.contains("bysan-theme-grid");
+      const rows = [...grid.children].map(row => {
+        const description = row.querySelector(":scope > .setting-item-info .setting-item-description")?.textContent || "";
+        const textLength = [...description].reduce((length, char) => length + (/[^\u0000-\u00ff]/.test(char) ? 2 : 1), 0);
+        const wide = !row.matches(".setting-item") || textLength > 80 ||
+          (!themeGrid && row.matches(".bysan-dual-mode-setting, :has(.setting-item-control button + button)"));
+        row.classList.toggle("bysan-grid-wide", wide);
+        const mediumWide = themeGrid && row.matches(".bysan-color-row:has(.slider), .bysan-theme-pair");
+        return {row, wide, mediumWide};
+      });
+      // Complete each short run before a wide row without reordering controls
+      // (unlike dense grid placement, the keyboard order stays visual).
+      for (const fit of ["medium", "roomy"]) {
+        const orphan = `bysan-grid-fill-${fit}`;
+        let pending = null;
+        for (const {row, wide, mediumWide} of rows) {
+          if (wide || (fit === "medium" && mediumWide)) {
+            pending?.classList.add(orphan);
+            pending = null;
+          } else pending = pending ? null : row;
+        }
+        pending?.classList.add(orphan);
+      }
+    }
   }
 
   hide() {
@@ -2203,10 +2272,14 @@ class BysanStyleSettingTab extends PluginSettingTab {
         links.createEl("a", { cls: "internal-link", text: zh ? "内链" : "Internal link" });
         links.append(" · ");
         links.createEl("a", { cls: "external-link", text: zh ? "外链" : "External link" });
+        links.append(" · ");
+        links.createEl("a", { cls: "internal-link is-unresolved", text: zh ? "未创建的链接" : "Uncreated link" });
       });
       this.renderNoteThemeControls(controls, EDITOR_MARK_CONTROLS);
       this.renderNoteThemeControls(controls, NOTE_MARK_CONTROLS);
       this.renderThemeGroups(body, ["marks"], false);
+      this.renderColourHighlightSettings(body);
+      this.renderClozeSettings(body);
     });
     this.createSettingsSection(containerEl, "headings", zh ? "页面标题与文内标题" : "Page title and headings",
       body => this.renderHeadingSettings(body));
@@ -2250,6 +2323,60 @@ class BysanStyleSettingTab extends PluginSettingTab {
     });
     this.createSettingsSection(containerEl, "embeds", zh ? "图片、嵌入与 Mermaid" : "Images, embeds and Mermaid",
       body => this.renderThemeGroups(body, ["embeds"], false));
+  }
+
+  renderClozeSettings(containerEl) {
+    const zh = this.plugin.language === "zh";
+    const language = zh ? 0 : 1;
+    this.createFeatureGroup(containerEl, zh ? "答案遮挡（复习用）" : "Hide answers (study)",
+      zh ? "先把答案藏起来，复习时再揭晓。只改变样式，不改笔记内容。"
+        : "Hide answers while studying and reveal them when needed. This only changes appearance.", group => {
+        group.classList.add("bysan-variant-feature");
+        this.renderNoteThemeControls(group, [CLOZE_SWITCH]);
+        for (const variant of CLOZE_VARIANTS) {
+          this.renderSyntaxVariant(group, "cloze", variant.name[language],
+            zh ? variant.syntax : variant.syntax.replace("答案", "answer"), variant.controls, (demo, sample) => {
+              demo.classList.add("bysan-cloze-demo");
+              const prefix = variant.italic ? demo.createEl("em") : demo;
+              const wrapper = variant.highlight ? prefix.createEl("mark") : prefix;
+              wrapper.createEl("del", {
+                text: zh ? "示例答案" : "Example answer",
+                attr: { tabindex: "0", title: zh ? "键盘聚焦时也可预览答案" : "Keyboard focus also reveals the answer in this sample" }
+              });
+              sample.createDiv({ cls: "bysan-preview-caption bysan-cloze-reveal-hint", text: variant.reveal[language] });
+              sample.createDiv({ cls: "bysan-preview-caption bysan-cloze-disabled-hint",
+                text: zh ? "已停用：显示原来的 Markdown 样式。" : "Off: normal Markdown formatting." });
+            });
+        }
+      });
+  }
+
+  renderColourHighlightSettings(containerEl) {
+    const zh = this.plugin.language === "zh";
+    this.createFeatureGroup(containerEl, zh ? "彩色高亮变体" : "Coloured highlight variants", "", group => {
+      group.classList.add("bysan-variant-feature");
+      this.renderNoteThemeControls(group, [COLOUR_HIGHLIGHT_SWITCH]);
+      for (const variant of COLOUR_HIGHLIGHT_VARIANTS) {
+        this.renderSyntaxVariant(group, "colour-highlight", variant.name[zh ? 0 : 1],
+          zh ? variant.syntax : variant.syntax.replace("文字", "text"), variant.controls, demo => {
+            let node = demo;
+            for (const tag of variant.tags) node = node.createEl(tag);
+            node.createEl("mark", { text: zh ? "示例文字" : "Example text" });
+          });
+      }
+    });
+  }
+
+  renderSyntaxVariant(group, id, title, syntax, controls, renderDemo) {
+    const zh = this.plugin.language === "zh";
+    const card = group.createEl("section", { cls: "bysan-syntax-variant" });
+    this.renderCompactSample(card, id, title, sample => {
+      const format = sample.createDiv({ cls: "bysan-syntax-format" });
+      format.createSpan({ text: zh ? "写法" : "Syntax" });
+      format.createEl("code", { text: syntax });
+      renderDemo(sample.createDiv({ cls: "bysan-syntax-demo" }), sample);
+    });
+    this.renderNoteThemeControls(card.createDiv({ cls: "bysan-syntax-variant-controls" }), controls);
   }
 
   renderHeadingSettings(body) {
@@ -2333,12 +2460,13 @@ class BysanStyleSettingTab extends PluginSettingTab {
 
   renderNoteThemeControls(containerEl, controls, compact = false) {
     const zh = this.plugin.language === "zh";
-    for (const [id, cn, en, descZh, descEn] of controls) {
+    for (const [id, cn, en, descZh, descEn, options] of controls) {
       const item = this.plugin.themeControls.controlItems.find(control => control.id === id);
       if (item) this.plugin.themeControls.renderItem(containerEl, item, {
         name: zh ? cn : en,
         scope: (zh ? descZh : descEn) || "",
-        compact
+        compact,
+        ...options
       });
     }
   }

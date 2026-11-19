@@ -2411,25 +2411,98 @@ table:not(.dataview) :is(th, td) {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .bysan-theme-grid > :is(.bysan-color-row:has(.slider), .bysan-theme-pair) {
-    grid-column: 1 / -1;
-  }
-
   .bysan-style-settings .bysan-settings-section-body .bysan-feature-group-body:has(> .setting-item) {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     column-gap: 0.65rem;
   }
 
-  .bysan-feature-group-body > :is(.bysan-dual-mode-setting, .setting-item:has(button + button)) {
+  :is(.bysan-theme-grid, .bysan-feature-group-body) > .bysan-grid-wide {
+    grid-column: 1 / -1;
+  }
+}
+
+@container (34rem <= width < 54rem) {
+  :is(.bysan-theme-grid, .bysan-feature-group-body) > .bysan-grid-fill-medium,
+  .bysan-theme-grid > :is(.bysan-color-row:has(.slider), .bysan-theme-pair) {
     grid-column: 1 / -1;
   }
 }
 
 @container (min-width: 54rem) {
-  .bysan-theme-grid > :is(.bysan-color-row, .bysan-theme-pair) {
-    grid-column: auto;
+  :is(.bysan-theme-grid, .bysan-feature-group-body) > .bysan-grid-fill-roomy {
+    grid-column: 1 / -1;
   }
+}
+
+.bysan-style-settings .bysan-settings-section-body .bysan-variant-feature.bysan-feature-group-body {
+  display: block;
+}
+
+.bysan-style-settings .bysan-variant-feature > .setting-item:not(.setting-item-heading) {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.bysan-syntax-variant {
+  display: grid;
+  gap: 0.25rem 0.65rem;
+  min-width: 0;
+  margin-block-start: 0.35rem;
+  padding: 0.35rem 0.45rem;
+  border: 1px solid var(--bysan-settings-border);
+  border-radius: 6px;
+}
+
+@container (min-width: 34rem) {
+  .bysan-syntax-variant {
+    grid-template-columns: minmax(9rem, 1fr) minmax(0, 2.5fr);
+    align-items: start;
+  }
+}
+
+.bysan-syntax-variant .bysan-compact-preview {
+  margin: 0;
+}
+
+.bysan-syntax-variant .bysan-compact-preview > .bysan-preview-caption {
+  color: var(--text-normal);
+  font-weight: 600;
+}
+
+.bysan-syntax-variant-controls {
+  min-width: 0;
+  container-type: inline-size;
+}
+
+.bysan-syntax-format {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.12rem 0.35rem;
+  align-items: baseline;
+}
+
+.bysan-syntax-format > code {
+  overflow-wrap: anywhere;
+}
+
+.bysan-syntax-demo {
+  margin-block: 0.35rem;
+}
+
+.bysan-cloze-demo del {
+  cursor: pointer;
+}
+
+body:not(.remove-cloze-style) .bysan-cloze-demo del:focus-visible {
+  color: var(--text-normal) !important;
+  background-color: transparent;
+  outline: 1px solid var(--interactive-accent);
+  outline-offset: 2px;
+}
+
+body.remove-cloze-style .bysan-cloze-reveal-hint,
+body:not(.remove-cloze-style) .bysan-cloze-disabled-hint {
+  display: none;
 }
 
 .bysan-compact-preview {

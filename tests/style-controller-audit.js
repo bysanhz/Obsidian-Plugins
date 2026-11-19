@@ -114,6 +114,15 @@ for (const id of ["bysan-review-panel-bg", "bysan-review-title-color", "bysan-re
 }
 assert.equal((headingModuleCss.match(/var\(--bysan-heading-number-gap, /g) || []).length, 3,
   "heading gap must apply to editor, reading and outline");
+assert.match(mainSource, /"remove-cloze-style", "启用答案遮挡"[^\n]*invertToggle: true/,
+  "the positive cloze label must preserve the legacy inverted switch");
+assert.match(mainSource, /"==~~答案~~=="[\s\S]*"\*==~~答案~~==\*"[\s\S]*"\*~~答案~~\*"/,
+  "all three Markdown variants should be discoverable in their examples");
+assert.match(mainSource, /CLOZE_SWITCH, \.\.\.CLOZE_VARIANTS\.flatMap/,
+  "the legacy cloze group must not render a second copy of local controls");
+for (const spanClass of ["bysan-grid-wide", "bysan-grid-fill-medium", "bysan-grid-fill-roomy"]) {
+  assert(styleCss.includes(spanClass), `missing responsive control span: ${spanClass}`);
+}
 for (const id of ["bysan-code-block-font", "bysan-inline-code-font", "bysan-inline-code-border"]) {
   assert(mainSource.includes(`id: "${id}"`), `missing code appearance field: ${id}`);
 }

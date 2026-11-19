@@ -1,6 +1,6 @@
 /**
  * Bysan Style Controller
- * Version: 0.18.3
+ * Version: 0.18.4
  *
  * Owns visual presentation and provides switchable, integrated Bysan modules.
  */

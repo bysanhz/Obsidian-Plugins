@@ -94,6 +94,78 @@ const TEXT_FONTS = {
   SimSun: "serif", Inter: "sans-serif", Arial: "sans-serif", Calibri: "sans-serif",
   Georgia: "serif", "Times New Roman": "serif"
 };
+const FONT_ALIASES = {
+  "LXGW WenKai": ["霞鹜文楷"], "LXGW WenKai Mono": ["霞鹜文楷等宽"],
+  "Noto Sans CJK SC": ["思源黑体", "简体中文"],
+  "Noto Serif CJK SC": ["思源宋体", "简体中文"],
+  "Source Han Sans SC": ["思源黑体"], "Source Han Serif SC": ["思源宋体"],
+  "Microsoft YaHei": ["微软雅黑"], "PingFang SC": ["苹方"], SimSun: ["宋体"],
+  "Sarasa Mono SC": ["等距更纱黑体"]
+};
+
+const fontKey = value => value.normalize("NFKD").toLowerCase().replace(/[\s\p{M}_-]+/gu, "");
+
+function parseFontconfigFamilies(output) {
+  return output.split(/\r?\n/).filter(Boolean).map(line => {
+    const [names, spacing] = line.split("\t");
+    const [family, ...aliases] = names.split(",").map(name => name.trim()).filter(Boolean);
+    return { family, aliases, mono: Number(spacing) >= 90 || /mono|code|console|等宽/i.test(family) };
+  });
+}
+
+function fontChoices(faces, query, preferMono, language) {
+  const families = new Map();
+  for (const face of faces) {
+    const family = String(face.family || "").trim();
+    if (!family || /[\u0000-\u001f]/.test(family)) continue;
+    const key = fontKey(family);
+    const entry = families.get(key) || { family, aliases: new Set(), mono: false };
+    for (const alias of [...(Object.hasOwn(FONT_ALIASES, family) ? FONT_ALIASES[family] : []), ...(face.aliases || [])]) {
+      if (alias && fontKey(alias) !== key) entry.aliases.add(alias);
+    }
+    entry.mono ||= face.mono || /mono|code|console|等宽/i.test(family);
+    families.set(key, entry);
+  }
+  const needle = fontKey(query);
+  const collator = new Intl.Collator(language === "zh" ? "zh-CN" : "en", { sensitivity: "base", numeric: true });
+  const ranked = [...families.values()].map(entry => {
+    const keys = [entry.family, ...entry.aliases].map(fontKey);
+    const rank = keys.some(key => key === needle) ? 0 : keys.some(key => key.startsWith(needle)) ? 1
+      : keys.some(key => key.includes(needle)) ? 2 : 3;
+    const localName = language === "zh" && [...entry.aliases].find(name => /[\u3400-\u9fff]/.test(name));
+    return { ...entry, rank, label: localName && localName !== entry.family ? `${localName} · ${entry.family}` : entry.family };
+  });
+  return ranked.filter(entry => entry.rank < 3).sort((a, b) => a.rank - b.rank
+    || (preferMono ? Number(b.mono) - Number(a.mono) : 0) || collator.compare(a.label, b.label));
+}
+
+function loadLocalFontFaces(win) {
+  if (typeof process !== "undefined" && process.platform === "linux") {
+    return new Promise((resolve, reject) => {
+      require("child_process").execFile("fc-list", ["-f", "%{family}\t%{spacing}\n"],
+        { encoding: "utf8", timeout: 4000, maxBuffer: 2 * 1024 * 1024 },
+        (error, output) => error ? reject(error) : resolve(parseFontconfigFamilies(output)));
+    }).catch(() => readBrowserFontFaces(win));
+  }
+  return readBrowserFontFaces(win);
+}
+
+async function readBrowserFontFaces(win) {
+  if (typeof win.queryLocalFonts !== "function") return [];
+  const fonts = await win.queryLocalFonts();
+  return fonts.map(font => ({ family: font.family, aliases: [font.fullName, font.postscriptName].filter(Boolean) }));
+}
+
+function fontStack(family, monospace) {
+  const generic = monospace ? "monospace" : Object.hasOwn(TEXT_FONTS, family) ? TEXT_FONTS[family] : "sans-serif";
+  return `${JSON.stringify(family)}, ${generic}`;
+}
+
+function selectedFontName(value) {
+  const match = /^("(?:[^"\\]|\\.)+"),\s*(?:sans-serif|serif|monospace)$/.exec(value);
+  if (!match) return null;
+  try { return JSON.parse(match[1]); } catch { return null; }
+}
 
 function isFontFamilySetting(item) {
   return item.type === "variable-text" && (CODE_FONT_IDS.has(item.id) ||
@@ -1516,49 +1588,70 @@ class ThemeControls {
 
   addFontPicker(setting, item, title) {
     const zh = this.plugin.language === "zh";
+    const t = (cn, en) => zh ? cn : en;
     const monospace = CODE_FONT_IDS.has(item.id);
-    const options = new Map([
-      ["obsidian", monospace ? "var(--font-monospace, monospace)" :
-        item.id === "font-text-theme" ? "var(--font-text-override, var(--font-default, sans-serif))" : "var(--font-text, sans-serif)"],
-      ...(monospace ? CODE_FONTS.map(name => [name, `"${name}", monospace`]) :
-        Object.entries(TEXT_FONTS).map(([name, fallback]) => [name, `"${name}", ${fallback}`]))
-    ]);
+    const obsidianFont = monospace ? "var(--font-monospace, monospace)" :
+      item.id === "font-text-theme" ? "var(--font-text-override, var(--font-default, sans-serif))" : "var(--font-text, sans-serif)";
+    const labels = {
+      default: t("沿用默认字体", "Use default font"),
+      obsidian: t("跟随 Obsidian 字体", "Use Obsidian font"),
+      custom: t("手动输入字体…", "Enter a font manually…")
+    };
     const current = String(this.stored[item.id] ?? "");
-    const selected = [...options].find(([, value]) => value === current)?.[0]
-      || (current ? "custom" : "default");
-    setting.settingEl.addClass("bysan-code-font-control");
-    let picker;
-    setting.addDropdown(dropdown => {
-      picker = dropdown.addOption("default", zh ? "沿用主题或旧配置" : "Use theme or legacy font");
-      for (const [key] of options) {
-        picker.addOption(key, key === "obsidian" ? (zh ? "跟随 Obsidian 字体" : "Use Obsidian font") : key);
-      }
-      picker.addOption("custom", zh ? "自定义字体…" : "Custom font…").setValue(selected);
-      picker.selectEl.setAttribute("aria-label", title);
-      picker.selectEl.title = zh ? "未安装所选字体时使用备用字体。" : "Uses a fallback font if the selected family is not installed.";
+    const family = selectedFontName(current);
+    let selected = !current ? "default" : current === obsidianFont ? "obsidian" : family ? `family:${family}` : "custom";
+    const win = setting.controlEl.ownerDocument.defaultView;
+    const listId = `bysan-font-picker-list-${item.id}`;
+    const panelId = `bysan-font-picker-${item.id}`;
+    setting.settingEl.addClass("bysan-font-control");
+    const trigger = setting.controlEl.createEl("button", {
+      cls: "bysan-font-trigger", attr: { type: "button", popovertarget: panelId,
+        "aria-controls": panelId, "aria-haspopup": "dialog", "aria-expanded": "false" }
     });
+    const triggerLabel = trigger.createSpan();
+    trigger.createSpan({ text: "▾", attr: { "aria-hidden": "true" } });
+    const syncTrigger = (label = labels[selected]) => {
+      const chosen = selected.slice(7);
+      const known = !label && selected.startsWith("family:") &&
+        fontChoices(this.localFontFaces || [{ family: chosen }], chosen, monospace, this.plugin.language)
+          .find(font => font.family === chosen)?.label;
+      triggerLabel.textContent = label || known || chosen;
+      trigger.setAttribute("aria-label", `${title}：${triggerLabel.textContent}`);
+      trigger.title = triggerLabel.textContent;
+    };
+    syncTrigger();
+    const panel = setting.controlEl.createDiv({
+      cls: "bysan-font-popover", attr: { id: panelId, popover: "auto", role: "dialog", "aria-label": title }
+    });
+    const search = panel.createEl("input", {
+      attr: { type: "search", role: "combobox", autocomplete: "off", "aria-expanded": "true",
+        "aria-controls": listId, "aria-label": t("搜索已安装字体", "Search installed fonts"),
+        placeholder: t("搜索字体，例如「文楷」", "Find fonts, e.g. WenKai") }
+    });
+    const list = panel.createDiv({ cls: "bysan-font-list", attr: { id: listId, role: "listbox", "aria-label": title } });
+    const footer = panel.createDiv({ cls: "bysan-font-footer" });
+    const status = footer.createSpan({ attr: { role: "status" } });
+    const rescan = footer.createEl("button", { text: t("重新扫描", "Rescan"), attr: { type: "button" } });
     const input = setting.controlEl.createEl("input", {
-      cls: "bysan-custom-code-font",
-      attr: {
-        type: "text",
-        placeholder: zh ? "字体名称或 CSS 字体列表" : "Font family or CSS font stack",
-        "aria-label": zh ? `${title}：自定义字体` : `${title}: custom font`
-      }
+      cls: "bysan-manual-font",
+      attr: { type: "text", placeholder: t("字体名称或备用字体列表", "Font family or fallback stack"),
+        "aria-label": `${title}：${labels.custom}` }
     });
-    input.value = selected === "custom" ? current : "";
+    input.value = selected === "custom" || family ? current : "";
     input.hidden = selected !== "custom";
     input.addEventListener("input", () => input.setCustomValidity(""));
     input.addEventListener("change", () => {
       if (input.hidden) return;
       const value = input.value.trim();
-      if (value && !CSS.supports("font-family", value)) {
-        input.setCustomValidity(zh ? "请输入有效的字体名称或字体列表。" : "Enter a valid font family or font stack.");
+      if (value && !win.CSS.supports("font-family", value)) {
+        input.setCustomValidity(t("请输入有效的字体名称或字体列表。", "Enter a valid font family or font stack."));
         input.reportValidity();
         return;
       }
       if (value) void this.plugin.updateThemeSetting(item.id, value);
       else {
-        picker.setValue("default");
+        selected = "default";
+        syncTrigger();
         input.hidden = true;
         void this.plugin.resetThemeSetting(item.id);
       }
@@ -1569,17 +1662,128 @@ class ThemeControls {
         input.blur();
       }
     });
-    picker.onChange(value => {
-      input.hidden = value !== "custom";
+    const choose = (key, label, chosenFamily) => {
+      selected = key;
+      syncTrigger(label);
+      panel.hidePopover();
+      input.hidden = key !== "custom";
       input.setCustomValidity("");
-      if (value === "custom") {
-        const savedCustom = input.value.trim();
-        if (savedCustom && CSS.supports("font-family", savedCustom)) {
-          void this.plugin.updateThemeSetting(item.id, savedCustom);
-        }
+      if (key === "custom") {
+        input.value = String(this.stored[item.id] ?? "");
         input.focus();
-      } else if (value === "default") void this.plugin.resetThemeSetting(item.id);
-      else if (options.has(value)) void this.plugin.updateThemeSetting(item.id, options.get(value));
+        return;
+      }
+      trigger.focus();
+      if (key === "default") void this.plugin.resetThemeSetting(item.id);
+      else void this.plugin.updateThemeSetting(item.id, key === "obsidian" ? obsidianFont : fontStack(chosenFamily, monospace));
+    };
+
+    let options = [], active = -1, loading = false;
+    const positionPanel = () => {
+      const rect = trigger.getBoundingClientRect();
+      const width = Math.min(win.innerWidth - 16, Math.max(rect.width, 320));
+      const below = win.innerHeight - rect.bottom - 12;
+      const above = rect.top - 12;
+      const openAbove = below < 330 && above > below;
+      panel.style.width = `${width}px`;
+      panel.style.left = `${Math.max(8, Math.min(rect.left, win.innerWidth - width - 8))}px`;
+      panel.style.top = openAbove ? "auto" : `${rect.bottom + 4}px`;
+      panel.style.bottom = openAbove ? `${win.innerHeight - rect.top + 4}px` : "auto";
+      panel.style.maxHeight = `${Math.min(340, Math.max(90, openAbove ? above : below))}px`;
+    };
+    const highlight = (index, scroll = false) => {
+      options[active]?.classList.remove("is-active");
+      active = index;
+      if (index < 0) search.removeAttribute("aria-activedescendant");
+      else {
+        const option = options[index];
+        search.setAttribute("aria-activedescendant", option.id);
+        option.classList.add("is-active");
+        if (scroll) option.scrollIntoView({ block: "nearest" });
+      }
+    };
+    const render = () => {
+      const query = search.value.trim();
+      const installed = this.localFontFaces?.length > 0;
+      const faces = installed ? this.localFontFaces : (monospace ? CODE_FONTS : Object.keys(TEXT_FONTS)).map(family => ({ family }));
+      const matches = fontChoices(faces, query, monospace, this.plugin.language);
+      list.empty();
+      options = [];
+      active = -1;
+      const add = (key, label, chosenFamily) => {
+        const option = list.createDiv({
+          cls: "bysan-font-option", attr: { role: "option", id: `${listId}-${options.length}`,
+            "aria-selected": String(selected === key) }
+        });
+        option.createSpan({ text: label });
+        if (chosenFamily) {
+          option.createSpan({ text: t("Aa 文字", "Aa 123"), cls: "bysan-font-sample", attr: { "aria-hidden": "true" } })
+            .style.fontFamily = fontStack(chosenFamily, monospace);
+        }
+        option.addEventListener("mousedown", event => event.preventDefault());
+        option.addEventListener("click", () => choose(key, label, chosenFamily));
+        options.push(option);
+      };
+      if (!query) for (const [key, label] of Object.entries(labels)) add(key, label);
+      for (const option of matches.slice(0, 80)) add(`family:${option.family}`, option.label, option.family);
+      list.scrollTop = 0;
+      highlight(query && options.length ? 0 : -1);
+      status.textContent = loading ? t("正在扫描本机字体…", "Finding installed fonts…")
+        : !installed ? t("无法读取本机字体，已显示常用字体。", "Installed fonts unavailable; showing common fonts.")
+        : !matches.length ? t("没有匹配的字体", "No matching fonts")
+        : matches.length > 80 ? t(`${matches.length} 个本机字体，输入名称缩小范围`, `${matches.length} installed fonts; type to narrow`)
+        : t(`${matches.length} 个本机字体`, `${matches.length} installed fonts`);
+    };
+    const scan = async (force = false) => {
+      if (this.localFontFaces && !force) return;
+      if (!this.localFontRequest) {
+        this.localFontRequest = loadLocalFontFaces(win).catch(() => []).then(fonts => {
+          this.localFontFaces = fonts;
+          this.localFontRequest = null;
+        });
+      }
+      loading = true;
+      render();
+      await this.localFontRequest;
+      loading = false;
+      if (panel.matches(":popover-open")) {
+        syncTrigger();
+        render();
+      }
+    };
+    panel.addEventListener("beforetoggle", event => {
+      if (event.newState !== "open") return;
+      search.value = "";
+      render();
+      positionPanel();
+      void scan();
+    });
+    panel.addEventListener("toggle", () => {
+      const open = panel.matches(":popover-open");
+      trigger.setAttribute("aria-expanded", String(open));
+      if (open) search.focus();
+    });
+    rescan.addEventListener("click", () => { search.focus(); void scan(true); });
+    search.addEventListener("input", render);
+    search.addEventListener("keydown", event => {
+      if (event.isComposing) return;
+      if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopPropagation();
+        panel.hidePopover();
+        trigger.focus();
+        return;
+      }
+      if (!options.length) return;
+      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        event.preventDefault();
+        const next = active < 0 ? (event.key === "ArrowDown" ? 0 : options.length - 1)
+          : (active + (event.key === "ArrowDown" ? 1 : -1) + options.length) % options.length;
+        highlight(next, true);
+      } else if (event.key === "Enter" && active >= 0) {
+        event.preventDefault();
+        options[active].click();
+      }
     });
   }
 

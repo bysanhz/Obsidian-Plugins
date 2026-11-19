@@ -68,13 +68,23 @@ const sandbox = {
 vm.runInNewContext(
   themeSource.replace(
     "module.exports = { ThemeControls, addValueStepper, addPointSizeStepper, readFontPoints, addStyleDropdown, FONT_WEIGHTS, ADVANCED_THEME_TOPICS };",
-    "module.exports = { ThemeControls, parseColor, colorWithAlpha, ADVANCED_MODE_PAIRS, COMPATIBILITY_ONLY_IDS, optionLabel, isFontFamilySetting, cssStyleChoices, readFontPoints };"
+    "module.exports = { ThemeControls, parseColor, colorWithAlpha, ADVANCED_MODE_PAIRS, COMPATIBILITY_ONLY_IDS, optionLabel, isFontFamilySetting, cssStyleChoices, readFontPoints, parseFontconfigFamilies, fontChoices, selectedFontName, fontStack };"
   ),
   sandbox
 );
 const { ThemeControls, parseColor, colorWithAlpha } = sandbox.module.exports;
 const { optionLabel, COMPATIBILITY_ONLY_IDS } = sandbox.module.exports;
 const { isFontFamilySetting, cssStyleChoices, readFontPoints } = sandbox.module.exports;
+const { parseFontconfigFamilies, fontChoices, selectedFontName, fontStack } = sandbox.module.exports;
+const fontFaces = parseFontconfigFamilies("LXGW WenKai,霞鹜文楷\t\nLXGW WenKai,霞鹜文楷,LXGW WenKai Bold\t0\n" +
+  "LXGW WenKai Mono,霞鹜文楷等宽\t100\nInter\t0\nNoto Sans CJK SC\t\n");
+assert.deepEqual(Array.from(fontChoices(fontFaces, "霞鹜文楷", false, "zh"), font => font.family),
+  ["LXGW WenKai", "LXGW WenKai Mono"], "localized aliases must rank exact matches and deduplicate faces");
+assert.equal(fontChoices(fontFaces, "wen-kai", true, "en")[0].family, "LXGW WenKai Mono");
+assert.equal(fontChoices(fontFaces, "思源黑体", false, "zh")[0].family, "Noto Sans CJK SC");
+assert.equal(fontChoices(fontFaces, "not installed", true, "zh").length, 0);
+assert.equal(selectedFontName(fontStack('Font "A"', true)), 'Font "A"');
+assert.equal(selectedFontName('"Font A", "Font B", sans-serif'), null, "custom stacks must remain editable");
 for (const id of ["bysan-code-block-font", "bysan-inline-code-font", "font-text-theme", "h1-font",
   "inline-title-font", "font-family-folder-file-title", "font-family-tag", "font-loading-text"]) {
   assert(isFontFamilySetting({id, type:"variable-text"}), `missing shared family picker for ${id}`);

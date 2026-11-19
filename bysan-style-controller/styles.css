@@ -2033,12 +2033,101 @@ table:not(.dataview) :is(th, td) {
   max-width: 100%;
 }
 
-.bysan-style-settings .bysan-code-font-control .bysan-custom-code-font:not([hidden]) {
+.bysan-style-settings .bysan-font-control .bysan-manual-font:not([hidden]) {
   flex-basis: 100%;
 }
 
-.bysan-style-settings .bysan-code-font-control .bysan-custom-code-font[hidden] {
+.bysan-style-settings .bysan-font-control .bysan-manual-font[hidden] {
   display: none !important;
+}
+
+.bysan-style-settings .bysan-font-control button.bysan-font-trigger {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5em;
+  flex: 1 1 7rem;
+  min-width: 0;
+  max-width: 100%;
+  padding-inline: 0.6em;
+}
+
+.bysan-font-trigger > span:first-child,
+.bysan-font-option > span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bysan-font-popover {
+  position: fixed;
+  inset: auto;
+  margin: 0;
+  padding: 6px;
+  gap: 5px;
+  box-sizing: border-box;
+  max-width: calc(100vw - 16px);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-m);
+  background: var(--background-primary);
+  color: var(--text-normal);
+  box-shadow: var(--shadow-s);
+  font-size: var(--font-ui-small);
+}
+
+.bysan-font-popover:popover-open {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
+
+.bysan-font-popover input[type="search"] {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  font-size: inherit;
+}
+
+.bysan-font-list {
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.bysan-font-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 25px;
+  padding: 2px 7px;
+  border-radius: var(--radius-s);
+  cursor: pointer;
+}
+
+.bysan-font-option[aria-selected="true"] {
+  color: var(--text-accent);
+  font-weight: 600;
+}
+
+.bysan-font-option:is(.is-active, :hover) {
+  background: var(--background-modifier-hover);
+}
+
+.bysan-font-sample {
+  flex: none;
+  color: var(--text-muted);
+}
+
+.bysan-font-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+}
+
+.bysan-font-footer button {
+  flex: none;
 }
 
 .bysan-style-settings .bysan-settings-section-body .setting-item-control

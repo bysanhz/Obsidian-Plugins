@@ -1,6 +1,6 @@
 /**
  * Selection Review Toolbar
- * Version: 0.2.4
+ * Version: 0.2.5
  *
  * A selection-driven, fixed-position review toolbar for Obsidian 1.13.x.
  * Formatting edits Markdown through Obsidian's Editor API. Review bodies are
@@ -14,6 +14,7 @@ const {
   MarkdownView,
   Notice,
   Plugin,
+  SuggestModal,
   setIcon
 } = require("obsidian");
 
@@ -108,6 +109,93 @@ function plainPreview(text, limit = 120) {
     .trim();
   if (!normalized) return "暂无评论内容";
   return normalized.length > limit ? `${normalized.slice(0, limit - 1)}…` : normalized;
+}
+
+function encodeLinkPath(path) {
+  return path.split("/").map(segment => encodeURIComponent(segment).replace(/[()]/g, char =>
+    char === "(" ? "%28" : "%29")).join("/");
+}
+
+function markdownLink(label, destination) {
+  const escaped = label.replace(/[\\[\]]/g, "\\$&");
+  return `[${escaped}](${destination})`;
+}
+
+function normalizeWebUrl(input) {
+  if (!/^https?:\/\//i.test(input) || /\s/u.test(input)) return null;
+  try {
+    const url = new URL(input);
+    if (!["https:", "http:"].includes(url.protocol) || !url.hostname) return null;
+    return url.href.replace(/[()]/g, char => char === "(" ? "%28" : "%29");
+  } catch {
+    return null;
+  }
+}
+
+function quoteWithSource(text, filePath, headings, line, sourceLabel) {
+  // Plugin bookkeeping is not part of the visible quote.
+  const excerpt = text.replace(REVIEW_MARKER_PATTERN, "").replace(LEGACY_REVIEW_PATTERN, "").trimEnd();
+  if (!excerpt.trim()) return "";
+  let heading = null;
+  if (Number.isInteger(line)) {
+    const nearest = [...headings].reverse().find(entry => entry.position.start.line <= line);
+    if (nearest && !/[#|\[\]\\\n]/u.test(nearest.heading) &&
+      headings.filter(entry => entry.heading.trim().toLowerCase() === nearest.heading.trim().toLowerCase()).length === 1) {
+      heading = nearest.heading;
+    }
+  }
+  const path = filePath.replace(/\.md$/i, "");
+  const source = /[#|\[\]\\]/u.test(path) ? markdownLink(path.split("/").at(-1), encodeLinkPath(filePath))
+    : `[[${path}${heading ? `#${heading}` : ""}]]`;
+  const lines = excerpt.split(/\r?\n/).map(line => line ? `> ${line}` : ">");
+  return [...lines, ">", `> — ${sourceLabel}${source}`].join("\n");
+}
+
+function intersectsExistingLink(line, from, to) {
+  if (/!?\[\[|\]\(|\]\[|<https?:\/\//i.test(line.slice(from, to))) return true;
+  const inlineLinks = /!?\[\[[^\n]*?\]\]|!?\[(?:\\.|[^\]\\])*\](?:\((?:\\.|\([^()]*\)|[^)\\])*\)|\[[^\]]*\])|<https?:\/\/[^>]+>/gi;
+  return [...line.matchAll(inlineLinks)].some(match => from < match.index + match[0].length && to > match.index);
+}
+
+class SelectionLinkPicker extends SuggestModal {
+  constructor(app, tr, onPick, onDismiss) {
+    super(app);
+    this.onPick = onPick;
+    this.onDismiss = onDismiss;
+    this.tr = tr;
+    this.files = app.vault.getMarkdownFiles().sort((a, b) => a.path.localeCompare(b.path));
+    this.limit = 30;
+    this.emptyStateText = tr("未找到笔记，也可粘贴完整的 HTTPS 或 HTTP 网址。", "No matching notes. You can also paste a full HTTP or HTTPS URL.");
+    this.setPlaceholder(tr("搜索库内笔记，或粘贴网址…", "Search vault notes or paste a URL…"));
+    this.modalEl.addClass("art-link-picker");
+  }
+
+  getSuggestions(query) {
+    const text = query.trim();
+    const url = normalizeWebUrl(text);
+    if (url) return [{ url }];
+    if (/^[a-z][\w+.-]*:\/\//i.test(text)) return [];
+    const parts = text.toLowerCase().split(/\s+/).filter(Boolean);
+    const prefix = text.toLowerCase();
+    const matches = this.files.filter(file => parts.every(part => file.path.toLowerCase().includes(part)));
+    const preferred = file => prefix && file.basename.toLowerCase().startsWith(prefix);
+    return matches.sort((a, b) => Number(Boolean(preferred(b))) - Number(Boolean(preferred(a))))
+      .slice(0, this.limit).map(file => ({ file }));
+  }
+
+  renderSuggestion(choice, element) {
+    element.createDiv({ cls: "suggestion-title", text: choice.file?.basename || this.tr("插入网址", "Insert external link") });
+    element.createDiv({ cls: "suggestion-note", text: choice.file?.path || choice.url });
+  }
+
+  onChooseSuggestion(choice) {
+    this.onPick(choice);
+  }
+
+  onClose() {
+    super.onClose();
+    this.onDismiss();
+  }
 }
 
 
@@ -418,7 +506,7 @@ module.exports = class SelectionReviewToolbar extends Plugin {
     this.lastMarkdownFilePath = null;
     this.reviewNavigatorJumping = false;
     this.activeReview = null;
-    this.readingSelectionNoticeKey = null;
+    this.linkModal = null;
 
     this.registerView(
       REVIEW_NAVIGATOR_VIEW_TYPE,
@@ -445,7 +533,7 @@ module.exports = class SelectionReviewToolbar extends Plugin {
       this.scheduleReviewSidebarRefresh();
     });
 
-    console.log("[Selection Review Toolbar] v0.2.4 loaded");
+    console.log("[Selection Review Toolbar] v0.2.5 loaded");
   }
 
 
@@ -455,6 +543,7 @@ module.exports = class SelectionReviewToolbar extends Plugin {
       this.selectionTimer = null;
     }
 
+    this.linkModal?.close();
     this.toolbarEl?.remove();
     this.reviewWindowEl?.remove();
     this.clearReviewBadges();
@@ -521,6 +610,11 @@ module.exports = class SelectionReviewToolbar extends Plugin {
       "keyup",
       (event) => {
         if (event.key === "Escape") {
+          if (this.morePanel && !this.morePanel.hidden) {
+            this.closePanels();
+            if (this.toolbarEl.contains(event.target)) this.moreButton.focus();
+            return;
+          }
           this.suppressedSelectionKey = this.cachedSelection?.key || null;
           this.hideToolbar({ clearCache: false });
           return;
@@ -708,6 +802,7 @@ module.exports = class SelectionReviewToolbar extends Plugin {
 
 
   async captureAndShowSelection() {
+    if (this.linkModal) return;
     const view = this.getActiveEditingView();
 
     if (view) {
@@ -764,6 +859,7 @@ module.exports = class SelectionReviewToolbar extends Plugin {
     }
 
     this.suppressedSelectionKey = null;
+    if (this.cachedSelection?.key !== key) this.closePanels();
     this.cachedSelection = {
       view,
       editor,
@@ -773,6 +869,7 @@ module.exports = class SelectionReviewToolbar extends Plugin {
       fromOffset,
       toOffset,
       text,
+      sourceLine: from.line,
       mode: "source",
       key
     };
@@ -785,7 +882,6 @@ module.exports = class SelectionReviewToolbar extends Plugin {
     }
 
     this.cachedRect = rect;
-    this.closePanels();
     this.showToolbar(rect);
   }
 
@@ -808,7 +904,8 @@ module.exports = class SelectionReviewToolbar extends Plugin {
       return;
     }
 
-    if (this.isPluginSurface(ancestor) || ancestor.closest(READING_UNREVIEWABLE_SELECTOR)) {
+    const isEmbedded = node => (node instanceof Element ? node : node.parentElement)?.closest(".internal-embed, .markdown-embed");
+    if (this.isPluginSurface(ancestor) || isEmbedded(range.startContainer) || isEmbedded(range.endContainer)) {
       this.hideToolbar({ clearCache: true });
       return;
     }
@@ -819,46 +916,43 @@ module.exports = class SelectionReviewToolbar extends Plugin {
       return;
     }
 
+    const filePath = view.file?.path || "";
+    const originalRange = range.cloneRange();
     const block = this.getReadingSelectionBlock(view, range);
-    if (!block) {
-      this.hideToolbar({ clearCache: true });
-      return;
-    }
-
-    const sourceMatch = await this.mapReadingSelectionToSource(view, block, visibleText);
-    if (!sourceMatch) {
-      this.hideToolbar({ clearCache: true });
-      this.maybeNoticeReadingSelection(view.file?.path || "", visibleText);
-      return;
-    }
-
+    const sourceMatch = block ? await this.mapReadingSelectionToSource(view, block, visibleText) : null;
+    const liveSelection = window.getSelection();
+    const liveRange = liveSelection?.rangeCount ? liveSelection.getRangeAt(0) : null;
+    if (!liveRange || view.file?.path !== filePath || this.getActiveMarkdownView() !== view ||
+      liveRange.startContainer !== originalRange.startContainer || liveRange.startOffset !== originalRange.startOffset ||
+      liveRange.endContainer !== originalRange.endContainer || liveRange.endOffset !== originalRange.endOffset) return;
     const rect = this.getDomRangeRect(range);
     if (!rect || !this.isRectNearViewport(rect)) {
       this.hideToolbar({ clearCache: false });
       return;
     }
 
-    const filePath = view.file?.path || "";
-    const key = `${filePath}:${sourceMatch.fromOffset}:${sourceMatch.toOffset}:${sourceMatch.sourceText}`;
+    const key = sourceMatch ? `${filePath}:${sourceMatch.fromOffset}:${sourceMatch.toOffset}:${sourceMatch.sourceText}`
+      : `${filePath}:copy:${visibleText}`;
     if (key === this.suppressedSelectionKey) {
       this.hideToolbar({ clearCache: false });
       return;
     }
 
     this.suppressedSelectionKey = null;
+    if (this.cachedSelection?.key !== key) this.closePanels();
     this.cachedSelection = {
       view,
       editor: null,
       filePath,
-      fromOffset: sourceMatch.fromOffset,
-      toOffset: sourceMatch.toOffset,
-      text: sourceMatch.sourceText,
+      fromOffset: sourceMatch?.fromOffset,
+      toOffset: sourceMatch?.toOffset,
+      sourceLine: sourceMatch?.sourceLine,
+      text: sourceMatch?.sourceText || visibleText,
       visibleText,
       mode: "reading",
       key
     };
     this.cachedRect = rect;
-    this.closePanels();
     this.showToolbar(rect);
   }
 
@@ -1022,7 +1116,7 @@ module.exports = class SelectionReviewToolbar extends Plugin {
       return null;
     }
 
-    return { fromOffset, toOffset, sourceText };
+    return { fromOffset, toOffset, sourceText, sourceLine: lineForOffset(source, fromOffset) };
   }
 
 
@@ -1036,14 +1130,6 @@ module.exports = class SelectionReviewToolbar extends Plugin {
 
   isReviewableSourceText(text) {
     return !/[`]|(?:\$\$)|(?:^\s*\|)|(?:\n\s*\|)/m.test(String(text || ""));
-  }
-
-
-  maybeNoticeReadingSelection(filePath, visibleText) {
-    const key = `${filePath}:${normalizeVisibleText(visibleText)}`;
-    if (this.readingSelectionNoticeKey === key) return;
-    this.readingSelectionNoticeKey = key;
-    new Notice("阅读模式下无法唯一定位该选区，请切到编辑模式添加评论");
   }
 
 
@@ -1174,10 +1260,13 @@ module.exports = class SelectionReviewToolbar extends Plugin {
     this.addTextButton("H", "高亮颜色", "art-highlight-button", () => this.openColorPanel("highlight"));
     this.addTextButton("A", "字体颜色", "art-text-color-button", () => this.openColorPanel("text"));
     this.addDivider();
-    this.addIconButton("message-square", "添加审阅评论", "art-comment-button", () => this.openCommentPanel());
+    this.commentButton = this.addIconButton("message-square", "添加审阅评论", "art-comment-button", () => this.openCommentPanel());
     this.addIconButton("code-2", "切换 Live Preview / Source Mode", "art-source-mode-button", () => this.toggleSourceMode());
+    this.moreButton = this.addIconButton("ellipsis", this.tr("更多选区操作", "More selection actions"),
+      "art-more-button", event => this.toggleMorePanel(event.detail === 0));
 
     this.createColorPanel();
+    this.createMorePanel();
 
     this.toolbarEl.addEventListener("pointerdown", (event) => {
       event.stopPropagation();
@@ -1233,6 +1322,118 @@ module.exports = class SelectionReviewToolbar extends Plugin {
 
   addDivider() {
     this.mainRowEl.createDiv({ cls: "art-toolbar-divider" });
+  }
+
+  tr(zh, en) {
+    return (this.getHostLanguage?.() || (navigator.language.startsWith("zh") ? "zh" : "en")) === "zh" ? zh : en;
+  }
+
+  createMorePanel() {
+    this.moreButton.setAttribute("aria-expanded", "false");
+    this.moreButton.setAttribute("aria-controls", "art-more-actions");
+    this.morePanel = this.toolbarEl.createDiv({
+      cls: "art-more-panel", attr: { id: "art-more-actions", role: "group", "aria-label": this.moreButton.title }
+    });
+    this.morePanel.hidden = true;
+    this.copyQuoteButton = this.addMoreAction("quote", () => this.copySelectionQuote());
+    this.insertLinkButton = this.addMoreAction("link", () => this.pickSelectionLink());
+  }
+
+  addMoreAction(icon, action) {
+    const button = this.morePanel.createEl("button", { cls: "art-more-action", attr: { type: "button" } });
+    setIcon(button.createSpan({ attr: { "aria-hidden": "true" } }), icon);
+    button.createSpan();
+    button.addEventListener("click", action);
+    return button;
+  }
+
+  toggleMorePanel(focusFirst) {
+    if (!this.selectionIsStillValid()) {
+      this.hideToolbar({ clearCache: true });
+      return;
+    }
+    const wasOpen = !this.morePanel.hidden;
+    this.closePanels();
+    if (wasOpen) {
+      this.refreshToolbarPosition();
+      return;
+    }
+    this.copyQuoteButton.lastElementChild.textContent = this.tr("复制原文引用", "Copy source quote");
+    this.insertLinkButton.lastElementChild.textContent = this.tr("插入链接", "Insert link");
+    this.insertLinkButton.hidden = this.cachedSelection.mode !== "source";
+    this.morePanel.hidden = false;
+    this.moreButton.setAttribute("aria-expanded", "true");
+    this.refreshToolbarPosition();
+    if (focusFirst) this.copyQuoteButton.focus({ preventScroll: true });
+  }
+
+  async copySelectionQuote() {
+    if (!this.selectionIsStillValid()) {
+      this.hideToolbar({ clearCache: true });
+      return;
+    }
+    const cache = this.cachedSelection;
+    const file = this.app.vault.getAbstractFileByPath(cache.filePath);
+    if (!file) return;
+    const headings = this.app.metadataCache.getFileCache(file)?.headings || [];
+    const line = cache.mode === "source" ? cache.from.line : cache.sourceLine;
+    const quote = quoteWithSource(cache.text, file.path, headings, line, this.tr("来源：", "Source: "));
+    if (!quote) return;
+    try {
+      await navigator.clipboard.writeText(quote);
+      if (this.cachedSelection?.key === cache.key) {
+        this.closePanels();
+        this.refreshToolbarPosition();
+      }
+      new Notice(this.tr("已复制原文引用", "Source quote copied"));
+    } catch {
+      new Notice(this.tr("无法写入剪贴板。", "Could not write to the clipboard."));
+    }
+  }
+
+  pickSelectionLink() {
+    const cache = this.cachedSelection;
+    if (cache?.mode !== "source" || !this.selectionIsStillValid()) return;
+    if (cache.from.line !== cache.to.line ||
+      intersectsExistingLink(cache.editor.getLine(cache.from.line), cache.from.ch, cache.to.ch)) {
+      new Notice(this.tr("请选择单行、且不包含现有链接的文字。", "Select text on one line, outside existing links."));
+      return;
+    }
+    const snapshot = cache.editor.getValue();
+    this.suppressedSelectionKey = cache.key;
+    this.hideToolbar({ clearCache: true });
+    this.linkModal?.close();
+    this.linkModal = new SelectionLinkPicker(this.app, this.tr.bind(this),
+      choice => this.insertSelectionLink(cache, snapshot, choice), () => { this.linkModal = null; });
+    this.linkModal.open();
+  }
+
+  insertSelectionLink(cache, snapshot, { file, url }) {
+    const view = this.getActiveEditingView();
+    if (!view || view !== cache.view || view.file?.path !== cache.filePath || cache.editor.getValue() !== snapshot) {
+      new Notice(this.tr("笔记已切换或内容有变化，请重新选中文字。", "The note changed. Select the text again."));
+      return;
+    }
+    const label = cache.text.trim();
+    if (!label) return;
+    let link;
+    if (file) {
+      if (this.app.vault.getAbstractFileByPath(file.path) !== file) {
+        new Notice(this.tr("目标笔记已移动或删除。", "The destination note has moved or been deleted."));
+        return;
+      }
+      const native = this.app.fileManager.generateMarkdownLink(file, cache.filePath, "", label);
+      link = /[\[\]|\\]/u.test(label) ? markdownLink(label, encodeLinkPath(file.path)) : native;
+    } else if (url) link = markdownLink(label, url);
+    if (!link) return;
+    // Keep spaces at the boundaries of the selection and make undo atomic.
+    const leading = cache.text.slice(0, cache.text.length - cache.text.trimStart().length);
+    const trailing = cache.text.slice(cache.text.trimEnd().length);
+    const replacement = leading + link + trailing;
+    const cursor = this.positionAfterInsertedText(cache.from, replacement);
+    cache.editor.transaction({ changes: [{ from: cache.from, to: cache.to, text: replacement }],
+      selections: [{ from: cursor, to: cursor }] });
+    cache.editor.focus();
   }
 
 
@@ -1450,6 +1651,7 @@ module.exports = class SelectionReviewToolbar extends Plugin {
   showToolbar(rect) {
     this.toolbarEl.classList.add("art-visible");
     this.toolbarEl.classList.toggle("art-reading-selection", this.cachedSelection?.mode === "reading");
+    this.commentButton.hidden = !Number.isInteger(this.cachedSelection?.fromOffset);
     this.positionToolbar(rect);
   }
 
@@ -1469,6 +1671,8 @@ module.exports = class SelectionReviewToolbar extends Plugin {
   closePanels() {
     this.colorPanelEl?.classList.remove("art-open");
     this.commentPanelEl?.classList.remove("art-open");
+    if (this.morePanel) this.morePanel.hidden = true;
+    this.moreButton?.setAttribute("aria-expanded", "false");
   }
 
 
@@ -1516,6 +1720,19 @@ module.exports = class SelectionReviewToolbar extends Plugin {
 
     this.toolbarEl.style.left = `${Math.round(left)}px`;
     this.toolbarEl.style.top = `${Math.round(top)}px`;
+    if (this.morePanel && !this.morePanel.hidden) {
+      const button = this.moreButton.getBoundingClientRect();
+      const menuWidth = this.morePanel.offsetWidth;
+      const menuHeight = this.morePanel.offsetHeight;
+      const menuLeft = Math.max(VIEWPORT_GAP, Math.min(button.right - menuWidth, window.innerWidth - menuWidth - VIEWPORT_GAP));
+      let menuTop = top + height + 4;
+      if (menuTop + menuHeight > window.innerHeight - VIEWPORT_GAP && top - menuHeight - 4 >= VIEWPORT_GAP) {
+        menuTop = top - menuHeight - 4;
+      }
+      menuTop = Math.max(VIEWPORT_GAP, Math.min(menuTop, window.innerHeight - menuHeight - VIEWPORT_GAP));
+      this.morePanel.style.left = `${Math.round(menuLeft - left)}px`;
+      this.morePanel.style.top = `${Math.round(menuTop - top)}px`;
+    }
   }
 
 
@@ -1740,7 +1957,7 @@ module.exports = class SelectionReviewToolbar extends Plugin {
       return;
     }
 
-    this.commentPanelEl?.classList.remove("art-open");
+    this.closePanels();
     this.colorPanelEl.classList.add("art-open");
     this.setColorMode(mode);
     this.updateActiveColor();
@@ -1883,7 +2100,7 @@ module.exports = class SelectionReviewToolbar extends Plugin {
    * ======================================================= */
 
   openCommentPanel() {
-    if (!this.selectionIsStillValid()) {
+    if (!this.selectionIsStillValid() || !Number.isInteger(this.cachedSelection?.fromOffset)) {
       this.hideToolbar({ clearCache: true });
       return;
     }

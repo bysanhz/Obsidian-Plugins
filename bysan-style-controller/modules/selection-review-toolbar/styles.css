@@ -1,5 +1,5 @@
 /**
- * Selection Review Toolbar v0.2.2
+ * Selection Review Toolbar v0.2.5
  * Built-in and user-defined review colors are centralized here.
  */
 
@@ -129,6 +129,50 @@ mark.art-hl-custom-4 { background-color: color-mix(in srgb, var(--art-custom-4) 
   .art-toolbar-divider
 ) {
   display: none;
+}
+
+.art-toolbar [hidden] {
+  display: none !important;
+}
+
+.art-more-panel {
+  position: absolute;
+  display: grid;
+  gap: 2px;
+  padding: 4px;
+  min-width: 9.5rem;
+  width: max-content;
+  max-width: calc(100vw - 16px);
+  box-sizing: border-box;
+  color: var(--text-normal);
+  background: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 7px;
+  box-shadow: var(--shadow-s);
+}
+
+.art-more-panel button.art-more-action {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 7px;
+  min-height: 28px;
+  padding: 4px 8px;
+  background: transparent;
+  box-shadow: none;
+  color: inherit;
+  font-size: var(--font-ui-small);
+  cursor: pointer;
+}
+
+.art-more-action svg {
+  display: block;
+  width: 15px;
+  height: 15px;
+}
+
+.art-more-panel button.art-more-action:is(:hover, :focus-visible) {
+  background: var(--background-modifier-hover);
 }
 
 .art-color-panel,

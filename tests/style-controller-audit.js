@@ -142,6 +142,7 @@ const reviewSandbox = {
   module: { exports: {} },
   exports: {},
   console,
+  URL,
   globalThis: { crypto: { randomUUID: () => "12345678-1234-1234-1234-123456789abc" } },
   require(id) {
     if (id !== "obsidian") throw new Error(`unexpected dependency: ${id}`);
@@ -152,12 +153,13 @@ const reviewSandbox = {
       MarkdownView: class MarkdownView {},
       Notice: class Notice {},
       Plugin: class Plugin {},
+      SuggestModal: class SuggestModal {},
       setIcon() {}
     };
   }
 };
 vm.runInNewContext(
-  `${reviewModuleSource}\n;globalThis.__reviewModuleTest = { findUniquePlainTextRange, sourceRangeForLines, lineForOffset, normalizeVisibleText };`,
+  `${reviewModuleSource}\n;globalThis.__reviewModuleTest = { findUniquePlainTextRange, sourceRangeForLines, lineForOffset, normalizeVisibleText, quoteWithSource, normalizeWebUrl, markdownLink, intersectsExistingLink };`,
   reviewSandbox
 );
 const {
@@ -166,6 +168,23 @@ const {
   lineForOffset,
   normalizeVisibleText
 } = reviewSandbox.globalThis.__reviewModuleTest;
+const { quoteWithSource, normalizeWebUrl, markdownLink, intersectsExistingLink } = reviewSandbox.globalThis.__reviewModuleTest;
+const heading = (text, line) => ({heading:text, position:{ start:{line} }});
+assert.equal(quoteWithSource("First %% BYSAN-REVIEW:test %%\n\n**Second**", "folder/Note.md",
+  [heading("Intro", 1),heading("Result", 8)], 4, "来源："),
+  "> First \n>\n> **Second**\n>\n> — 来源：[[folder/Note#Intro]]");
+assert.equal(quoteWithSource("Text", "folder/Note.md", [heading("Intro", 1),heading("Intro", 8)], 4, "Source: "),
+  "> Text\n>\n> — Source: [[folder/Note]]");
+assert.equal(quoteWithSource("Selection", "folder/Note.md", [heading("Intro", 1)], undefined, "来源："),
+  "> Selection\n>\n> — 来源：[[folder/Note]]");
+assert.equal(normalizeWebUrl("https://example.com/a(b)"), "https://example.com/a%28b%29");
+for (const input of ["javascript:alert(1)", "data:text/html,abc", "https://", "https://domain/with space"]) {
+  assert.equal(normalizeWebUrl(input), null, `invalid link target accepted: ${input}`);
+}
+assert.equal(markdownLink("[sample]", "https://example.com/"), "[\\[sample\\]](https://example.com/)");
+assert(intersectsExistingLink("pre [[Note|name]] post", 11, 15));
+assert(intersectsExistingLink("pre [name](https://example.com/a(b)) post", 6, 9));
+assert(!intersectsExistingLink("pre [[Note|name]] post", 18, 22));
 const plugin = { settings: { themeSettings: {} }, language: "zh", t: (key) => key, addCommand() {} };
 const themeControls = new ThemeControls(plugin, catalog);
 assert.equal(themeControls.controlItems.length, renderedControls.length, "every non-manual control must be owned");
@@ -338,7 +357,7 @@ for (const moduleId of ["academic-heading-numbering", "mermaid-inline-resizer", 
   }
 }
 
-assert.equal(reviewModuleManifest.version, "0.2.4", "selection review module version mismatch");
+assert.equal(reviewModuleManifest.version, "0.2.5", "selection review module version mismatch");
 for (const method of [
   "registerReadingSectionMapping", "captureReadingSelection", "mapReadingSelectionToSource",
   "refreshReadingReviewBadges", "findReadingSectionForLine", "replaceCachedFileRange",

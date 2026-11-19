@@ -1,6 +1,6 @@
 /**
  * Bysan Style Controller
- * Version: 0.18.7
+ * Version: 0.18.8
  *
  * Owns visual presentation and provides switchable, integrated Bysan modules.
  */
@@ -916,6 +916,7 @@ module.exports = class BysanStyleController extends Plugin {
       dir: directory
     };
     const instance = new ModuleClass(this.app, manifest);
+    if (module.id === "selection-review-toolbar") instance.getHostLanguage = () => this.language;
     await instance.load();
 
     const style = document.createElement("style");

@@ -118,6 +118,12 @@ body.bysan-style-controller-active[style*="--bysan-active-file-bg:"] .nav-files-
 
 /* -------------------------- code blocks ------------------------ */
 
+body.bysan-inline-code-point-size :is(.markdown-preview-view, .markdown-rendered) :not(pre) > code,
+body.bysan-inline-code-point-size .markdown-source-view.mod-cm6
+  .cm-inline-code:not(.cm-hmd-codeblock) {
+  font-size: var(--bysan-inline-code-font-size) !important;
+}
+
 :is(.markdown-preview-view, .markdown-rendered) pre:not(.frontmatter) {
   color: var(--bysan-code-text) !important;
   background: var(--bysan-code-bg) !important;
@@ -129,6 +135,10 @@ body.bysan-style-controller-active[style*="--bysan-active-file-bg:"] .nav-files-
   line-height: var(--bysan-code-line-height, 1.55);
   padding: var(--bysan-code-padding-y, 0.8em)
     var(--bysan-code-padding-x, 1em) !important;
+}
+
+body.bysan-code-block-point-size :is(.markdown-preview-view, .markdown-rendered) pre:not(.frontmatter) > code {
+  font-size: inherit !important;
 }
 
 :is(.markdown-preview-view, .markdown-rendered) pre:not(.frontmatter) > code {
@@ -259,12 +269,12 @@ body.table-width-auto .markdown-source-view.mod-cm6 :is(.cm-table-widget, .cm-em
 .markdown-source-view.mod-cm6 :is(.cm-table-widget, .cm-embed-block) table thead {
   background-color: var(--bysan-table-head-bg) !important;
   border-bottom: var(--bysan-table-border-width, 1.2pt) solid var(--bysan-table-border);
-  font-weight: var(--bysan-table-header-weight, 800);
 }
 
 :is(.markdown-preview-view, .markdown-rendered) table:not(.dataview) thead > tr > th,
 .markdown-source-view.mod-cm6 :is(.cm-table-widget, .cm-embed-block) table thead > tr > th {
   background-color: var(--bysan-table-head-bg) !important;
+  font-weight: var(--bysan-table-header-weight, 800);
 }
 
 body :is(.markdown-preview-view, .markdown-rendered) table:not(.dataview) tbody > tr:nth-child(even),
@@ -298,6 +308,10 @@ body .markdown-source-view.mod-cm6 :is(.cm-table-widget, .cm-embed-block) table 
   margin-left: 0;
   padding: var(--bysan-quote-padding-y, 0.55em)
     var(--bysan-quote-padding-x, 2em) !important;
+}
+
+body.bysan-quote-point-size .markdown-source-view.mod-cm6.is-live-preview .HyperMD-quote {
+  font-size: var(--bysan-quote-font-size);
 }
 
 body.bysan-style-controller-active

@@ -1,6 +1,6 @@
 /**
  * Bysan Style Controller
- * Version: 0.18.2
+ * Version: 0.18.3
  *
  * Owns visual presentation and provides switchable, integrated Bysan modules.
  */
@@ -18,9 +18,14 @@ const {
 /* Obsidian evaluates main.js without a plugin-local CommonJS base path. Resolve
  * the helper through the active vault so the plugin remains portable. */
 globalThis.__bysanObsidianSetting = Setting;
-const { ThemeControls, addValueStepper } = require(app.vault.adapter.getFullPath(
+const themeControlsPath = app.vault.adapter.getFullPath(
   ".obsidian/plugins/bysan-style-controller/theme-controls.js"
-));
+);
+// Obsidian's plugin require wrapper does not expose Node's module cache.
+// Reload only our helper so a plugin reload cannot mix old controls with new main.js.
+const requireThemeHelper = require("module").createRequire(themeControlsPath);
+delete requireThemeHelper.cache[requireThemeHelper.resolve(themeControlsPath)];
+const { ThemeControls, addValueStepper, addPointSizeStepper, readFontPoints, addStyleDropdown, FONT_WEIGHTS } = requireThemeHelper(themeControlsPath);
 const { resolveLanguage, translate } = require(app.vault.adapter.getFullPath(
   ".obsidian/plugins/bysan-style-controller/i18n.js"
 ));
@@ -142,7 +147,8 @@ const PAGE_TITLE_CONTROLS = [
 const COMMON_THEME_IDS = new Set(
   [...NOTE_BODY_CONTROLS, ...NOTE_BACKGROUND_CONTROLS, ...EDITOR_MARK_CONTROLS, ...NOTE_MARK_CONTROLS,
     ...CALLOUT_CONTROLS, ...INTERFACE_COLOR_CONTROLS, ...NAVIGATION_COLOR_CONTROLS, ...TAB_COLOR_CONTROLS, ...PAGE_TITLE_CONTROLS,
-    ...NOTE_HEADING_CONTROLS.flat(), ...HEADING_BACKGROUND_CONTROLS.flat(), ["font-size-latex"], ["bysan-inline-code-border"]].map(([id]) => id)
+    ...NOTE_HEADING_CONTROLS.flat(), ...HEADING_BACKGROUND_CONTROLS.flat(), ["font-size-latex"],
+    ["bysan-inline-code-border"], ["bysan-code-block-font"], ["bysan-inline-code-font"]].map(([id]) => id)
 );
 
 /*
@@ -307,6 +313,9 @@ const CONTENT_GEOMETRY_CONTROLS = [
   ["hrMargin", "--bysan-hr-margin", "em", 0, 5, 0.1, "分隔线上下间距", "Divider vertical margin"],
   ["strongWeight", "--bysan-strong-weight", "", 100, 900, 50, "粗体字重", "Strong-text weight"]
 ];
+const GEOMETRY_FONT_TARGETS = {
+  inlineCodeFontSize: "p > code", codeBlockFontSize: "pre > code", quoteFontSize: "blockquote"
+};
 
 const CONTENT_GEOMETRY_DEFAULTS = {
   inlineCodeRadius: 2,
@@ -370,7 +379,10 @@ const CONTROLLED_CLASSES = [
   "bysan-table-left-aligned",
   "bysan-quote-system-font",
   "bysan-note-font-size-set",
-  "bysan-table-font-size-set"
+  "bysan-table-font-size-set",
+  "bysan-inline-code-point-size",
+  "bysan-code-block-point-size",
+  "bysan-quote-point-size"
 ];
 
 const CONTROLLED_PROPERTIES = [
@@ -784,6 +796,8 @@ module.exports = class BysanStyleController extends Plugin {
     this.lineRangeObserver?.disconnect();
     this.themeControls?.destroy();
     if (this.lineRangeFrame) window.cancelAnimationFrame(this.lineRangeFrame);
+    if (this.pointRefreshFrame) window.cancelAnimationFrame(this.pointRefreshFrame);
+    this.pointRefreshers?.clear();
     this.clearLineRangeLabels();
     this.baseThemeStyleEl?.remove();
     for (const module of INTEGRATED_MODULES) await this.stopIntegratedModule(module.id);
@@ -899,6 +913,7 @@ module.exports = class BysanStyleController extends Plugin {
     this.settings.stylePresetDirty = true;
     await this.saveData(this.settings);
     this.themeControls.applySetting(id);
+    this.schedulePointRefresh();
   }
 
 
@@ -940,6 +955,24 @@ module.exports = class BysanStyleController extends Plugin {
     this.settings.stylePresetDirty = true;
     await this.saveData(this.settings);
     this.themeControls.applySetting(id);
+    this.schedulePointRefresh();
+  }
+
+  addPointStepper(container, options) {
+    const refresh = addPointSizeStepper(container, { ...options, language: this.language });
+    (this.pointRefreshers ??= new Map()).set(container, refresh);
+    this.schedulePointRefresh();
+  }
+
+  schedulePointRefresh() {
+    if (!this.pointRefreshers?.size || this.pointRefreshFrame) return;
+    this.pointRefreshFrame = window.requestAnimationFrame(() => {
+      this.pointRefreshFrame = 0;
+      for (const [container, refresh] of this.pointRefreshers) {
+        if (container.isConnected) refresh();
+        else this.pointRefreshers.delete(container);
+      }
+    });
   }
 
 
@@ -1212,8 +1245,17 @@ module.exports = class BysanStyleController extends Plugin {
     );
     for (const [key, property, unit] of CONTENT_GEOMETRY_CONTROLS) {
       const fallback = CONTENT_GEOMETRY_DEFAULTS[key];
-      const value = Number.isFinite(Number(this.settings[key]))
-        ? Number(this.settings[key])
+      const stored = this.settings[key];
+      const isPointSize = Object.hasOwn(GEOMETRY_FONT_TARGETS, key) && typeof stored === "string" && /^\d+(?:\.\d+)?pt$/.test(stored);
+      if (key === "inlineCodeFontSize") body.classList.toggle("bysan-inline-code-point-size", isPointSize);
+      if (key === "codeBlockFontSize") body.classList.toggle("bysan-code-block-point-size", isPointSize);
+      if (key === "quoteFontSize") body.classList.toggle("bysan-quote-point-size", isPointSize);
+      if (isPointSize) {
+        body.style.setProperty(property, stored);
+        continue;
+      }
+      const value = Number.isFinite(Number(stored))
+        ? Number(stored)
         : fallback;
       body.style.setProperty(property, `${value}${unit}`);
     }
@@ -1222,6 +1264,7 @@ module.exports = class BysanStyleController extends Plugin {
     this.applyPalette();
     this.themeControls.applyVariables();
     this.scheduleLineRangeRefresh();
+    this.schedulePointRefresh();
   }
 
 
@@ -2052,7 +2095,7 @@ class BysanStyleSettingTab extends PluginSettingTab {
   renderCodeSettings(containerEl) {
     const controls = this.createAppearanceLayout(containerEl, sample =>
       this.renderMarkdownSample(sample, ["```js", "const n = 42;", "console.log(n);", "```"].join("\n")));
-    this.renderThemeGroups(controls, ["code"], false, id => id === "bysan-code-block-font");
+    this.renderNoteThemeControls(controls, [["bysan-code-block-font", "代码块字体", "Code block font"]]);
     this.createFeatureGroup(
       controls,
       this.plugin.language === "zh" ? "功能与渲染" : "Behaviour and rendering",
@@ -2135,9 +2178,9 @@ class BysanStyleSettingTab extends PluginSettingTab {
         paragraph.append(" / ");
         paragraph.createEl("em", { text: zh ? "斜体" : "Italic" });
       });
-      this.addNumberSetting(controls, zh ? "正文字号" : "Body font size",
+      this.addFontSizeSetting(controls, zh ? "正文字号" : "Body font size",
         zh ? "恢复后跟随 Obsidian 的字体大小。" : "Reset to follow Obsidian’s font size.",
-        "noteFontSize", 8, 48, 1, "px",
+        "noteFontSize", ".markdown-rendered", "px",
         () => parseFloat(getComputedStyle(document.body).getPropertyValue("--font-text-size")) || 16);
       this.renderNoteThemeControls(controls, NOTE_BODY_CONTROLS);
       this.renderGeometryControls(controls, "strong");
@@ -2276,6 +2319,7 @@ class BysanStyleSettingTab extends PluginSettingTab {
         if (this.app.vault.getConfig?.("showIndentGuide")) {
           sample.closest(".markdown-rendered")?.classList.add("show-indentation-guide");
         }
+        this.plugin.schedulePointRefresh();
       })
       .catch(error => console.warn("[Bysan Style Controller] Could not render settings sample", error));
   }
@@ -2309,7 +2353,7 @@ class BysanStyleSettingTab extends PluginSettingTab {
       const paragraph = sample.createEl("p", { text: this.plugin.language === "zh" ? "行内代码示例 " : "Inline code sample " });
       paragraph.createEl("code", { text: "np.arange(0, 1)" });
     });
-    this.renderThemeGroups(controls, ["code"], false, id => id === "bysan-inline-code-font");
+    this.renderNoteThemeControls(controls, [["bysan-inline-code-font", "行内代码字体", "Inline code font"]]);
     this.createFeatureGroup(
       controls,
       this.plugin.language === "zh" ? "明暗外观" : "Light and dark appearance",
@@ -2344,12 +2388,9 @@ class BysanStyleSettingTab extends PluginSettingTab {
       "tableStripeLight", "tableStripeDark");
     this.addDualColor(grid, this.plugin.t("palette.tableHover"), "tableHoverLight", "tableHoverDark");
     this.addDualColor(grid, this.plugin.t("palette.tableBorder"), "tableBorderLight", "tableBorderDark");
-    this.addNumberSetting(grid, zh ? "表格字号" : "Table font size",
+    this.addFontSizeSetting(grid, zh ? "表格字号" : "Table font size",
       zh ? "恢复后使用主题的表格字号。" : "Reset to use the theme’s table font size.",
-      "tableFontSize", 7, 48, 1, "px", () => {
-        const cell = containerEl.querySelector(".bysan-appearance-sample td");
-        return cell ? parseFloat(cell.ownerDocument.defaultView.getComputedStyle(cell).fontSize) || 14 : 14;
-      });
+      "tableFontSize", "td", "px");
     this.renderGeometryControls(grid, "table");
     this.renderThemeGroups(controls, ["tables"], false);
   }
@@ -2359,7 +2400,15 @@ class BysanStyleSettingTab extends PluginSettingTab {
     const controls = this.createAppearanceLayout(containerEl, sample =>
       this.renderMarkdownSample(sample, this.plugin.language === "zh" ? "> 一段引用文字。" : "> A sample blockquote."));
     const grid = controls.createDiv({ cls: "bysan-theme-grid" });
-    this.addToggle(grid, this.plugin.t("components.quoteSerif"), this.plugin.t("components.quoteSerifDesc"), "quoteSerif");
+    const zh = this.plugin.language === "zh";
+    const quoteFont = new Setting(grid).setName(zh ? "引用字体样式" : "Blockquote font style")
+      .addDropdown(dropdown => dropdown
+        .addOption("serif", zh ? "衬线字体" : "Serif")
+        .addOption("body", zh ? "跟随正文" : "Use body font")
+        .setValue(this.plugin.settings.quoteSerif ? "serif" : "body")
+        .onChange(value => this.plugin.updateSetting("quoteSerif", value === "serif")));
+    quoteFont.settingEl.addClass("bysan-control-type-select");
+    quoteFont.settingEl.dataset.bysanSettingKeys = "quoteSerif";
     this.addDualColor(grid, this.plugin.t("palette.quoteBg"), "quoteBgLight", "quoteBgDark", "quoteBgOpacityLight", "quoteBgOpacityDark");
     this.addDualColor(grid, this.plugin.t("palette.quoteBorder"), "quoteBorderLight", "quoteBorderDark");
     this.renderGeometryControls(grid, "quote");
@@ -2524,9 +2573,25 @@ class BysanStyleSettingTab extends PluginSettingTab {
   renderGeometryControls(containerEl, groupId) {
     const entries = CONTENT_GEOMETRY_CONTROLS.filter(([key]) => key.startsWith(groupId));
     for (const [key, property, unit, minimum, maximum, step, controlZh, controlEn] of entries) {
+      const name = this.plugin.language === "zh" ? controlZh : controlEn;
+      if (Object.hasOwn(GEOMETRY_FONT_TARGETS, key)) {
+        this.addFontSizeSetting(containerEl, name, "", key, GEOMETRY_FONT_TARGETS[key], "pt");
+        continue;
+      }
+      if (key.endsWith("Weight")) {
+        const setting = new Setting(containerEl).setName(name);
+        setting.settingEl.dataset.bysanSettingKeys = key;
+        addStyleDropdown(setting, {
+          language: this.plugin.language, label: name, choices: FONT_WEIGHTS, stored: this.plugin.settings[key],
+          defaultValue: DEFAULT_SETTINGS[key],
+          save: value => this.plugin.updateSetting(key, Number(value)),
+          reset: () => this.plugin.resetSetting(key)
+        });
+        continue;
+      }
       const setting = this.addNumberSetting(
         containerEl,
-        this.plugin.language === "zh" ? controlZh : controlEn,
+        name,
         "",
         key,
         minimum,
@@ -2536,6 +2601,33 @@ class BysanStyleSettingTab extends PluginSettingTab {
       );
       setting.infoEl.title = `${property} · ${minimum}–${maximum}${unit}`;
     }
+  }
+
+  addFontSizeSetting(containerEl, name, description, key, target, storageUnit, fallbackPx = () => 16) {
+    const setting = new Setting(containerEl).setName(name).setDesc(description);
+    const read = () => {
+      const stored = this.plugin.settings[key];
+      if (storageUnit === "px" && Number.isFinite(stored) && stored > 0) {
+        return Number((stored * 0.75).toFixed(2));
+      }
+      if (storageUnit === "pt" && typeof stored === "string" && /^\d+(?:\.\d+)?pt$/.test(stored)) {
+        return parseFloat(stored);
+      }
+      const sample = containerEl.closest(".bysan-appearance-layout")
+        ?.querySelector(`.bysan-appearance-sample ${target}`);
+      return readFontPoints(sample, fallbackPx());
+    };
+    this.plugin.addPointStepper(setting.controlEl, {
+      label: name, read,
+      save: value => this.plugin.updateSetting(key, storageUnit === "px" ? value / 0.75 : `${value}pt`),
+      reset: async () => {
+        await this.plugin.resetSetting(key);
+        return read();
+      }
+    });
+    setting.settingEl.addClass("bysan-unified-control-setting", "bysan-stepper-setting");
+    setting.settingEl.dataset.bysanSettingKeys = key;
+    return setting;
   }
 
 

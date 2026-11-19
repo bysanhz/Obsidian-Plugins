@@ -81,14 +81,82 @@ const COMPATIBILITY_ONLY_IDS = new Set([
   "font-monospace-theme"
 ]);
 
-const CODE_FONT_OPTIONS = new Map([
-  ["obsidian", "var(--font-monospace, monospace)"],
-  ...[
-    "JetBrains Mono", "Fira Code", "Cascadia Code", "Consolas", "Menlo",
-    "DejaVu Sans Mono", "Liberation Mono", "Noto Sans Mono", "Noto Sans Mono CJK SC",
-    "Sarasa Mono SC", "Ubuntu Mono", "Courier New"
-  ].map(family => [family, `"${family}", monospace`])
-]);
+const CODE_FONT_IDS = new Set(["bysan-code-block-font", "bysan-inline-code-font"]);
+const CODE_FONTS = [
+  "JetBrains Mono", "Fira Code", "Cascadia Code", "Consolas", "Menlo",
+  "DejaVu Sans Mono", "Liberation Mono", "Noto Sans Mono", "Noto Sans Mono CJK SC",
+  "Sarasa Mono SC", "Ubuntu Mono", "Courier New"
+];
+const TEXT_FONTS = {
+  "Noto Sans CJK SC": "sans-serif", "Noto Serif CJK SC": "serif",
+  "Source Han Sans SC": "sans-serif", "Source Han Serif SC": "serif",
+  "LXGW WenKai": "serif", "Microsoft YaHei": "sans-serif", "PingFang SC": "sans-serif",
+  SimSun: "serif", Inter: "sans-serif", Arial: "sans-serif", Calibri: "sans-serif",
+  Georgia: "serif", "Times New Roman": "serif"
+};
+
+function isFontFamilySetting(item) {
+  return item.type === "variable-text" && (CODE_FONT_IDS.has(item.id) ||
+    /^(?:font-text-theme$|font-family-|font-loading-text$|h[1-6]-font$|inline-title-font$)/.test(item.id));
+}
+
+const FONT_WEIGHTS = [
+  ["100", "极细", "Thin"], ["200", "特细", "Extra light"], ["300", "细体", "Light"],
+  ["400", "常规", "Regular"], ["500", "中等", "Medium"], ["600", "半粗", "Semibold"],
+  ["700", "粗体", "Bold"], ["800", "特粗", "Extra bold"], ["900", "黑体", "Black"]
+];
+const LINE_STYLES = [
+  ["none", "无线条", "None"], ["solid", "实线", "Solid"], ["dotted", "点线", "Dotted"],
+  ["dashed", "虚线", "Dashed"], ["double", "双实线", "Double"], ["wavy", "波浪线", "Wavy"]
+];
+const BULLET_SYMBOLS = [
+  ['"\\2022"', "• 圆点", "• Bullet"], ['"\\25E6"', "◦ 空心圆", "◦ Open circle"],
+  ['"\\25AA"', "▪ 方点", "▪ Square"], ['"◆"', "◆ 菱形", "◆ Diamond"],
+  ['"→"', "→ 箭头", "→ Arrow"], ['"–"', "– 短横", "– Dash"]
+];
+const ORDERED_MARKERS = [
+  ["decimal", "1, 2, 3", "1, 2, 3"], ["decimal-leading-zero", "01, 02, 03", "01, 02, 03"],
+  ["lower-latin", "a, b, c", "a, b, c"], ["upper-latin", "A, B, C", "A, B, C"],
+  ["lower-roman", "i, ii, iii", "i, ii, iii"], ["upper-roman", "I, II, III", "I, II, III"],
+  ["cjk-ideographic", "一、二、三", "一、二、三"]
+];
+
+function cssStyleChoices(id) {
+  if (/^(?:h[1-6]-weight$|inline-title-weight$|font-weight-highlight-[1-3]$)/.test(id)) return FONT_WEIGHTS;
+  if (id === "font-style-em") return [["normal", "直立", "Upright"], ["italic", "斜体", "Italic"], ["oblique", "倾斜", "Oblique"]];
+  if (/^(?:h[1-6]-underline-style$|inline-title-underline-style$)/.test(id)) {
+    return LINE_STYLES.filter(([value]) => value !== "wavy");
+  }
+  if (/^cloze-decoration(?:-[23])?$/.test(id)) return LINE_STYLES;
+  if (/^list-ul-marker-[1-4]$/.test(id)) return BULLET_SYMBOLS;
+  if (/^list-ol-marker-[1-4]$/.test(id)) return ORDERED_MARKERS;
+  if (id === "fancy-hr-icon") return ["😀", "✦", "◆", "✿", "❖", "⁂"].map(char => [`'${char}'`, char, char]);
+  return null;
+}
+
+function addStyleDropdown(setting, { language, label, choices, stored, defaultValue, save, reset }) {
+  const zh = language === "zh";
+  setting.settingEl.addClass("bysan-control-type-select");
+  const normalizeChoice = value => choices === FONT_WEIGHTS && value === "normal" ? "400"
+    : choices === FONT_WEIGHTS && value === "bold" ? "700" : String(value ?? "");
+  setting.addDropdown(dropdown => {
+    const effectiveDefault = normalizeChoice(defaultValue);
+    const defaultLabel = choices.find(([value]) => value === effectiveDefault)?.[zh ? 1 : 2] || effectiveDefault;
+    dropdown.addOption("default", defaultLabel
+      ? (zh ? `默认（${defaultLabel}）` : `Default (${defaultLabel})`)
+      : (zh ? "沿用默认" : "Use default"));
+    for (const [value, cn, en] of choices) dropdown.addOption(value, zh ? cn : en);
+    const current = normalizeChoice(stored);
+    if (current && !choices.some(([value]) => value === current)) {
+      dropdown.addOption(current, zh ? `当前自定义：${current}` : `Current custom: ${current}`);
+    }
+    dropdown.setValue(current || "default").onChange(value => {
+      if (value === "default") void reset();
+      else void save(value);
+    });
+    dropdown.selectEl.setAttribute("aria-label", label);
+  });
+}
 
 const NOTE_PAPER_COLOR_IDS = ["bysan-note-page-bg", "bg-color-notebook", "stripe-notebook-stripe-color"];
 const NOTE_PAPER_PATTERN_IDS = ["background-notebook-liked-switch", "notebook-liked-markdown-page-options"];
@@ -440,6 +508,8 @@ const CONTROL_COPY = {
 
 function localised(item, key, language) {
   if (key === "title") {
+    const headingFont = /^(h[1-6])-font$/.exec(item.id);
+    if (headingFont) return `${headingFont[1].toUpperCase()} ${language === "zh" ? "字体" : "font"}`;
     const match = /^hr-color-(icon|numbers-line)-([1-4])$/.exec(item.id);
     if (match) {
       const [, kind, side] = match;
@@ -593,7 +663,7 @@ function rgbToHsl(red, green, blue) {
 }
 
 
-function addValueStepper(containerEl, { label, language, value, unit = "", numeric = false, edit, adjust, save, reset }) {
+function addValueStepper(containerEl, { label, language, value, unit = "", numeric = false, edit, adjust, save, reset, read }) {
   const zh = language === "zh";
   const controls = containerEl.createDiv({ cls: "bysan-value-stepper" });
   let current = String(value);
@@ -613,13 +683,17 @@ function addValueStepper(containerEl, { label, language, value, unit = "", numer
     set(next);
     if (changed) void save(next);
   };
-  const step = direction => apply(adjust(current, direction));
+  const step = direction => {
+    if (read) set(read());
+    apply(adjust(current, direction));
+  };
   action("−", zh ? `减小${label}` : `Decrease ${label}`, () => step(-1));
   const input = controls.createEl("input", {
     attr: { type: numeric ? "number" : "text", "aria-label": unit ? `${label} (${unit})` : label }
   });
   if (numeric) input.step = "any";
   set(value);
+  if (read) input.addEventListener("focus", () => set(read()));
   input.addEventListener("change", () => apply(edit(input.value)));
   input.addEventListener("keydown", event => {
     if (event.key === "Enter") {
@@ -633,13 +707,23 @@ function addValueStepper(containerEl, { label, language, value, unit = "", numer
   action("+", zh ? `增大${label}` : `Increase ${label}`, () => step(1));
   if (numeric) controls.createSpan({ cls: "bysan-stepper-unit", text: unit });
   action("↺", zh ? `恢复${label}默认值` : `Reset ${label}`, async () => set(await reset()));
+  return () => { if (read && !input.matches(":focus")) set(read()); };
 }
 
-function stepCssFontSize(value, direction) {
-  const [, amount, unit] = String(value).trim().match(/^(\d+(?:\.\d+)?|\.\d+)(px|em|rem|pt|%)$/i) || [];
-  if (!unit) return null;
-  const increment = /^(em|rem)$/i.test(unit) ? 0.05 : unit === "%" ? 5 : 1;
-  return `${Math.max(0, Number((Number(amount) + increment * direction).toFixed(4)))}${unit}`;
+function readFontPoints(element, fallbackPx = 16) {
+  const px = element ? parseFloat(element.ownerDocument.defaultView.getComputedStyle(element).fontSize) : NaN;
+  return Number(((px > 0 ? px : fallbackPx) * 0.75).toFixed(2));
+}
+
+function addPointSizeStepper(containerEl, { label, language, read, save, reset }) {
+  const bound = value => Number(clamp(value, 4, 192).toFixed(2));
+  return addValueStepper(containerEl, {
+    label, language, value: read(), read, save, reset, unit: "pt", numeric: true,
+    edit: value => value.trim() && Number.isFinite(Number(value)) ? bound(Number(value)) : null,
+    adjust: (value, direction) => bound(direction > 0
+      ? Math.floor(Number(value) + 0.001) + 1
+      : Math.ceil(Number(value) - 0.001) - 1)
+  });
 }
 
 class ThemeControls {
@@ -1295,8 +1379,18 @@ class ThemeControls {
   }
 
   renderControl(setting, item, title, presentation = null) {
-    if (item.id === "bysan-code-block-font" || item.id === "bysan-inline-code-font") {
-      this.addCodeFontPicker(setting, item, title);
+    if (isFontFamilySetting(item)) {
+      this.addFontPicker(setting, item, title);
+      return;
+    }
+    const choices = item.type === "variable-text" && cssStyleChoices(item.id);
+    if (choices) {
+      addStyleDropdown(setting, {
+        language: this.plugin.language, label: title, choices, stored: this.stored[item.id],
+        defaultValue: this.defaultValueFor(item),
+        save: value => this.plugin.updateThemeSetting(item.id, value),
+        reset: () => this.plugin.resetThemeSetting(item.id)
+      });
       return;
     }
     if (item.type === "class-toggle") {
@@ -1334,23 +1428,32 @@ class ThemeControls {
       return;
     }
 
-    const fontSize = /^(?:font-size-|h[1-6]-size$|inline-title-size$)/.test(item.id);
-    if (fontSize || (presentation && item.type === "variable-number")) {
-      const numeric = !fontSize;
+    const fontSize = /^(?:font-size-|h[1-6]-size$|inline-title-size$|list-ul-marker-size(?:-[1-4])?$)/.test(item.id);
+    if (fontSize) {
+      setting.settingEl.addClass("bysan-stepper-setting");
+      const read = () => this.readPointSize(setting, item);
+      this.plugin.addPointStepper(setting.controlEl, {
+        label: title, read,
+        save: value => this.plugin.updateThemeSetting(item.id, `${value}pt`),
+        reset: async () => {
+          await this.plugin.resetThemeSetting(item.id);
+          return read();
+        }
+      });
+      return;
+    }
+    if (presentation && item.type === "variable-number") {
       setting.settingEl.addClass("bysan-stepper-setting");
       addValueStepper(setting.controlEl, {
         label: title,
         language: this.plugin.language,
         value: this.displayValueFor(item) ?? "",
-        numeric,
+        numeric: true,
         edit: value => {
           const trimmed = value.trim();
-          if (fontSize) return CSS.supports("font-size", trimmed) ? trimmed : null;
           return trimmed && Number.isFinite(Number(trimmed)) && Number(trimmed) > 0 ? Number(trimmed) : null;
         },
-        adjust: (value, direction) => fontSize
-          ? stepCssFontSize(value, direction)
-          : Math.max(0.1, Number((Number(value) + 0.05 * direction).toFixed(2))),
+        adjust: (value, direction) => Math.max(0.1, Number((Number(value) + 0.05 * direction).toFixed(2))),
         save: value => this.plugin.updateThemeSetting(item.id, value),
         reset: async () => {
           await this.plugin.resetThemeSetting(item.id);
@@ -1388,21 +1491,51 @@ class ThemeControls {
     }
   }
 
-  addCodeFontPicker(setting, item, title) {
+  readPointSize(setting, item) {
+    const row = setting.settingEl;
+    const container = row.closest(".bysan-appearance-layout") || row.closest(".bysan-settings-section");
+    const target = {
+      "inline-title-size": ".bysan-appearance-sample .inline-title",
+      "font-size-latex": ".bysan-appearance-sample .math-block mjx-container",
+      "font-size-outline": ".bysan-sample-nav .outline .tree-item-self",
+      "font-size-folder-and-file": ".bysan-sample-nav .nav-file-title"
+    }[item.id] || (/^h([1-6])-size$/.exec(item.id)?.[1] && `.bysan-appearance-sample ${item.id.slice(0, 2)}`);
+    const sample = target && container?.querySelector(target);
+    if (sample) return readFontPoints(sample);
+    const doc = row.ownerDocument;
+    const probe = doc.createElement("span");
+    probe.style.cssText = "position:absolute;visibility:hidden;pointer-events:none";
+    probe.style.fontSize = String(this.displayValueFor(item) ?? "");
+    row.append(probe);
+    try {
+      return readFontPoints(probe);
+    } finally {
+      probe.remove();
+    }
+  }
+
+  addFontPicker(setting, item, title) {
     const zh = this.plugin.language === "zh";
+    const monospace = CODE_FONT_IDS.has(item.id);
+    const options = new Map([
+      ["obsidian", monospace ? "var(--font-monospace, monospace)" :
+        item.id === "font-text-theme" ? "var(--font-text-override, var(--font-default, sans-serif))" : "var(--font-text, sans-serif)"],
+      ...(monospace ? CODE_FONTS.map(name => [name, `"${name}", monospace`]) :
+        Object.entries(TEXT_FONTS).map(([name, fallback]) => [name, `"${name}", ${fallback}`]))
+    ]);
     const current = String(this.stored[item.id] ?? "");
-    const selected = [...CODE_FONT_OPTIONS].find(([, value]) => value === current)?.[0]
+    const selected = [...options].find(([, value]) => value === current)?.[0]
       || (current ? "custom" : "default");
     setting.settingEl.addClass("bysan-code-font-control");
     let picker;
     setting.addDropdown(dropdown => {
       picker = dropdown.addOption("default", zh ? "沿用主题或旧配置" : "Use theme or legacy font");
-      for (const [key] of CODE_FONT_OPTIONS) {
-        picker.addOption(key, key === "obsidian" ? (zh ? "跟随 Obsidian 等宽字体" : "Use Obsidian monospace font") : key);
+      for (const [key] of options) {
+        picker.addOption(key, key === "obsidian" ? (zh ? "跟随 Obsidian 字体" : "Use Obsidian font") : key);
       }
       picker.addOption("custom", zh ? "自定义字体…" : "Custom font…").setValue(selected);
       picker.selectEl.setAttribute("aria-label", title);
-      picker.selectEl.title = zh ? "未安装所选字体时使用系统备用等宽字体。" : "Falls back to a system monospace font if the selected font is not installed.";
+      picker.selectEl.title = zh ? "未安装所选字体时使用备用字体。" : "Uses a fallback font if the selected family is not installed.";
     });
     const input = setting.controlEl.createEl("input", {
       cls: "bysan-custom-code-font",
@@ -1446,7 +1579,7 @@ class ThemeControls {
         }
         input.focus();
       } else if (value === "default") void this.plugin.resetThemeSetting(item.id);
-      else if (CODE_FONT_OPTIONS.has(value)) void this.plugin.updateThemeSetting(item.id, CODE_FONT_OPTIONS.get(value));
+      else if (options.has(value)) void this.plugin.updateThemeSetting(item.id, options.get(value));
     });
   }
 
@@ -1579,4 +1712,4 @@ class ThemeControls {
 }
 
 
-module.exports = { ThemeControls, addValueStepper, ADVANCED_THEME_TOPICS };
+module.exports = { ThemeControls, addValueStepper, addPointSizeStepper, readFontPoints, addStyleDropdown, FONT_WEIGHTS, ADVANCED_THEME_TOPICS };

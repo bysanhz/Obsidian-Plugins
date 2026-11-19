@@ -67,13 +67,27 @@ const sandbox = {
 };
 vm.runInNewContext(
   themeSource.replace(
-    "module.exports = { ThemeControls, addValueStepper, ADVANCED_THEME_TOPICS };",
-    "module.exports = { ThemeControls, parseColor, colorWithAlpha, ADVANCED_MODE_PAIRS, COMPATIBILITY_ONLY_IDS, optionLabel };"
+    "module.exports = { ThemeControls, addValueStepper, addPointSizeStepper, readFontPoints, addStyleDropdown, FONT_WEIGHTS, ADVANCED_THEME_TOPICS };",
+    "module.exports = { ThemeControls, parseColor, colorWithAlpha, ADVANCED_MODE_PAIRS, COMPATIBILITY_ONLY_IDS, optionLabel, isFontFamilySetting, cssStyleChoices, readFontPoints };"
   ),
   sandbox
 );
 const { ThemeControls, parseColor, colorWithAlpha } = sandbox.module.exports;
 const { optionLabel, COMPATIBILITY_ONLY_IDS } = sandbox.module.exports;
+const { isFontFamilySetting, cssStyleChoices, readFontPoints } = sandbox.module.exports;
+for (const id of ["bysan-code-block-font", "bysan-inline-code-font", "font-text-theme", "h1-font",
+  "inline-title-font", "font-family-folder-file-title", "font-family-tag", "font-loading-text"]) {
+  assert(isFontFamilySetting({id, type:"variable-text"}), `missing shared family picker for ${id}`);
+}
+assert(!isFontFamilySetting({id:"font-size-outline", type:"variable-text"}));
+for (const id of ["h1-weight", "inline-title-weight", "font-style-em", "h6-underline-style",
+  "font-weight-highlight-2", "list-ul-marker-4", "list-ol-marker-2", "fancy-hr-icon", "cloze-decoration-3"]) {
+  const choices = cssStyleChoices(id);
+  assert(choices?.length > 1 && new Set(choices.map(([value]) => value)).size === choices.length,
+    `missing or duplicated style choices: ${id}`);
+}
+assert.equal(cssStyleChoices("inline-title-bg-url"), null, "custom URLs should remain editable");
+assert.equal(readFontPoints(null, 16), 12, "CSS pixels must convert to typographic points");
 for (const id of ["font-family-inline-code", "font-monospace-theme"]) {
   assert(COMPATIBILITY_ONLY_IDS.has(id), `legacy code font still visible: ${id}`);
 }
@@ -252,7 +266,7 @@ const mountedGroups = [...mainSource.matchAll(/this\.renderThemeGroups\((?:body|
 const expectedGroups = [
   "general", "workspace-background", "tabs", "navigation", "window", "canvas", "graph",
   "pdf", "plugins", "documents", "note-background", "marks", "headings", "typography",
-  "lists", "blocks", "embeds", "math", "code", "code", "tables", "quotes"
+  "lists", "blocks", "embeds", "math", "tables", "quotes"
 ];
 assert.deepStrictEqual(mountedGroups.sort(), expectedGroups.sort(), "every theme group must be mounted exactly once");
 assert(mainSource.includes('this.renderCompactSample(containerEl, "tags"'), "missing preview colocated with tag controls");

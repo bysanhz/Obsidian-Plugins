@@ -309,6 +309,31 @@ for (const method of [
 assert(!mainSource.includes('createSubarea(content, "palette"'), "legacy standalone dual-mode palette area still rendered");
 assert(!mainSource.includes('createMajorArea(\n      areas,\n      "theme"'), "legacy full-theme major area still rendered");
 assert(mainSource.includes('this.renderEditorRegionSettings(content)'), "note appearance is not rendered in the content tab");
+const settingsTabStart = mainSource.indexOf("class BysanStyleSettingTab extends PluginSettingTab");
+assert(settingsTabStart >= 0, "missing Style Controller setting tab");
+const SettingsTab = vm.runInNewContext(
+  `${mainSource.slice(settingsTabStart)}\nBysanStyleSettingTab`, { PluginSettingTab: class {} }
+);
+for (const [value, priority] of [["", ""], ["grid", "important"]]) {
+  for (const willThrow of [false, true]) {
+    let display = [value, priority];
+    const tab = new SettingsTab({}, {});
+    tab.containerEl = { style: {
+      getPropertyValue: () => display[0],
+      getPropertyPriority: () => display[1],
+      setProperty: (_, value, priority) => { display = [value, priority]; },
+      removeProperty: () => { display = ["", ""]; }
+    } };
+    tab.renderSettings = container => {
+      assert.equal(container, tab.containerEl);
+      assert.deepEqual(display, ["none", "important"], "layout must be suspended during settings construction");
+      if (willThrow) throw Error("test rendering error");
+    };
+    if (willThrow) assert.throws(() => tab.display(), /test rendering error/);
+    else tab.display();
+    assert.deepEqual(display, [value, priority], "settings must restore the caller's display property");
+  }
+}
 for (const objectId of ["body-text", "headings", "code", "blocks", "text-details", "embeds"]) {
   assert(mainSource.includes(`createSettingsSection(containerEl, "${objectId}"`), `missing editor object group: ${objectId}`);
 }

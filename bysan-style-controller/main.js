@@ -1,6 +1,6 @@
 /**
  * Bysan Style Controller
- * Version: 0.18.8
+ * Version: 0.18.9
  *
  * Owns visual presentation and provides switchable, integrated Bysan modules.
  */
@@ -1603,6 +1603,21 @@ class BysanStyleSettingTab extends PluginSettingTab {
 
   display() {
     const { containerEl } = this;
+    const { style } = containerEl;
+    const previousDisplay = style.getPropertyValue("display");
+    const previousPriority = style.getPropertyPriority("display");
+    // Keep CSS inheritance for the live samples and pt controls, but suppress
+    // layout while building all sections (including those used by global search).
+    style.setProperty("display", "none", "important");
+    try {
+      this.renderSettings(containerEl);
+    } finally {
+      if (previousDisplay) style.setProperty("display", previousDisplay, previousPriority);
+      else style.removeProperty("display");
+    }
+  }
+
+  renderSettings(containerEl) {
     const zh = this.plugin.language === "zh";
     this.sampleComponent?.unload();
     this.sampleComponent = new Component();

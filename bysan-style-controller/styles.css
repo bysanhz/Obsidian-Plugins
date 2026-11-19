@@ -47,6 +47,65 @@ body {
     "Liberation Mono", "Courier New", monospace);
   --bysan-quote-font: "Latin Modern Roman", "Times New Roman", "Noto Serif CJK SC",
     serif;
+  --bysan-review-panel-bg-default: color-mix(in srgb, var(--background-primary) 88%, var(--interactive-accent) 12%);
+  --bysan-review-title-color: var(--text-accent);
+  --bysan-review-empty-bg: color-mix(in srgb, var(--background-primary) 76%, transparent);
+  --bysan-review-empty-text: var(--text-muted);
+  --bysan-review-empty-border: var(--background-modifier-border);
+  --bysan-review-card-bg: color-mix(in srgb, var(--background-primary) 90%, var(--interactive-accent) 10%);
+  --bysan-review-card-text: var(--text-normal);
+  --bysan-review-card-border: color-mix(in srgb, var(--interactive-accent) 24%, var(--background-modifier-border));
+}
+
+.bysan-heading-number-sample .ahn-reading-number {
+  display: inline-block;
+  color: var(--ahn-number-color, #6495ed);
+  font-weight: 700;
+  margin-inline-end: var(--bysan-heading-number-gap, 0.55em);
+}
+
+.bysan-review-sample {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border-radius: var(--radius-m);
+  background: var(--bysan-review-panel-bg, var(--bysan-right-pane-bg, var(--bysan-review-panel-bg-default)));
+}
+
+.bysan-review-sample .art-review-sidebar-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--bysan-review-title-color);
+  font-size: var(--font-ui-small);
+  font-weight: 700;
+}
+
+.bysan-review-sample .art-review-sidebar-title-icon svg {
+  display: block;
+  width: 15px;
+  height: 15px;
+}
+
+.bysan-review-sample :is(.art-review-sidebar-empty, .art-review-sidebar-card) {
+  padding: 7px;
+  border-radius: var(--radius-m);
+  font-size: var(--font-ui-small);
+}
+
+.bysan-review-sample .art-review-sidebar-empty {
+  background: var(--bysan-review-empty-bg);
+  color: var(--bysan-review-empty-text);
+  border: 1px dashed var(--bysan-review-empty-border);
+}
+
+.bysan-review-sample .art-review-sidebar-card {
+  background: var(--bysan-review-card-bg);
+  border: 1px solid var(--bysan-review-card-border);
+}
+
+.bysan-review-sample .art-review-sidebar-preview {
+  color: var(--bysan-review-card-text);
 }
 
 /* A fully transparent Chromium canvas is prone to stale-frame flashes when
@@ -2411,7 +2470,7 @@ table:not(.dataview) :is(th, td) {
 }
 
 .bysan-tag-example > .bysan-preview-caption {
-  flex: 0 0 7.5em;
+  flex: 0 1 11em;
 }
 
 .bysan-compact-preview [class*="bysan-sample-"],
@@ -2427,7 +2486,7 @@ table:not(.dataview) :is(th, td) {
   filter: none;
 }
 
-body.colorful-tag-bt .bysan-tag-example-palette {
+body.colorful-tag-bt :is(.bysan-tag-example-palette, .bysan-tag-palette-hint) {
   display: none;
 }
 

@@ -1,6 +1,6 @@
 /**
  * Bysan Style Controller
- * Version: 0.18.5
+ * Version: 0.18.6
  *
  * Owns visual presentation and provides switchable, integrated Bysan modules.
  */
@@ -13,7 +13,8 @@ const {
   Notice,
   Plugin,
   PluginSettingTab,
-  Setting
+  Setting,
+  setIcon
 } = require("obsidian");
 /* Obsidian evaluates main.js without a plugin-local CommonJS base path. Resolve
  * the helper through the active vault so the plugin remains portable. */
@@ -116,13 +117,32 @@ const INTERFACE_COLOR_CONTROLS = [
   ["status-bar-bg", "底部状态栏背景", "Status bar background"],
   ["interactive-accent", "界面强调色", "Interface accent colour"]
 ];
+const REVIEW_PANEL_CONTROLS = [
+  ["bysan-review-panel-bg", "面板底色", "Panel background",
+    "未单独设色时跟随右侧栏底色；右侧栏也未设色时沿用评论面板原配色。",
+    "Follows the right sidebar when customised there; otherwise uses the original panel colour."],
+  ["bysan-review-title-color", "面板标题文字与图标", "Panel title text and icon"],
+  ["bysan-review-empty-bg", "空状态提示框底色", "Empty-state box background"],
+  ["bysan-review-empty-text", "空状态提示文字", "Empty-state text"],
+  ["bysan-review-empty-border", "空状态提示框边框", "Empty-state box border"],
+  ["bysan-review-card-bg", "评论卡片底色", "Comment card background"],
+  ["bysan-review-card-text", "评论卡片正文文字", "Comment card text"],
+  ["bysan-review-card-border", "评论卡片边框", "Comment card border"]
+];
+const HEADING_NUMBER_CONTROLS = [
+  ["ahn-number-color", "编号颜色", "Number colour"],
+  ["bysan-heading-number-gap", "编号与标题间距", "Gap between number and heading",
+    "启用「学术标题编号」后适用于编辑、阅读、大纲和 PDF。em 会按各处的字号等比例变化。",
+    "With Academic heading numbering on, applies to editing, reading, outline and PDF. The em unit scales with the local font size."]
+];
 const SURFACE_COLORS = [
   ["bysan-note-page-bg", "background-primary"],
   ["bysan-mark-bg", "text-highlight-bg"],
   ["bysan-left-pane-bg", "bt-background-split-container"],
   ["bysan-right-pane-bg", "bt-background-split-container"],
   ["bysan-active-tab-bg", "tab-background-active"],
-  ["bysan-active-file-bg", "nav-item-background-active"]
+  ["bysan-active-file-bg", "nav-item-background-active"],
+  ...REVIEW_PANEL_CONTROLS.map(([id]) => [id, id === "bysan-review-panel-bg" ? "bysan-review-panel-bg-default" : undefined])
 ];
 const NOTE_HEADING_CONTROLS = Array.from({ length: 6 }, (_, index) => {
   const level = index + 1;
@@ -147,7 +167,7 @@ const PAGE_TITLE_CONTROLS = [
 const COMMON_THEME_IDS = new Set(
   [...NOTE_BODY_CONTROLS, ...NOTE_BACKGROUND_CONTROLS, ...EDITOR_MARK_CONTROLS, ...NOTE_MARK_CONTROLS,
     ...CALLOUT_CONTROLS, ...INTERFACE_COLOR_CONTROLS, ...NAVIGATION_COLOR_CONTROLS, ...TAB_COLOR_CONTROLS, ...PAGE_TITLE_CONTROLS,
-    ...NOTE_HEADING_CONTROLS.flat(), ...HEADING_BACKGROUND_CONTROLS.flat(), ["font-size-latex"],
+    ...NOTE_HEADING_CONTROLS.flat(), ...HEADING_BACKGROUND_CONTROLS.flat(), ...HEADING_NUMBER_CONTROLS, ...REVIEW_PANEL_CONTROLS, ["font-size-latex"],
     ["bysan-inline-code-border"], ["bysan-code-block-font"], ["bysan-inline-code-font"]].map(([id]) => id)
 );
 
@@ -1150,10 +1170,17 @@ module.exports = class BysanStyleController extends Plugin {
     for (const [id, fallbackVariable] of SURFACE_COLORS) {
       this.themeCatalog.settings.push({
         id, title: id, type: "variable-themed-color", format: "hex", opacity: true,
-        fallbackVariable, "default-light": "#00000000", "default-dark": "#00000000"
+        fallbackVariable, "default-light": "#00000000", "default-dark": "#00000000",
+        ...(id === "bysan-review-panel-bg" && {
+          liveDefault: mode => this.settings.themeSettings?.["bysan-right-pane-bg"]?.[mode]
+        })
       });
     }
     this.themeCatalog.settings.push(
+      { id: "ahn-number-color", title: "Heading number colour", type: "variable-themed-color", format: "hex",
+        opacity: true, "default-light": "#6495ed", "default-dark": "#6495ed" },
+      { id: "bysan-heading-number-gap", title: "Heading number gap", type: "variable-number",
+        format: "em", default: 0.55, min: 0, max: 2, step: 0.05 },
       { id: "bysan-code-block-font", title: "Code block font", type: "variable-text" },
       { id: "bysan-inline-code-font", title: "Inline code font", type: "variable-text" },
       {
@@ -1632,8 +1659,8 @@ class BysanStyleSettingTab extends PluginSettingTab {
     const zh = this.plugin.language === "zh";
     this.renderCompactSample(containerEl, "tags", zh ? "标签预览" : "Tag preview", sample => {
       for (const [type, label] of [
-        ["active", zh ? "当前样式" : "Current style"],
-        ["palette", zh ? "自定义彩色标签" : "Custom colourful tags"]
+        ["active", zh ? "笔记中实际显示" : "Shown in notes"],
+        ["palette", zh ? "彩色方案（未启用）" : "Colour scheme (not active)"]
       ]) {
         const line = sample.createDiv({ cls: `bysan-tag-example bysan-tag-example-${type}` });
         line.createSpan({ cls: "bysan-preview-caption", text: label });
@@ -1647,6 +1674,9 @@ class BysanStyleSettingTab extends PluginSettingTab {
           heading.createEl("a", { cls: "tag", text: zh ? "#上标" : "#superscript" });
         }
       }
+      sample.createDiv({ cls: "bysan-tag-palette-hint bysan-preview-caption", text: zh
+        ? "选中下方「标签样式 → 自定义彩色标签」才会应用标签颜色 1–5。"
+        : "Select “Tag style → Custom colourful tags” below to use colours 1–5 in notes." });
     });
   }
 
@@ -1945,6 +1975,20 @@ class BysanStyleSettingTab extends PluginSettingTab {
           this.plugin.t("review.badgeSizeDesc"), "reviewBadgeSize", 12, 24, 1, "px");
         badgeSetting.infoEl.createSpan({ cls: "bysan-badge-sample", text: "1",
           attr: { title: zh ? "评论角标样例" : "Comment badge sample" } });
+        this.createFeatureGroup(group, zh ? "文档评论面板配色" : "Document comments panel colours",
+          zh ? "启用「选区审阅工具栏」后生效。只调整评论面板，不影响评论角标或弹窗。"
+            : "With Selection review toolbar on, styles the comments panel without affecting badges or comment windows.", panel => {
+            const controls = this.createAppearanceLayout(panel, sample => {
+              const review = sample.createDiv({ cls: "bysan-review-sample" });
+              const title = review.createDiv({ cls: "art-review-sidebar-title" });
+              setIcon(title.createSpan({ cls: "art-review-sidebar-title-icon" }), "message-square");
+              title.createSpan({ text: zh ? "文档评论" : "Document comments" });
+              review.createDiv({ cls: "art-review-sidebar-empty", text: zh ? "当前文档还没有评论。" : "No comments in this note." });
+              review.createDiv({ cls: "art-review-sidebar-card" })
+                .createDiv({ cls: "art-review-sidebar-preview", text: zh ? "一条示例评论" : "An example comment" });
+            }, false);
+            this.renderNoteThemeControls(controls, REVIEW_PANEL_CONTROLS);
+          });
       }
     }
   }
@@ -2213,9 +2257,10 @@ class BysanStyleSettingTab extends PluginSettingTab {
     const targets = [
       ["title", zh ? "页面标题" : "Page title"],
       ...NOTE_HEADING_CONTROLS.map((_, index) => [String(index + 1), `H${index + 1}`]),
+      ["numbering", zh ? "标题编号（所有级别）" : "Heading numbers (all levels)"],
       ["shared", zh ? "通用标题设置" : "Shared heading settings"]
     ];
-    new Setting(body).setName(zh ? "调整哪一级标题" : "Heading to customise")
+    new Setting(body).setName(zh ? "调整哪项标题样式" : "Heading style to customise")
       .addDropdown(dropdown => {
         for (const [id, title] of targets) dropdown.addOption(id, title);
         this.headingPicker = dropdown.onChange(value => this.selectHeadingTarget(value));
@@ -2228,11 +2273,20 @@ class BysanStyleSettingTab extends PluginSettingTab {
       });
       const controls = this.createAppearanceLayout(panel, sample => {
         if (id === "title") sample.createDiv({ cls: "inline-title", text: zh ? "笔记名称" : "Note name" });
+        else if (id === "numbering") {
+          for (const [tag, number, label] of [["h1", "一、", zh ? "章标题" : "Chapter heading"],
+            ["h2", "1.1", zh ? "小节标题" : "Section heading"]]) {
+            const heading = sample.createEl(tag, { cls: "bysan-heading-number-sample" });
+            heading.createSpan({ cls: "ahn-reading-number", text: number });
+            heading.append(label);
+          }
+        }
         else sample.createEl(id === "shared" ? "h2" : `h${id}`, {
           text: id === "shared" ? (zh ? "文内标题" : "Section heading") : title
         });
       });
       if (id === "title") this.renderNoteThemeControls(controls, PAGE_TITLE_CONTROLS);
+      else if (id === "numbering") this.renderNoteThemeControls(controls, HEADING_NUMBER_CONTROLS);
       else if (id !== "shared") this.renderNoteThemeControls(controls,
         [...NOTE_HEADING_CONTROLS[Number(id) - 1], ...HEADING_BACKGROUND_CONTROLS[Number(id) - 1]]);
       this.renderThemeGroups(controls, ["headings"], false, itemId => targetFor(itemId) === id);
@@ -2290,9 +2344,9 @@ class BysanStyleSettingTab extends PluginSettingTab {
   }
 
 
-  createAppearanceLayout(containerEl, render) {
+  createAppearanceLayout(containerEl, render, labelled = true) {
     const layout = containerEl.createDiv({ cls: "bysan-appearance-layout" });
-    this.renderAppearanceSample(layout, render);
+    this.renderAppearanceSample(layout, render, labelled);
     return layout.createDiv({ cls: "bysan-appearance-controls" });
   }
 

@@ -104,6 +104,16 @@ for (const id of ["font-family-inline-code", "font-monospace-theme"]) {
   assert(COMPATIBILITY_ONLY_IDS.has(id), `legacy code font still visible: ${id}`);
 }
 const styleCss = fs.readFileSync(path.join(pluginRoot, "styles.css"), "utf8");
+const headingModuleCss = fs.readFileSync(path.join(pluginRoot, "modules", "academic-heading-numbering", "styles.css"), "utf8");
+for (const id of ["bysan-review-panel-bg", "bysan-review-title-color", "bysan-review-empty-bg",
+  "bysan-review-empty-text", "bysan-review-empty-border", "bysan-review-card-bg",
+  "bysan-review-card-text", "bysan-review-card-border"]) {
+  assert(mainSource.includes(`["${id}",`), `missing review setting: ${id}`);
+  assert(styleCss.includes(`var(--${id}`) && reviewModuleCss.includes(`var(--${id}`),
+    `preview and actual review sidebar do not share ${id}`);
+}
+assert.equal((headingModuleCss.match(/var\(--bysan-heading-number-gap, /g) || []).length, 3,
+  "heading gap must apply to editor, reading and outline");
 for (const id of ["bysan-code-block-font", "bysan-inline-code-font", "bysan-inline-code-border"]) {
   assert(mainSource.includes(`id: "${id}"`), `missing code appearance field: ${id}`);
 }
@@ -207,6 +217,8 @@ for (const [input, expectedHex, expectedAlpha] of [
   ["#11223380", "#112233", 128 / 255],
   ["rgba(1, 2, 3, 0.4)", "#010203", 0.4],
   ["rgb(1 2 3 / 40%)", "#010203", 0.4],
+  ["color(srgb 0.2 0.4 0.6 / 0.76)", "#336699", 0.76],
+  ["color(srgb 0.2 0.4 0.6 / 33%)", "#336699", 0.33],
   ["transparent", "#000000", 0]
 ]) {
   const parsed = parseColor(input);

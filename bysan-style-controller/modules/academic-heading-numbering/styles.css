@@ -40,7 +40,7 @@
     tabular-nums;
 
   margin-right:
-    var(--ahn-number-gap);
+    var(--bysan-heading-number-gap, var(--ahn-number-gap));
 
   white-space: nowrap;
 
@@ -75,7 +75,7 @@
   color: var(--ahn-number-color);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
-  margin-right: var(--ahn-number-gap);
+  margin-right: var(--bysan-heading-number-gap, var(--ahn-number-gap));
   white-space: nowrap;
   text-decoration: none;
   pointer-events: none;
@@ -116,7 +116,7 @@
     tabular-nums;
 
   margin-right:
-    0.4em;
+    var(--bysan-heading-number-gap, 0.4em);
 
   text-decoration:
     none;

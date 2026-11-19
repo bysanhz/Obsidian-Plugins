@@ -698,6 +698,14 @@ function parseColor(value) {
     return { hex: `#${hexPart}`, red, green, blue, alpha, valid: true };
   }
 
+  // Chromium serialises computed color-mix(in srgb, …) as color(srgb …).
+  const srgb = text.match(/^color\(srgb\s+(-?[\d.]+)\s+(-?[\d.]+)\s+(-?[\d.]+)(?:\s*\/\s*([\d.]+)(%)?)?\)$/i);
+  if (srgb) {
+    const [red, green, blue] = srgb.slice(1, 4).map(value => clamp(value, 0, 1) * 255);
+    const rgb = [red, green, blue].map(part => Math.round(part).toString(16).padStart(2, "0")).join("");
+    const alpha = srgb[4] == null ? 1 : clamp(Number(srgb[4]) / (srgb[5] ? 100 : 1), 0, 1);
+    return { hex: `#${rgb}`, red, green, blue, alpha, valid: true };
+  }
   return { hex: "#000000", red: 0, green: 0, blue: 0, alpha: 1, valid: false };
 }
 
@@ -1131,7 +1139,10 @@ class ThemeControls {
       }
       return;
     }
-    if (String(item.type || "").startsWith("variable-")) this.applyVariable(item);
+    if (String(item.type || "").startsWith("variable-")) {
+      this.applyVariable(item);
+      if (id === "bysan-right-pane-bg") this.refreshThemedColorControl("bysan-review-panel-bg");
+    }
   }
 
 
@@ -1517,16 +1528,22 @@ class ThemeControls {
     }
     if (presentation && item.type === "variable-number") {
       setting.settingEl.addClass("bysan-stepper-setting");
+      const min = item.min ?? 0.1;
+      const max = item.max ?? Infinity;
+      const step = item.step ?? 0.05;
       addValueStepper(setting.controlEl, {
         label: title,
         language: this.plugin.language,
         value: this.displayValueFor(item) ?? "",
+        unit: item.format || "",
         numeric: true,
         edit: value => {
           const trimmed = value.trim();
-          return trimmed && Number.isFinite(Number(trimmed)) && Number(trimmed) > 0 ? Number(trimmed) : null;
+          const parsed = Number(trimmed);
+          if (!trimmed || !Number.isFinite(parsed)) return null;
+          return item.min != null || item.max != null ? clamp(parsed, min, max) : parsed > 0 ? parsed : null;
         },
-        adjust: (value, direction) => Math.max(0.1, Number((Number(value) + 0.05 * direction).toFixed(2))),
+        adjust: (value, direction) => clamp(Number((Number(value) + step * direction).toFixed(2)), min, max),
         save: value => this.plugin.updateThemeSetting(item.id, value),
         reset: async () => {
           await this.plugin.resetThemeSetting(item.id);

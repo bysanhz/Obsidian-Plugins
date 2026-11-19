@@ -2042,36 +2042,44 @@ table:not(.dataview) :is(th, td) {
 }
 
 .bysan-style-settings .bysan-font-control button.bysan-font-trigger {
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
   gap: 0.5em;
-  flex: 1 1 7rem;
+  flex: 0 1 13.5rem;
   min-width: 0;
   max-width: 100%;
   padding-inline: 0.6em;
+  border-radius: var(--radius-m);
 }
 
-.bysan-font-trigger > span:first-child,
-.bysan-font-option > span:first-child {
+.bysan-font-trigger-label,
+.bysan-font-option-label {
   min-width: 0;
+  text-align: center;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  line-height: 1.35;
+}
+
+.bysan-font-trigger[aria-expanded="true"] .bysan-font-arrow {
+  transform: rotate(180deg);
 }
 
 .bysan-font-popover {
   position: fixed;
   inset: auto;
   margin: 0;
-  padding: 6px;
-  gap: 5px;
+  padding: 0;
   box-sizing: border-box;
+  overflow: hidden;
   max-width: calc(100vw - 16px);
   border: 1px solid var(--background-modifier-border);
   border-radius: var(--radius-m);
   background: var(--background-primary);
   color: var(--text-normal);
-  box-shadow: var(--shadow-s);
+  box-shadow: var(--shadow-l, var(--shadow-s));
   font-size: var(--font-ui-small);
 }
 
@@ -2080,54 +2088,86 @@ table:not(.dataview) :is(th, td) {
   grid-template-rows: auto minmax(0, 1fr) auto;
 }
 
+.bysan-font-search {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 4px;
+  padding: 7px;
+  background: var(--background-secondary);
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+
 .bysan-font-popover input[type="search"] {
   box-sizing: border-box;
   width: 100%;
   min-width: 0;
+  min-height: 28px;
+  border-radius: var(--radius-m);
   font-size: inherit;
+}
+
+.bysan-font-popover input[type="search"]:focus {
+  outline: 1px solid var(--interactive-accent);
+  outline-offset: 1px;
+}
+
+.bysan-font-rescan {
+  width: 22px;
+  padding-inline: 0;
 }
 
 .bysan-font-list {
   overflow: auto;
   overscroll-behavior: contain;
+  scrollbar-width: thin;
 }
 
 .bysan-font-option {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  min-height: 25px;
-  padding: 2px 7px;
-  border-radius: var(--radius-s);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-content: center;
+  gap: 3px;
+  min-height: 27px;
+  padding: 4px 7px;
   cursor: pointer;
 }
 
-.bysan-font-option[aria-selected="true"] {
-  color: var(--text-accent);
-  font-weight: 600;
+.bysan-font-option-with-sample {
+  min-height: 49px;
+  content-visibility: auto;
+  contain-intrinsic-block-size: auto 49px;
 }
 
-.bysan-font-option:is(.is-active, :hover) {
-  background: var(--background-modifier-hover);
+.bysan-font-option:is(.is-active, :hover, [aria-selected="true"]) {
+  background: var(--interactive-accent);
+  color: var(--text-on-accent, white);
 }
 
 .bysan-font-sample {
-  flex: none;
-  color: var(--text-muted);
+  display: flex;
+  justify-content: center;
+  align-items: baseline;
+  gap: 0.5em;
+  white-space: nowrap;
+  line-height: 1.25;
+  opacity: 0.88;
 }
 
-.bysan-font-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 6px;
+.bysan-font-status {
+  padding: 7px;
+  text-align: center;
   color: var(--text-muted);
   font-size: var(--font-ui-smaller);
 }
 
-.bysan-font-footer button {
-  flex: none;
+.bysan-font-status-quiet {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
 }
 
 .bysan-style-settings .bysan-settings-section-body .setting-item-control

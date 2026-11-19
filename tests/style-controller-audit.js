@@ -82,6 +82,8 @@ assert.deepEqual(Array.from(fontChoices(fontFaces, "霞鹜文楷", false, "zh"),
   ["LXGW WenKai", "LXGW WenKai Mono"], "localized aliases must rank exact matches and deduplicate faces");
 assert.equal(fontChoices(fontFaces, "wen-kai", true, "en")[0].family, "LXGW WenKai Mono");
 assert.equal(fontChoices(fontFaces, "思源黑体", false, "zh")[0].family, "Noto Sans CJK SC");
+assert.equal(fontChoices(fontFaces, "wenkai", true, "zh")[0].displayName, "霞鹜文楷等宽");
+assert.equal(fontChoices(fontFaces, "霞鹜文楷等宽", true, "en")[0].displayName, "LXGW WenKai Mono");
 assert.equal(fontChoices(fontFaces, "not installed", true, "zh").length, 0);
 assert.equal(selectedFontName(fontStack('Font "A"', true)), 'Font "A"');
 assert.equal(selectedFontName('"Font A", "Font B", sans-serif'), null, "custom stacks must remain editable");

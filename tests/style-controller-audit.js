@@ -74,6 +74,17 @@ vm.runInNewContext(
 );
 const { ThemeControls, parseColor, colorWithAlpha } = sandbox.module.exports;
 const { optionLabel, COMPATIBILITY_ONLY_IDS } = sandbox.module.exports;
+for (const id of ["font-family-inline-code", "font-monospace-theme"]) {
+  assert(COMPATIBILITY_ONLY_IDS.has(id), `legacy code font still visible: ${id}`);
+}
+const styleCss = fs.readFileSync(path.join(pluginRoot, "styles.css"), "utf8");
+for (const id of ["bysan-code-block-font", "bysan-inline-code-font", "bysan-inline-code-border"]) {
+  assert(mainSource.includes(`id: "${id}"`), `missing code appearance field: ${id}`);
+}
+assert.match(styleCss, /border: 1px solid var\(--bysan-inline-code-border, var\(--bysan-code-border\)\)/);
+for (const id of ["bysan-code-block-font", "bysan-inline-code-font"]) {
+  assert(styleCss.includes(`var(--${id}, var(--bysan-code-font))`), `missing legacy font fallback: ${id}`);
+}
 assert.equal(optionLabel("Grid notebook 1 (@CZ-15/YZ-10)", "zh"), "均匀网格");
 for (const item of controls) {
   for (const option of (item.options || []).filter(option => option.value != null)) {

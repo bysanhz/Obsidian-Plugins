@@ -76,7 +76,18 @@ const COMPATIBILITY_ONLY_IDS = new Set([
   "bg-color-notebook",
   "stripe-notebook-stripe-color",
   "bt-background-split-container",
-  "show-border-table"
+  "show-border-table",
+  "font-family-inline-code",
+  "font-monospace-theme"
+]);
+
+const CODE_FONT_OPTIONS = new Map([
+  ["obsidian", "var(--font-monospace, monospace)"],
+  ...[
+    "JetBrains Mono", "Fira Code", "Cascadia Code", "Consolas", "Menlo",
+    "DejaVu Sans Mono", "Liberation Mono", "Noto Sans Mono", "Noto Sans Mono CJK SC",
+    "Sarasa Mono SC", "Ubuntu Mono", "Courier New"
+  ].map(family => [family, `"${family}", monospace`])
 ]);
 
 const NOTE_PAPER_COLOR_IDS = ["bysan-note-page-bg", "bg-color-notebook", "stripe-notebook-stripe-color"];
@@ -368,6 +379,8 @@ function chineseTitle(text) {
 }
 
 const CONTROL_COPY = {
+  "bysan-code-block-font": { "title.zh": "代码块字体", title: "Code block font" },
+  "bysan-inline-code-font": { "title.zh": "行内代码字体", title: "Inline code font" },
   "color-scheme-options": { "title.zh": "整体配色方案", title: "Colour scheme" },
   "toggle-fixed-pattern": { "title.zh": "滚动时固定纸纹理", title: "Keep paper pattern fixed while scrolling" },
   "toggle-split-note-background": { "title.zh": "侧栏笔记不使用纸纹理", title: "Hide paper pattern in sidebar notes" },
@@ -718,7 +731,7 @@ class ThemeControls {
         const legacy = legacyId && this.controlItems.find(entry => entry.id === legacyId);
         if (legacy) return this.displayValueFor(legacy, mode);
       }
-      return this.displayDefaults.get(`${item.id}:${mode}`) ?? item[`default-${mode}`];
+      return item.liveDefault?.(mode) ?? this.displayDefaults.get(`${item.id}:${mode}`) ?? item[`default-${mode}`];
     }
     if (isDefined(storedValue)) return storedValue;
     // Non-colour controls already carry their canonical defaults in the
@@ -731,7 +744,7 @@ class ThemeControls {
 
   defaultValueFor(item, mode) {
     if (item.type === "variable-themed-color") {
-      return this.baseDefaults.get(`${item.id}:${mode}`) ?? item[`default-${mode}`];
+      return item.liveDefault?.(mode) ?? this.baseDefaults.get(`${item.id}:${mode}`) ?? item[`default-${mode}`];
     }
     return isDefined(item.default) ? item.default : this.baseDefaults.get(item.id);
   }
@@ -869,6 +882,7 @@ class ThemeControls {
     this.displayDefaults.clear();
     this.baseDefaults.clear();
     this.refreshNotePaperControl = null;
+    this.liveColourRefreshers?.clear();
   }
 
 
@@ -1019,10 +1033,14 @@ class ThemeControls {
 
   beginRegionRender() {
     this.refreshNotePaperControl = null;
+    this.liveColourRefreshers = new Map();
     this.refreshDisplayDefaults();
     this.cachedRegionBuckets = this.buildRegionBuckets();
   }
 
+  refreshThemedColorControl(id) {
+    this.liveColourRefreshers?.get(id)?.();
+  }
 
   advancedGroupFor(item) {
     const { id } = item;
@@ -1042,7 +1060,7 @@ class ThemeControls {
     if (/^(?:setting-etc-pane|popover-)/.test(id)) return "window";
     if (/^(?:font-family-tag|font-size-tag|tag(?:[1-5]|-.*)|head-tag-style)$/.test(id)) return "marks";
     if (/^(?:font-size-latex|mjx-)/.test(id)) return "math";
-    if (/^(?:font-monospace-theme|font-family-inline-code)$/.test(id)) return "code";
+    if (/^(?:font-monospace-theme|font-family-inline-code|bysan-(?:code-block-font|inline-code-(?:font|border)))$/.test(id)) return "code";
     if (/^(?:strong-em-color-|accent-strong$|accent-em$)/.test(id)) return "typography";
     if (/^(?:fancy-hr|hr-)/.test(id)) return "lists";
     if (/^(?:table-|toggle-table-|show-border-table$|full-width-table$)/.test(id) || isIn(/table-styles/)) return "tables";
@@ -1277,6 +1295,10 @@ class ThemeControls {
   }
 
   renderControl(setting, item, title, presentation = null) {
+    if (item.id === "bysan-code-block-font" || item.id === "bysan-inline-code-font") {
+      this.addCodeFontPicker(setting, item, title);
+      return;
+    }
     if (item.type === "class-toggle") {
       setting.addToggle((toggle) => toggle
         .setValue(Boolean(this.valueFor(item)))
@@ -1364,6 +1386,68 @@ class ThemeControls {
         input.setValue(String(this.displayValueFor(item) ?? ""));
       });
     }
+  }
+
+  addCodeFontPicker(setting, item, title) {
+    const zh = this.plugin.language === "zh";
+    const current = String(this.stored[item.id] ?? "");
+    const selected = [...CODE_FONT_OPTIONS].find(([, value]) => value === current)?.[0]
+      || (current ? "custom" : "default");
+    setting.settingEl.addClass("bysan-code-font-control");
+    let picker;
+    setting.addDropdown(dropdown => {
+      picker = dropdown.addOption("default", zh ? "沿用主题或旧配置" : "Use theme or legacy font");
+      for (const [key] of CODE_FONT_OPTIONS) {
+        picker.addOption(key, key === "obsidian" ? (zh ? "跟随 Obsidian 等宽字体" : "Use Obsidian monospace font") : key);
+      }
+      picker.addOption("custom", zh ? "自定义字体…" : "Custom font…").setValue(selected);
+      picker.selectEl.setAttribute("aria-label", title);
+      picker.selectEl.title = zh ? "未安装所选字体时使用系统备用等宽字体。" : "Falls back to a system monospace font if the selected font is not installed.";
+    });
+    const input = setting.controlEl.createEl("input", {
+      cls: "bysan-custom-code-font",
+      attr: {
+        type: "text",
+        placeholder: zh ? "字体名称或 CSS 字体列表" : "Font family or CSS font stack",
+        "aria-label": zh ? `${title}：自定义字体` : `${title}: custom font`
+      }
+    });
+    input.value = selected === "custom" ? current : "";
+    input.hidden = selected !== "custom";
+    input.addEventListener("input", () => input.setCustomValidity(""));
+    input.addEventListener("change", () => {
+      if (input.hidden) return;
+      const value = input.value.trim();
+      if (value && !CSS.supports("font-family", value)) {
+        input.setCustomValidity(zh ? "请输入有效的字体名称或字体列表。" : "Enter a valid font family or font stack.");
+        input.reportValidity();
+        return;
+      }
+      if (value) void this.plugin.updateThemeSetting(item.id, value);
+      else {
+        picker.setValue("default");
+        input.hidden = true;
+        void this.plugin.resetThemeSetting(item.id);
+      }
+    });
+    input.addEventListener("keydown", event => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        input.blur();
+      }
+    });
+    picker.onChange(value => {
+      input.hidden = value !== "custom";
+      input.setCustomValidity("");
+      if (value === "custom") {
+        const savedCustom = input.value.trim();
+        if (savedCustom && CSS.supports("font-family", savedCustom)) {
+          void this.plugin.updateThemeSetting(item.id, savedCustom);
+        }
+        input.focus();
+      } else if (value === "default") void this.plugin.resetThemeSetting(item.id);
+      else if (CODE_FONT_OPTIONS.has(value)) void this.plugin.updateThemeSetting(item.id, CODE_FONT_OPTIONS.get(value));
+    });
   }
 
 
@@ -1456,11 +1540,11 @@ class ThemeControls {
         syncControls();
       });
     }
-    if (item.id === NOTE_PAPER_COLOR_IDS[0]) {
-      this.refreshNotePaperControl = () => {
-        if (setting.settingEl.isConnected) refreshers.forEach(sync => sync());
-      };
-    }
+    const refresh = () => {
+      if (setting.settingEl.isConnected) refreshers.forEach(sync => sync());
+    };
+    if (item.id === NOTE_PAPER_COLOR_IDS[0]) this.refreshNotePaperControl = refresh;
+    if (item.liveDefault) this.liveColourRefreshers?.set(item.id, refresh);
   }
 
 

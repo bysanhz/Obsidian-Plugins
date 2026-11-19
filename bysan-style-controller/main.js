@@ -1,6 +1,6 @@
 /**
  * Bysan Style Controller
- * Version: 0.18.1
+ * Version: 0.18.2
  *
  * Owns visual presentation and provides switchable, integrated Bysan modules.
  */
@@ -142,7 +142,7 @@ const PAGE_TITLE_CONTROLS = [
 const COMMON_THEME_IDS = new Set(
   [...NOTE_BODY_CONTROLS, ...NOTE_BACKGROUND_CONTROLS, ...EDITOR_MARK_CONTROLS, ...NOTE_MARK_CONTROLS,
     ...CALLOUT_CONTROLS, ...INTERFACE_COLOR_CONTROLS, ...NAVIGATION_COLOR_CONTROLS, ...TAB_COLOR_CONTROLS, ...PAGE_TITLE_CONTROLS,
-    ...NOTE_HEADING_CONTROLS.flat(), ...HEADING_BACKGROUND_CONTROLS.flat(), ["font-size-latex"]].map(([id]) => id)
+    ...NOTE_HEADING_CONTROLS.flat(), ...HEADING_BACKGROUND_CONTROLS.flat(), ["font-size-latex"], ["bysan-inline-code-border"]].map(([id]) => id)
 );
 
 /*
@@ -1120,6 +1120,16 @@ module.exports = class BysanStyleController extends Plugin {
         fallbackVariable, "default-light": "#00000000", "default-dark": "#00000000"
       });
     }
+    this.themeCatalog.settings.push(
+      { id: "bysan-code-block-font", title: "Code block font", type: "variable-text" },
+      { id: "bysan-inline-code-font", title: "Inline code font", type: "variable-text" },
+      {
+        id: "bysan-inline-code-border", title: "Inline code border colour",
+        type: "variable-themed-color", format: "hex", opacity: true,
+        fallbackVariable: "bysan-code-border",
+        liveDefault: mode => this.codeBlockBorderColor(mode)
+      }
+    );
   }
 
 
@@ -1321,6 +1331,11 @@ module.exports = class BysanStyleController extends Plugin {
   }
 
 
+  codeBlockBorderColor(mode) {
+    const dark = mode === "dark";
+    return hexToRgba(this.settings[dark ? "codeBorderDark" : "codeBorderLight"], dark ? 0.28 : 0.34);
+  }
+
   applyPalette() {
     const dark = document.body.classList.contains("theme-dark");
     const suffix = dark ? "Dark" : "Light";
@@ -1333,7 +1348,7 @@ module.exports = class BysanStyleController extends Plugin {
 
     body.style.setProperty("--bysan-code-bg", codeBackground);
     body.style.setProperty("--bysan-code-active-bg", activeCodeBackground);
-    body.style.setProperty("--bysan-code-border", hexToRgba(get("codeBorder"), dark ? 0.28 : 0.34));
+    body.style.setProperty("--bysan-code-border", this.codeBlockBorderColor(dark ? "dark" : "light"));
     body.style.setProperty("--bysan-code-text", get("codeText"));
     body.style.setProperty("--bysan-inline-code-bg", get("inlineBg"));
     body.style.setProperty("--bysan-inline-code-text", get("inlineText"));
@@ -1354,6 +1369,7 @@ module.exports = class BysanStyleController extends Plugin {
     body.style.setProperty("--background-code-2", get("inlineBg"));
     body.style.setProperty("--code-background", codeBackground);
     body.style.setProperty("--code-normal", get("codeText"));
+    this.themeControls?.refreshThemedColorControl("bysan-inline-code-border");
   }
 
 
@@ -2036,6 +2052,7 @@ class BysanStyleSettingTab extends PluginSettingTab {
   renderCodeSettings(containerEl) {
     const controls = this.createAppearanceLayout(containerEl, sample =>
       this.renderMarkdownSample(sample, ["```js", "const n = 42;", "console.log(n);", "```"].join("\n")));
+    this.renderThemeGroups(controls, ["code"], false, id => id === "bysan-code-block-font");
     this.createFeatureGroup(
       controls,
       this.plugin.language === "zh" ? "功能与渲染" : "Behaviour and rendering",
@@ -2081,7 +2098,6 @@ class BysanStyleSettingTab extends PluginSettingTab {
         this.renderGeometryControls(body, "codeBlock");
       }
     );
-    this.renderThemeGroups(controls, ["code"], false, id => id === "font-monospace-theme");
   }
 
 
@@ -2291,8 +2307,9 @@ class BysanStyleSettingTab extends PluginSettingTab {
   renderInlineCodeSettings(containerEl) {
     const controls = this.createAppearanceLayout(containerEl, sample => {
       const paragraph = sample.createEl("p", { text: this.plugin.language === "zh" ? "行内代码示例 " : "Inline code sample " });
-      paragraph.createEl("code", { text: "np.arange()" });
+      paragraph.createEl("code", { text: "np.arange(0, 1)" });
     });
+    this.renderThemeGroups(controls, ["code"], false, id => id === "bysan-inline-code-font");
     this.createFeatureGroup(
       controls,
       this.plugin.language === "zh" ? "明暗外观" : "Light and dark appearance",
@@ -2300,6 +2317,8 @@ class BysanStyleSettingTab extends PluginSettingTab {
       (body) => {
         this.addDualColor(body, this.plugin.t("palette.inlineBg"), "inlineBgLight", "inlineBgDark");
         this.addDualColor(body, this.plugin.t("palette.inlineText"), "inlineTextLight", "inlineTextDark");
+        this.renderNoteThemeControls(body, [["bysan-inline-code-border", "行内代码边框颜色", "Inline code border colour",
+          "恢复后跟随代码块边框。", "Reset to follow the code block border."]]);
         this.addDualColor(body, this.plugin.language === "zh" ? "行内代码阴影" : "Inline-code shadow", "inlineShadowLight", "inlineShadowDark");
       }
     );
@@ -2309,7 +2328,6 @@ class BysanStyleSettingTab extends PluginSettingTab {
       "",
       (body) => this.renderGeometryControls(body, "inlineCode")
     );
-    this.renderThemeGroups(controls, ["code"], false, id => id === "font-family-inline-code");
   }
 
 

@@ -104,12 +104,12 @@ body.bysan-style-controller-active[style*="--bysan-active-file-bg:"] .nav-files-
 .markdown-source-view.mod-cm6 .cm-inline-code:not(.cm-hmd-codeblock) {
   color: var(--bysan-inline-code-text) !important;
   background-color: var(--bysan-inline-code-bg) !important;
-  border: 1px solid var(--bysan-code-border);
+  border: 1px solid var(--bysan-inline-code-border, var(--bysan-code-border));
   border-radius: var(--bysan-inline-code-radius, 2px);
   box-shadow: 0 0 var(--bysan-inline-code-shadow-size, 1px)
     var(--bysan-inline-code-shadow-size, 1px) var(--bysan-inline-code-shadow);
   box-sizing: border-box;
-  font-family: var(--bysan-code-font) !important;
+  font-family: var(--bysan-inline-code-font, var(--bysan-code-font)) !important;
   font-size: var(--bysan-inline-code-font-size, 0.9em);
   margin-inline: var(--bysan-inline-code-margin, 2px);
   padding: var(--bysan-inline-code-padding-y, 1px)
@@ -124,7 +124,7 @@ body.bysan-style-controller-active[style*="--bysan-active-file-bg:"] .nav-files-
   border: 1px solid var(--bysan-code-border) !important;
   border-radius: var(--bysan-code-radius, 3px) !important;
   box-shadow: none !important;
-  font-family: var(--bysan-code-font);
+  font-family: var(--bysan-code-block-font, var(--bysan-code-font));
   font-size: var(--bysan-code-font-size, 0.95em);
   line-height: var(--bysan-code-line-height, 1.55);
   padding: var(--bysan-code-padding-y, 0.8em)
@@ -145,7 +145,7 @@ body.bysan-style-controller-active .markdown-source-view.mod-cm6 .HyperMD-codebl
   color: var(--bysan-code-text);
   background-color: var(--bysan-code-bg) !important;
   border-inline: 1px solid var(--bysan-code-border);
-  font-family: var(--bysan-code-font);
+  font-family: var(--bysan-code-block-font, var(--bysan-code-font));
   font-size: var(--bysan-code-font-size, 0.95em);
   line-height: var(--bysan-code-line-height, 1.55);
 }
@@ -2017,6 +2017,14 @@ table:not(.dataview) :is(th, td) {
   flex: 1 1 7rem;
   min-width: 0;
   max-width: 100%;
+}
+
+.bysan-style-settings .bysan-code-font-control .bysan-custom-code-font:not([hidden]) {
+  flex-basis: 100%;
+}
+
+.bysan-style-settings .bysan-code-font-control .bysan-custom-code-font[hidden] {
+  display: none !important;
 }
 
 .bysan-style-settings .bysan-settings-section-body .setting-item-control

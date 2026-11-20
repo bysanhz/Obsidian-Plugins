@@ -438,7 +438,7 @@ for (const moduleId of ["academic-heading-numbering", "mermaid-inline-resizer", 
   }
 }
 
-assert.equal(reviewModuleManifest.version, "0.2.5", "selection review module version mismatch");
+assert.equal(reviewModuleManifest.version, "0.2.6", "selection review module version mismatch");
 for (const method of [
   "registerReadingSectionMapping", "captureReadingSelection", "mapReadingSelectionToSource",
   "refreshReadingReviewBadges", "findReadingSectionForLine", "replaceCachedFileRange",

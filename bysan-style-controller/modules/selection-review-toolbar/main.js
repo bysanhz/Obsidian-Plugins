@@ -1,6 +1,6 @@
 /**
  * Selection Review Toolbar
- * Version: 0.2.5
+ * Version: 0.2.6
  *
  * A selection-driven, fixed-position review toolbar for Obsidian 1.13.x.
  * Formatting edits Markdown through Obsidian's Editor API. Review bodies are
@@ -63,6 +63,7 @@ const READING_UNREVIEWABLE_SELECTOR = [
 ].join(",");
 const DEFAULT_DATA = {
   comments: {},
+  drafts: {},
   popup: { left: null, top: null, width: 560, height: 420 },
   customColors: [...CUSTOM_COLOR_DEFAULTS]
 };
@@ -215,7 +216,7 @@ class ReviewCommentsView extends ItemView {
 
 
   getDisplayText() {
-    return "文档评论";
+    return this.reviewPlugin.tr("文档评论", "Document comments");
   }
 
 
@@ -238,6 +239,10 @@ class ReviewCommentsView extends ItemView {
   async refresh() {
     const token = ++this.renderToken;
     const container = this.contentEl || this.containerEl.querySelector(".view-content") || this.containerEl;
+    const tr = (zh, en) => this.reviewPlugin.tr(zh, en);
+    const oldScroll = container.scrollTop;
+    const focused = container.contains(container.ownerDocument.activeElement)
+      ? container.ownerDocument.activeElement.dataset.artAction : null;
     container.empty();
     container.addClass("art-review-sidebar");
 
@@ -248,10 +253,10 @@ class ReviewCommentsView extends ItemView {
     const header = container.createDiv({ cls: "art-review-sidebar-header" });
     const title = header.createDiv({ cls: "art-review-sidebar-title" });
     setIcon(title.createSpan({ cls: "art-review-sidebar-title-icon" }), "message-square");
-    title.createSpan({ text: "文档评论" });
+    title.createSpan({ text: this.getDisplayText() });
     const refreshButton = header.createEl("button", {
       cls: "clickable-icon art-review-sidebar-refresh",
-      attr: { type: "button", title: "刷新评论列表", "aria-label": "刷新评论列表" }
+      attr: { type: "button", title: tr("刷新评论列表", "Refresh comments"), "aria-label": tr("刷新评论列表", "Refresh comments") }
     });
     setIcon(refreshButton, "refresh-cw");
     refreshButton.addEventListener("click", () => this.refresh());
@@ -261,16 +266,26 @@ class ReviewCommentsView extends ItemView {
 
     const subtitle = container.createDiv({
       cls: "art-review-sidebar-subtitle",
-      text: items.file ? `${items.file.basename} · ${items.comments.length} 条评论` : "当前没有活动 Markdown 文档"
+      text: items.file ? `${items.file.basename} · ${tr(`${items.comments.length} 条评论`, `${items.comments.length} comments`)}`
+        : tr("当前没有活动 Markdown 文档", "No active Markdown note")
     });
     subtitle.setAttribute("title", items.file?.path || "");
 
     if (!items.file) return;
 
+    for (const [key, draft] of Object.entries(this.reviewPlugin.data.drafts)) {
+      if (draft?.filePath !== items.file.path) continue;
+      const button = container.createEl("button", {
+        cls: "art-review-sidebar-draft", text: tr("继续写草稿", "Resume draft"),
+        attr: { type: "button", title: plainPreview(draft.body) }
+      });
+      button.addEventListener("click", () => this.reviewPlugin.resumeDraft(key));
+    }
     if (items.comments.length === 0) {
       container.createDiv({
         cls: "art-review-sidebar-empty",
-        text: "当前文档还没有评论。选择正文后点击工具栏评论按钮即可添加。"
+        text: tr("当前文档还没有评论。选择正文后点击工具栏评论按钮即可添加。",
+          "No comments in this note. Select text and choose Add comment.")
       });
       return;
     }
@@ -279,45 +294,51 @@ class ReviewCommentsView extends ItemView {
     for (const item of items.comments) {
       const card = list.createDiv({
         cls: `art-review-sidebar-card${item.hasBody ? "" : " art-review-sidebar-card-missing"}`,
-        attr: { role: "button", tabindex: "0" }
       });
       card.dataset.reviewId = item.id || "";
       card.dataset.reviewIndex = String(item.index);
-      card.setAttribute("aria-label", `跳转到评论 ${item.index + 1}`);
 
       const meta = card.createDiv({ cls: "art-review-sidebar-meta" });
       meta.createSpan({ cls: "art-review-sidebar-number", text: String(item.index + 1) });
       meta.createSpan({ cls: "art-review-sidebar-line", text: `L${item.lineNumber}` });
       if (!item.hasBody) {
-        meta.createSpan({ cls: "art-review-sidebar-missing", text: "内容缺失" });
+        meta.createSpan({ cls: "art-review-sidebar-missing", text: tr("内容缺失", "Body missing") });
       }
 
       card.createDiv({
         cls: "art-review-sidebar-anchor",
-        text: item.anchorText || item.lineText || "未记录锚点"
+        text: item.anchorText || item.lineText || tr("未记录锚点", "No anchor text")
       });
 
       const preview = card.createDiv({ cls: "art-review-sidebar-preview markdown-rendered" });
       await MarkdownRenderer.render(
         this.reviewPlugin.app,
-        item.body || "*暂无评论内容*",
+        item.body || tr("*暂无评论内容*", "*No comment body*"),
         preview,
         item.file.path,
         this.previewComponent
       );
       preview.setAttribute("title", plainPreview(item.body));
 
-      const open = () => this.reviewPlugin.jumpToReviewItem(item).catch((error) => {
-        console.warn("[Selection Review Toolbar] Could not jump to review:", error);
-        new Notice("跳转评论失败");
-      });
-      card.addEventListener("click", open);
-      card.addEventListener("keydown", (event) => {
-        if (event.key !== "Enter" && event.key !== " ") return;
-        event.preventDefault();
-        open();
-      });
+      if (token !== this.renderToken) return;
+      const actions = card.createDiv({ cls: "art-sidebar-actions" });
+      for (const [kind, label] of [["jump", tr("跳到原文", "Go to text")], ["open", tr("打开评论", "Open comment")]]) {
+        const button = actions.createEl("button", { text: label, attr: { type: "button" } });
+        button.dataset.artAction = `${item.id || item.index}:${kind}`;
+        button.addEventListener("click", () => {
+          const action = kind === "jump"
+            ? this.reviewPlugin.jumpToReviewItem(item, false)
+            : this.reviewPlugin.openReviewWindow(item, item.body);
+          Promise.resolve(action).catch(error => {
+            console.warn("[Selection Review Toolbar] Could not open review:", error);
+            new Notice(tr("评论操作失败", "Could not open the comment"));
+          });
+        });
+      }
     }
+    container.scrollTop = oldScroll;
+    if (focused) [...container.querySelectorAll("[data-art-action]")]
+      .find(e => e.dataset.artAction === focused)?.focus({ preventScroll: true });
   }
 }
 
@@ -475,6 +496,7 @@ module.exports = class SelectionReviewToolbar extends Plugin {
       ...DEFAULT_DATA,
       ...(loaded || {}),
       comments: { ...DEFAULT_DATA.comments, ...(loaded?.comments || {}) },
+      drafts: { ...(loaded?.drafts || {}) },
       popup: { ...DEFAULT_DATA.popup, ...(loaded?.popup || {}) },
       customColors: CUSTOM_COLOR_DEFAULTS.map((fallback, index) => (
         validHexColor(loaded?.customColors?.[index]) ? loaded.customColors[index] : fallback
@@ -507,16 +529,28 @@ module.exports = class SelectionReviewToolbar extends Plugin {
     this.reviewNavigatorJumping = false;
     this.activeReview = null;
     this.linkModal = null;
+    this.localization = [];
 
     this.registerView(
       REVIEW_NAVIGATOR_VIEW_TYPE,
       (leaf) => new ReviewCommentsView(leaf, this)
     );
-    this.addRibbonIcon("message-square", "打开文档评论导航", () => this.activateReviewNavigator());
+    const ribbon = this.addRibbonIcon("message-square", this.tr("打开文档评论导航", "Open document comments"), () => this.activateReviewNavigator());
+    this.localize(ribbon, "打开文档评论导航", "Open document comments", "aria-label");
     this.addCommand({
       id: "open-review-comments-navigator",
-      name: "打开当前文档评论导航",
+      name: this.tr("打开当前文档评论导航", "Open current document comments"),
       callback: () => this.activateReviewNavigator()
+    });
+    this.addCommand({
+      id: "focus-selection-toolbar",
+      name: this.tr("聚焦选区工具栏", "Focus selection toolbar"),
+      checkCallback: checking => {
+        if (!this.isToolbarVisible()) return false;
+        if (!checking) [...this.toolbarEl.querySelectorAll(".art-toolbar-row button:not(:disabled)")]
+          .find(button => button.getClientRects().length)?.focus({ preventScroll: true });
+        return true;
+      }
     });
 
     this.createToolbar();
@@ -533,7 +567,7 @@ module.exports = class SelectionReviewToolbar extends Plugin {
       this.scheduleReviewSidebarRefresh();
     });
 
-    console.log("[Selection Review Toolbar] v0.2.5 loaded");
+    console.log("[Selection Review Toolbar] v0.2.6 loaded");
   }
 
 
@@ -610,6 +644,10 @@ module.exports = class SelectionReviewToolbar extends Plugin {
       "keyup",
       (event) => {
         if (event.key === "Escape") {
+          if (this.reviewWindowEl?.contains(event.target)) {
+            this.requestCloseReview();
+            return;
+          }
           if (this.morePanel && !this.morePanel.hidden) {
             this.closePanels();
             if (this.toolbarEl.contains(event.target)) this.moreButton.focus();
@@ -670,7 +708,7 @@ module.exports = class SelectionReviewToolbar extends Plugin {
       this.suppressedSelectionKey = null;
       this.hideToolbar({ clearCache: true });
       if (!this.reviewNavigatorJumping) {
-        this.closeReviewWindow();
+        this.closeReviewWindow({ keep: true, focus: false });
       }
       this.scheduleReviewBadgeRefresh();
       this.scheduleReviewSidebarRefresh();
@@ -897,9 +935,9 @@ module.exports = class SelectionReviewToolbar extends Plugin {
     const ancestor = range.commonAncestorContainer instanceof Element
       ? range.commonAncestorContainer
       : range.commonAncestorContainer.parentElement;
-    const preview = view.containerEl.querySelector(".markdown-preview-view, .markdown-reading-view, .markdown-rendered");
+    const preview = ancestor?.closest(".markdown-preview-view");
 
-    if (!ancestor || !preview?.contains(ancestor)) {
+    if (!preview || !view.containerEl.contains(preview) || preview.closest(".markdown-source-view") || !preview.getClientRects().length) {
       this.hideToolbar({ clearCache: true });
       return;
     }
@@ -1248,7 +1286,7 @@ module.exports = class SelectionReviewToolbar extends Plugin {
   createToolbar() {
     this.toolbarEl = document.body.createDiv({ cls: "art-toolbar" });
     this.toolbarEl.setAttribute("role", "toolbar");
-    this.toolbarEl.setAttribute("aria-label", "Selection review toolbar");
+    this.localize(this.toolbarEl, "选区审阅工具栏", "Selection review toolbar", "aria-label");
 
     this.mainRowEl = this.toolbarEl.createDiv({ cls: "art-toolbar-row" });
 
@@ -1265,6 +1303,16 @@ module.exports = class SelectionReviewToolbar extends Plugin {
     this.moreButton = this.addIconButton("ellipsis", this.tr("更多选区操作", "More selection actions"),
       "art-more-button", event => this.toggleMorePanel(event.detail === 0));
 
+    for (const [cls, zh, en] of [
+      ["bold", "加粗", "Bold"], ["italic", "斜体", "Italic"], ["underline", "下划线", "Underline"],
+      ["strike", "删除线", "Strikethrough"], ["highlight-button", "高亮颜色", "Highlight colour"],
+      ["text-color-button", "字体颜色", "Text colour"], ["comment-button", "添加审阅评论", "Add review comment"],
+      ["source-mode-button", "切换实时预览／源码模式", "Toggle Live Preview / Source mode"],
+      ["more-button", "更多选区操作", "More selection actions"]
+    ]) {
+      const button = this.toolbarEl.querySelector(`.art-${cls}`);
+      for (const attr of ["title", "aria-label"]) this.localize(button, zh, en, attr);
+    }
     this.createColorPanel();
     this.createMorePanel();
 
@@ -1285,6 +1333,14 @@ module.exports = class SelectionReviewToolbar extends Plugin {
     });
 
     this.toolbarEl.addEventListener("click", (event) => event.stopPropagation());
+    this.toolbarEl.addEventListener("keydown", event => {
+      if (!["ArrowLeft", "ArrowRight"].includes(event.key) || !this.mainRowEl.contains(event.target)) return;
+      const buttons = [...this.mainRowEl.querySelectorAll("button:not(:disabled)")].filter(button => button.getClientRects().length);
+      if (buttons.length < 2) return;
+      event.preventDefault();
+      const offset = event.key === "ArrowRight" ? 1 : -1;
+      buttons[(buttons.indexOf(event.target) + offset + buttons.length) % buttons.length]?.focus();
+    });
   }
 
 
@@ -1328,6 +1384,22 @@ module.exports = class SelectionReviewToolbar extends Plugin {
     return (this.getHostLanguage?.() || (navigator.language.startsWith("zh") ? "zh" : "en")) === "zh" ? zh : en;
   }
 
+  localize(el, zh, en, attribute) {
+    const update = () => {
+      const value = this.tr(zh, en);
+      if (attribute) el.setAttribute(attribute, value);
+      else el.setText(value);
+    };
+    this.localization.push(update);
+    update();
+    return el;
+  }
+
+  refreshLanguage() {
+    this.localization.forEach(update => update());
+    this.scheduleReviewSidebarRefresh();
+  }
+
   createMorePanel() {
     this.moreButton.setAttribute("aria-expanded", "false");
     this.moreButton.setAttribute("aria-controls", "art-more-actions");
@@ -1360,7 +1432,10 @@ module.exports = class SelectionReviewToolbar extends Plugin {
     }
     this.copyQuoteButton.lastElementChild.textContent = this.tr("复制原文引用", "Copy source quote");
     this.insertLinkButton.lastElementChild.textContent = this.tr("插入链接", "Insert link");
-    this.insertLinkButton.hidden = this.cachedSelection.mode !== "source";
+    this.insertLinkButton.hidden = false;
+    this.insertLinkButton.disabled = this.cachedSelection.mode !== "source";
+    this.insertLinkButton.title = this.insertLinkButton.disabled
+      ? this.tr("请在编辑模式插入链接。", "Switch to editing mode to insert a link.") : "";
     this.morePanel.hidden = false;
     this.moreButton.setAttribute("aria-expanded", "true");
     this.refreshToolbarPosition();
@@ -1450,6 +1525,9 @@ module.exports = class SelectionReviewToolbar extends Plugin {
           title: color.label
         }
       });
+      const english = { yellow: "Yellow: key point", red: "Red: issue", green: "Green: confirmed", blue: "Blue: evidence",
+        purple: "Purple: idea", magenta: "Magenta: emphasis", orange: "Orange: to do", gray: "Gray: subdued" };
+      for (const attr of ["title", "aria-label"]) this.localize(swatch, color.label, english[color.id], attr);
       swatch.addEventListener("click", () => this.applyColor(color.id));
       this.colorSwatches.set(color.id, swatch);
     }
@@ -1464,9 +1542,10 @@ module.exports = class SelectionReviewToolbar extends Plugin {
       }
     });
     clear.addEventListener("click", () => this.applyColor(null));
+    for (const attr of ["title", "aria-label"]) this.localize(clear, "清除当前颜色", "Clear current colour", attr);
 
     const custom = this.colorPanelEl.createDiv({ cls: "art-custom-colors" });
-    custom.createDiv({ cls: "art-custom-colors-label", text: "自定义颜色" });
+    this.localize(custom.createDiv({ cls: "art-custom-colors-label" }), "自定义颜色", "Custom colours");
     const customGrid = custom.createDiv({ cls: "art-custom-colors-grid" });
     this.data.customColors.forEach((value, index) => {
       const id = `custom-${index + 1}`;
@@ -1494,6 +1573,10 @@ module.exports = class SelectionReviewToolbar extends Plugin {
         }
       });
       input.value = value;
+      for (const attr of ["title", "aria-label"]) {
+        this.localize(swatch, `应用自定义颜色 ${index + 1}`, `Apply custom colour ${index + 1}`, attr);
+        this.localize(input, `编辑自定义颜色 ${index + 1}`, `Edit custom colour ${index + 1}`, attr);
+      }
       input.addEventListener("input", () => this.updateCustomColor(index, input.value));
       input.addEventListener("change", () => this.updateCustomColor(index, input.value, true));
     });
@@ -1510,6 +1593,8 @@ module.exports = class SelectionReviewToolbar extends Plugin {
       attr: { type: "button" }
     });
 
+    this.localize(highlight, "高亮", "Highlight");
+    this.localize(text, "字体颜色", "Text colour");
     highlight.addEventListener("click", () => this.setColorMode("highlight"));
     text.addEventListener("click", () => this.setColorMode("text"));
     this.colorModeButtons.set("highlight", highlight);
@@ -1537,7 +1622,7 @@ module.exports = class SelectionReviewToolbar extends Plugin {
     if (persist) {
       this.data.customColors[index] = value.toUpperCase();
       await this.saveData(this.data);
-      new Notice(`自定义颜色 ${index + 1} 已保存`);
+      new Notice(this.tr(`自定义颜色 ${index + 1} 已保存`, `Custom colour ${index + 1} saved`));
     }
   }
 
@@ -1556,7 +1641,7 @@ module.exports = class SelectionReviewToolbar extends Plugin {
       attr: { type: "button", title: "关闭", "aria-label": "关闭评论窗口" }
     });
     setIcon(close, "x");
-    close.addEventListener("click", () => this.closeReviewWindow());
+    close.addEventListener("click", () => this.requestCloseReview());
 
     const content = this.reviewWindowEl.createDiv({ cls: "art-review-content" });
     const editorPane = content.createDiv({ cls: "art-review-pane art-review-editor-pane" });
@@ -1586,7 +1671,7 @@ module.exports = class SelectionReviewToolbar extends Plugin {
       text: "关闭",
       attr: { type: "button" }
     });
-    const save = actions.createEl("button", {
+    const save = this.reviewSaveButton = actions.createEl("button", {
       cls: "art-review-button art-review-save",
       text: "保存",
       attr: { type: "button" }
@@ -1594,15 +1679,37 @@ module.exports = class SelectionReviewToolbar extends Plugin {
     hint.setAttribute("aria-hidden", "true");
 
     this.reviewDeleteButton.addEventListener("click", () => this.deleteActiveReview());
-    cancel.addEventListener("click", () => this.closeReviewWindow());
+    cancel.addEventListener("click", () => this.requestCloseReview());
     save.addEventListener("click", () => this.saveActiveReview());
     this.reviewInputEl.addEventListener("input", () => this.scheduleReviewPreview());
     this.reviewInputEl.addEventListener("keydown", (event) => {
-      if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+      if (!event.isComposing && (event.ctrlKey || event.metaKey) && event.key === "Enter") {
         event.preventDefault();
         this.saveActiveReview();
       }
     });
+    this.reviewCloseOptions = footer.createDiv({ cls: "art-review-close-options", attr: { hidden: "" } });
+    this.localize(this.reviewCloseOptions.createSpan(), "保留未保存的评论？", "Keep your unsaved comment?");
+    for (const [zh, en, action] of [
+      ["继续编辑", "Keep editing", () => { this.reviewCloseOptions.hidden = true; this.reviewInputEl.focus(); }],
+      ["保留草稿并关闭", "Keep draft and close", () => this.closeReviewWindow({ keep: true })],
+      ["放弃并关闭", "Discard and close", () => this.closeReviewWindow()]
+    ]) {
+      const button = this.localize(this.reviewCloseOptions.createEl("button", { attr: { type: "button" } }), zh, en);
+      button.addEventListener("click", action);
+    }
+    this.localize(this.reviewWindowEl, "审阅评论", "Review comment", "aria-label");
+    this.localize(title.lastElementChild, "审阅评论", "Review comment");
+    this.localize(close, "关闭评论窗口", "Close comment", "aria-label");
+    this.localize(close, "关闭评论窗口", "Close comment", "title");
+    this.localize(this.reviewInputEl, "评论 Markdown 编辑器", "Markdown comment editor", "aria-label");
+    this.localize(this.reviewInputEl, "输入 Markdown；行内公式使用 $...$，块公式使用 $$...$$",
+      "Enter Markdown. Use $...$ for inline math and $$...$$ for display math.", "placeholder");
+    this.localize(previewPane.firstElementChild, "预览", "Preview");
+    this.localize(hint, "Ctrl/⌘ + Enter 保存", "Ctrl/⌘ + Enter to save");
+    this.localize(this.reviewDeleteButton, "删除", "Delete");
+    this.localize(cancel, "关闭", "Close");
+    this.localize(save, "保存", "Save");
 
     this.installReviewWindowDrag(header);
     this.registerDomEvent(window, "pointerup", () => this.persistReviewWindowGeometry());
@@ -1651,8 +1758,29 @@ module.exports = class SelectionReviewToolbar extends Plugin {
   showToolbar(rect) {
     this.toolbarEl.classList.add("art-visible");
     this.toolbarEl.classList.toggle("art-reading-selection", this.cachedSelection?.mode === "reading");
-    this.commentButton.hidden = !Number.isInteger(this.cachedSelection?.fromOffset);
+    this.commentButton.hidden = false;
+    const canComment = Number.isInteger(this.cachedSelection?.fromOffset);
+    this.commentButton.disabled = !canComment;
+    this.commentButton.title = canComment ? this.tr("添加审阅评论", "Add review comment")
+      : this.tr("此选区不能安全映射到源文。可复制引用，或切回编辑模式。", "This selection cannot be safely mapped to source. Copy it as a quote, or switch to editing mode.");
+    this.commentButton.setAttribute("aria-label", this.commentButton.title);
+    this.updateFormatState();
     this.positionToolbar(rect);
+  }
+
+  updateFormatState() {
+    const cache = this.cachedSelection;
+    if (!cache?.editor) return;
+    const source = cache.editor.getValue();
+    for (const [kind, start, end] of [["bold", "**", "**"], ["italic", "*", "*"], ["underline", "<u>", "</u>"], ["strike", "~~", "~~"]]) {
+      const included = cache.text.length > start.length + end.length &&
+        cache.text.startsWith(start) && cache.text.endsWith(end);
+      let surrounded = source.slice(cache.fromOffset - start.length, cache.fromOffset) === start &&
+        source.slice(cache.toOffset, cache.toOffset + end.length) === end;
+      if (kind === "italic" && surrounded) surrounded = this.countCharacterRun(source, cache.fromOffset - 1, -1, "*") % 2 === 1 &&
+        this.countCharacterRun(source, cache.toOffset, 1, "*") % 2 === 1;
+      this.toolbarEl.querySelector(`.art-${kind}`)?.setAttribute("aria-pressed", String(included || surrounded));
+    }
   }
 
 
@@ -1908,15 +2036,10 @@ module.exports = class SelectionReviewToolbar extends Plugin {
     const file = this.app.vault.getAbstractFileByPath(cache.filePath);
     if (!file) return false;
 
-    const documentText = await this.app.vault.cachedRead(file);
-    if (documentText.slice(startOffset, endOffset) !== cache.text) {
-      return false;
-    }
-
-    await this.app.vault.modify(
-      file,
-      documentText.slice(0, startOffset) + replacement + documentText.slice(endOffset)
-    );
+    const changed = await this.changeReviewSource(cache.filePath, source =>
+      source.slice(startOffset, endOffset) === cache.text
+        ? { start: startOffset, end: endOffset, text: replacement } : null, false);
+    if (!changed) return false;
 
     const selectedText = replacement.slice(selectionStart, selectionEnd);
     cache.fromOffset = startOffset + selectionStart;
@@ -1969,6 +2092,7 @@ module.exports = class SelectionReviewToolbar extends Plugin {
     this.colorMode = mode;
     for (const [id, button] of this.colorModeButtons) {
       button.classList.toggle("art-active", id === mode);
+      button.setAttribute("aria-pressed", String(id === mode));
     }
     this.updateActiveColor();
   }
@@ -2015,6 +2139,7 @@ module.exports = class SelectionReviewToolbar extends Plugin {
     const current = this.findCurrentColor(this.colorMode);
     for (const [id, swatch] of this.colorSwatches) {
       swatch.classList.toggle("art-selected", id === current);
+      swatch.setAttribute("aria-pressed", String(id === current));
     }
   }
 
@@ -2099,13 +2224,15 @@ module.exports = class SelectionReviewToolbar extends Plugin {
    * Comment editor
    * ======================================================= */
 
-  openCommentPanel() {
+  async openCommentPanel() {
     if (!this.selectionIsStillValid() || !Number.isInteger(this.cachedSelection?.fromOffset)) {
       this.hideToolbar({ clearCache: true });
       return;
     }
 
     const cache = this.cachedSelection;
+    const source = await this.readReviewSource(cache.filePath);
+    if (!source || cache !== this.cachedSelection || source.slice(cache.fromOffset, cache.toOffset) !== cache.text) return;
     this.closePanels();
     this.hideToolbar({ clearCache: false });
     this.openReviewWindow({
@@ -2114,15 +2241,22 @@ module.exports = class SelectionReviewToolbar extends Plugin {
       selection: {
         fromOffset: cache.fromOffset,
         toOffset: cache.toOffset,
-        text: cache.visibleText || cache.text
+        text: cache.text,
+        left: source.slice(Math.max(0, cache.fromOffset - 24), cache.fromOffset),
+        right: source.slice(cache.toOffset, cache.toOffset + 24)
       }
     }, "", this.cachedRect);
   }
 
 
   openReviewWindow(review, body, anchorRect = null) {
+    if (this.reviewWriting) return;
+    if (this.activeReview) this.closeReviewWindow({ keep: true, focus: false });
     this.activeReview = review;
-    this.reviewInputEl.value = body || "";
+    this.reviewReturnFocus = document.activeElement;
+    this.reviewOriginal = body || "";
+    this.reviewInputEl.value = this.data.drafts[this.draftKey(review)]?.body ?? this.reviewOriginal;
+    this.reviewCloseOptions.hidden = true;
     this.reviewDeleteButton.classList.toggle("art-hidden", Boolean(review.draft));
     this.reviewWindowEl.classList.add("art-open");
     this.applyReviewWindowGeometry(anchorRect);
@@ -2131,11 +2265,48 @@ module.exports = class SelectionReviewToolbar extends Plugin {
   }
 
 
-  closeReviewWindow() {
+  draftKey(review) {
+    return JSON.stringify([review.filePath, review.draft ? [review.selection.fromOffset, review.selection.toOffset, review.selection.text] : review.id || review.start]);
+  }
+
+  requestCloseReview() {
+    if (!this.activeReview || this.reviewWriting) return;
+    if (this.reviewInputEl.value !== this.reviewOriginal) {
+      this.reviewCloseOptions.hidden = false;
+      this.reviewCloseOptions.querySelector("button")?.focus();
+    } else this.closeReviewWindow();
+  }
+
+  closeReviewWindow({ keep = false, focus = true } = {}) {
+    const review = this.activeReview;
+    if (!review) return;
+    const key = this.draftKey(review), body = this.reviewInputEl.value;
+    if (keep && body !== this.reviewOriginal && body.trim()) {
+      const { filePath, draft, selection, id, start, end, raw, index } = review;
+      this.data.drafts[key] = { filePath, draft, selection, id, start, end, raw, index, body, original: this.reviewOriginal };
+      void this.saveData(this.data).catch(console.error);
+    } else if (this.data.drafts[key]) {
+      delete this.data.drafts[key];
+      void this.saveData(this.data).catch(console.error);
+    }
     this.reviewWindowEl?.classList.remove("art-open");
     this.activeReview = null;
+    if (focus && this.reviewReturnFocus?.isConnected && !this.toolbarEl?.contains(this.reviewReturnFocus)) {
+      this.reviewReturnFocus.focus({ preventScroll: true });
+    }
     this.reviewPreviewComponent?.unload();
     this.reviewPreviewComponent = null;
+    this.scheduleReviewSidebarRefresh();
+  }
+
+  async resumeDraft(key) {
+    const record = this.data.drafts[key];
+    if (!record) return;
+    if (record.draft) this.openReviewWindow(record, record.original);
+    else {
+      const fresh = await this.findFreshReviewItem(record);
+      this.openReviewWindow(fresh ? { ...fresh, draft: false } : record, fresh?.body ?? record.original);
+    }
   }
 
 
@@ -2187,7 +2358,7 @@ module.exports = class SelectionReviewToolbar extends Plugin {
     this.reviewPreviewComponent = new Component();
     this.reviewPreviewComponent.load();
     this.reviewPreviewEl.empty();
-    const markdown = this.reviewInputEl.value || "*暂无内容*";
+    const markdown = this.reviewInputEl.value || this.tr("*暂无内容*", "*No content yet*");
     try {
       await MarkdownRenderer.render(
         this.app,
@@ -2197,26 +2368,36 @@ module.exports = class SelectionReviewToolbar extends Plugin {
         this.reviewPreviewComponent
       );
     } catch (error) {
-      this.reviewPreviewEl.setText(`预览失败：${error.message || error}`);
+      this.reviewPreviewEl.setText(this.tr(`预览失败：${error.message || error}`, `Preview failed: ${error.message || error}`));
     }
   }
 
 
   async saveActiveReview() {
+    if (this.reviewWriting) return;
+    this.reviewWriting = true;
+    this.reviewInputEl.readOnly = true;
+    try {
+      await this.writeActiveReview();
+    } catch (error) {
+      console.warn("[Selection Review Toolbar] Save failed", error);
+      new Notice(this.tr("未能保存评论，草稿仍在。", "Could not save the comment. The draft is still available."));
+    } finally {
+      this.reviewInputEl.readOnly = false;
+      this.reviewWriting = false;
+    }
+  }
+
+  async writeActiveReview() {
     const body = this.reviewInputEl.value.trim();
     if (!body) {
-      new Notice("请输入评论内容");
+      new Notice(this.tr("请输入评论内容", "Enter a comment first"));
       return;
     }
     const review = this.activeReview;
     if (!review) return;
 
     if (review.draft) {
-      if (!this.selectionIsStillValid()) {
-        new Notice("原选区已变化，请重新选择文字后添加评论");
-        this.closeReviewWindow();
-        return;
-      }
       const id = createReviewId();
       this.data.comments[id] = {
         body,
@@ -2225,36 +2406,29 @@ module.exports = class SelectionReviewToolbar extends Plugin {
         createdAt: Date.now(),
         updatedAt: Date.now()
       };
-      const cache = this.cachedSelection;
       const suffix = ` %% BYSAN-REVIEW:${id} %%`;
-      this.closeReviewWindow();
-      const inserted = await this.replaceCachedRange(
-        cache.fromOffset,
-        cache.toOffset,
-        `${cache.text}${suffix}`,
-        0,
-        cache.text.length
-      );
+      // Persist the body first: never create an anchor pointing at unsaved data.
+      await this.saveData(this.data);
+      const { fromOffset, toOffset, text, left, right } = review.selection;
+      const inserted = await this.changeReviewSource(review.filePath, source => (
+        source.slice(fromOffset, toOffset) === text &&
+        source.slice(fromOffset - left.length, fromOffset) === left &&
+        source.slice(toOffset, toOffset + right.length) === right
+      ) ? { start: toOffset, end: toOffset, text: suffix } : null);
       if (!inserted) {
         delete this.data.comments[id];
         await this.saveData(this.data);
-        new Notice("原选区已变化，未插入评论标记");
+        new Notice(this.tr("锚点已变化，未修改原文。可复制草稿后重新选择文字。", "The anchor changed; the note was not edited. You can copy the draft and select the text again."));
         return;
       }
-      await this.saveData(this.data);
+      await this.finishReviewSave(review, body);
       this.scheduleReviewBadgeRefresh();
       this.scheduleReviewSidebarRefresh();
+      new Notice(this.tr("评论已保存", "Comment saved"));
       return;
     }
 
-    let id = review.id;
-    if (!id) {
-      id = createReviewId();
-      if (!(await this.replaceReviewMarker(review, `%% BYSAN-REVIEW:${id} %%`))) {
-        new Notice("未找到旧评论标记，未执行迁移");
-        return;
-      }
-    }
+    const id = review.id || createReviewId();
     const previous = this.data.comments[id] || {};
     this.data.comments[id] = {
       ...previous,
@@ -2264,56 +2438,116 @@ module.exports = class SelectionReviewToolbar extends Plugin {
       updatedAt: Date.now()
     };
     await this.saveData(this.data);
-    this.closeReviewWindow();
+    if (!review.id && !(await this.replaceReviewMarker(review, `%% BYSAN-REVIEW:${id} %%`))) {
+      delete this.data.comments[id];
+      await this.saveData(this.data);
+      new Notice(this.tr("未找到旧评论标记，未执行迁移", "Legacy anchor not found; migration was skipped"));
+      return;
+    }
+    await this.finishReviewSave(review, body);
     this.scheduleReviewBadgeRefresh();
     this.scheduleReviewSidebarRefresh();
-    new Notice("评论已保存");
+    new Notice(this.tr("评论已保存", "Comment saved"));
   }
 
+  async finishReviewSave(review, body) {
+    if (this.activeReview === review) {
+      this.closeReviewWindow();
+      return;
+    }
+    const key = this.draftKey(review);
+    if (this.data.drafts[key]?.body.trim() === body) {
+      delete this.data.drafts[key];
+      await this.saveData(this.data);
+    }
+  }
 
   async deleteActiveReview() {
     const review = this.activeReview;
-    if (!review || review.draft) return;
-    if (!(await this.replaceReviewMarker(review, ""))) {
-      new Notice("未找到评论标记");
+    if (!review || review.draft || this.reviewWriting) return;
+    this.reviewWriting = true;
+    let result;
+    try {
+      result = await this.replaceReviewMarker(review, "");
+    } catch (error) {
+      console.warn("[Selection Review Toolbar] Delete failed", error);
+      new Notice(this.tr("未能删除评论。", "Could not delete the comment."));
+      return;
+    } finally {
+      this.reviewWriting = false;
+    }
+    if (!result) {
+      new Notice(this.tr("未找到评论标记", "Comment anchor not found"));
       return;
     }
-    if (review.id) delete this.data.comments[review.id];
-    await this.saveData(this.data);
-    this.closeReviewWindow();
+    // The body is keyed by its marker and intentionally retained. Editor Undo
+    // can restore the marker even after the pop-up and this notice are closed.
+    if (this.activeReview === review) this.closeReviewWindow();
     this.scheduleReviewBadgeRefresh();
     this.scheduleReviewSidebarRefresh();
-    new Notice("评论已删除");
+    const message = document.createDocumentFragment();
+    message.append(this.tr("评论已删除。 ", "Comment deleted. "));
+    const undo = document.createElement("button");
+    undo.type = "button";
+    undo.textContent = this.tr("撤销删除", "Undo delete");
+    message.append(undo);
+    const notice = new Notice(message, 12000);
+    undo.addEventListener("click", async () => {
+      notice.hide();
+      try {
+        const restored = await this.changeReviewSource(review.filePath, source =>
+          source === result.after ? { start: result.start, end: result.start, text: review.raw } : null);
+        if (!restored) new Notice(this.tr("原文已变化，未覆盖笔记。", "The note changed; nothing was overwritten."));
+      } catch (error) {
+        console.warn("[Selection Review Toolbar] Undo failed", error);
+        new Notice(this.tr("未能撤销删除。", "Could not undo the deletion."));
+      }
+      this.scheduleReviewBadgeRefresh();
+      this.scheduleReviewSidebarRefresh();
+    }, { once: true });
   }
 
 
   async replaceReviewMarker(review, replacement) {
-    const view = this.getActiveEditingView();
-    if (view?.file?.path === review.filePath) {
-      const text = view.editor.getValue();
+    return this.changeReviewSource(review.filePath, text => {
       let start = review.start;
       let end = review.end;
       if (text.slice(start, end) !== review.raw) {
         start = text.indexOf(review.raw);
-        if (start < 0) return false;
+        if (start < 0 || text.indexOf(review.raw, start + 1) >= 0) return null;
         end = start + review.raw.length;
       }
-      view.editor.replaceRange(replacement, view.editor.offsetToPos(start), view.editor.offsetToPos(end));
-      return true;
-    }
+      return { start, end, text: replacement };
+    });
+  }
 
-    const file = this.app.vault.getAbstractFileByPath(review.filePath);
-    if (!file) return false;
-    const text = await this.app.vault.cachedRead(file);
-    let start = review.start;
-    let end = review.end;
-    if (text.slice(start, end) !== review.raw) {
-      start = text.indexOf(review.raw);
-      if (start < 0) return false;
-      end = start + review.raw.length;
+  async readReviewSource(path) {
+    const view = this.getActiveEditingView();
+    if (view?.file?.path === path) return view.editor.getValue();
+    const file = this.app.vault.getAbstractFileByPath(path);
+    return file ? this.app.vault.cachedRead(file) : null;
+  }
+
+  async changeReviewSource(path, change, preferEditor = true) {
+    const view = this.getActiveEditingView();
+    if (preferEditor && view?.file?.path === path) {
+      const source = view.editor.getValue(), edit = change(source);
+      if (!edit) return false;
+      const { start, end, text } = edit;
+      view.editor.replaceRange(text, view.editor.offsetToPos(start), view.editor.offsetToPos(end), "bysan.comment");
+      return { start, after: source.slice(0, start) + text + source.slice(end) };
     }
-    await this.app.vault.modify(file, text.slice(0, start) + replacement + text.slice(end));
-    return true;
+    const file = this.app.vault.getAbstractFileByPath(path);
+    if (!file) return false;
+    let result = false;
+    await this.app.vault.process(file, source => {
+      const edit = change(source);
+      if (!edit) return source;
+      const { start, end, text } = edit;
+      result = { start, after: source.slice(0, start) + text + source.slice(end) };
+      return result.after;
+    });
+    return result;
   }
 
 
@@ -2348,7 +2582,7 @@ module.exports = class SelectionReviewToolbar extends Plugin {
     const file = this.getCurrentMarkdownFile();
     if (!file) return { file: null, comments: [] };
 
-    const source = await this.app.vault.cachedRead(file);
+    const source = await this.readReviewSource(file.path);
     const markers = parseReviewMarkers(source);
     const lineOffsets = createLineStartOffsets(source);
     const comments = markers.map((marker, index) => {
@@ -2384,11 +2618,12 @@ module.exports = class SelectionReviewToolbar extends Plugin {
   async findFreshReviewItem(item) {
     const file = this.app.vault.getAbstractFileByPath(item.filePath);
     if (!file) return null;
-    const source = await this.app.vault.cachedRead(file);
+    const source = await this.readReviewSource(file.path);
     const markers = parseReviewMarkers(source);
     const marker = item.id
       ? markers.find((candidate) => candidate.id === item.id)
-      : markers[item.index];
+      : (item.raw ? markers.find(candidate => candidate.raw === item.raw && candidate.start === item.start)
+        || markers.find(candidate => candidate.raw === item.raw) : markers[item.index]);
     if (!marker) return null;
 
     const record = marker.id ? this.data.comments[marker.id] : null;
@@ -2407,10 +2642,10 @@ module.exports = class SelectionReviewToolbar extends Plugin {
   }
 
 
-  async jumpToReviewItem(item) {
+  async jumpToReviewItem(item, openEditor = true) {
     const fresh = await this.findFreshReviewItem(item);
     if (!fresh) {
-      new Notice("未找到该评论标记，可能已被删除");
+      new Notice(this.tr("未找到该评论标记，可能已被删除", "Comment anchor not found; it may have been deleted"));
       this.scheduleReviewSidebarRefresh();
       return;
     }
@@ -2419,7 +2654,7 @@ module.exports = class SelectionReviewToolbar extends Plugin {
     try {
       const view = await this.openReviewFileInEditorLeaf(fresh.file);
       if (!view) {
-        new Notice("无法打开评论所在文档");
+        new Notice(this.tr("无法打开评论所在文档", "Could not open the note containing the comment"));
         return;
       }
 
@@ -2432,10 +2667,10 @@ module.exports = class SelectionReviewToolbar extends Plugin {
 
       await new Promise((resolve) => window.requestAnimationFrame(resolve));
       this.scheduleReviewBadgeRefresh();
-      this.openReviewWindow({
+      if (openEditor) this.openReviewWindow({
         ...fresh,
         draft: false
-      }, fresh.body || "评论内容缺失", anchorRect);
+      }, fresh.body || "", anchorRect);
     } finally {
       window.setTimeout(() => {
         this.reviewNavigatorJumping = false;
@@ -2727,7 +2962,7 @@ module.exports = class SelectionReviewToolbar extends Plugin {
     const commandId = this.sourceModeCommandId || this.findSourceModeCommandId();
 
     if (!commandId) {
-      new Notice("未找到 Obsidian 的 Live Preview / Source Mode 切换命令");
+      new Notice(this.tr("未找到 Obsidian 的实时预览／源码切换命令", "Obsidian’s Live Preview / Source mode command was not found"));
       this.hideToolbar({ clearCache: true });
       return;
     }

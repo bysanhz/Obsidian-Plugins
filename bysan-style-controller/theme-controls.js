@@ -750,7 +750,7 @@ function rgbToHsl(red, green, blue) {
 function addValueStepper(containerEl, { label, language, value, unit = "", numeric = false, edit, adjust, save, reset, read, split, range }) {
   const zh = language === "zh";
   const controls = containerEl.createDiv({ cls: "bysan-value-stepper" });
-  let slider, sliderTrack;
+  let slider, sliderTrack, sliderGesture;
   let current = String(value);
   const action = (text, tooltip, onClick) => {
     const button = controls.createEl("button", {
@@ -775,10 +775,10 @@ function addValueStepper(containerEl, { label, language, value, unit = "", numer
     }
     if (split) input.title = current;
   };
-  const apply = (next) => {
+  const apply = (next, group) => {
     const changed = next != null && String(next) !== current;
     set(next);
-    if (changed) void save(next);
+    if (changed) void save(next, group ? { group } : undefined);
   };
   const step = direction => {
     if (read) set(read());
@@ -816,7 +816,10 @@ function addValueStepper(containerEl, { label, language, value, unit = "", numer
     });
     // A typed value may fall between the original drag steps. Keep its exact
     // handle position, but snap drag changes to the original increments.
-    slider.addEventListener("input", () => apply(range.snap(slider.valueAsNumber)));
+    slider.addEventListener("pointerdown", () => { sliderGesture = Symbol("style-slider-drag"); });
+    const endGesture = () => { sliderGesture = undefined; };
+    for (const type of ["pointerup", "pointercancel", "lostpointercapture", "blur"]) slider.addEventListener(type, endGesture);
+    slider.addEventListener("input", () => apply(range.snap(slider.valueAsNumber), sliderGesture));
     slider.addEventListener("keydown", event => {
       const change = {
         ArrowDown: -1, ArrowLeft: -1, ArrowUp: 1, ArrowRight: 1, PageDown: -10, PageUp: 10
@@ -1583,7 +1586,7 @@ class ThemeControls {
       const read = () => this.readPointSize(setting, item);
       this.plugin.addPointStepper(setting.controlEl, {
         label: title, read,
-        save: value => this.plugin.updateThemeSetting(item.id, `${value}pt`),
+        save: (value, action) => this.plugin.updateThemeSetting(item.id, `${value}pt`, action),
         reset: async () => {
           await this.plugin.resetThemeSetting(item.id);
           return read();
@@ -1599,7 +1602,7 @@ class ThemeControls {
         label: title,
         language: this.plugin.language,
         value: read(),
-        save: value => this.plugin.updateThemeSetting(item.id, value),
+        save: (value, action) => this.plugin.updateThemeSetting(item.id, value, action),
         reset: async () => {
           await this.plugin.resetThemeSetting(item.id);
           return read();
@@ -1933,7 +1936,7 @@ class ThemeControls {
       };
       let pickerComponent;
       let refreshOpacity;
-      let syncingControls = false;
+      let syncingControls = false, colourGesture;
       const colorLabel = this.plugin.t("theme.colorTitle", { mode: label });
       const updateTooltip = (hex, alpha) => {
         const value = (item.opacity ? colorWithAlpha(hex, alpha) : hex).toUpperCase();
@@ -1941,6 +1944,7 @@ class ThemeControls {
       };
       appendNewControls(() => setting.addColorPicker((picker) => {
         pickerComponent = picker;
+        picker.colorPickerEl.addEventListener("pointerdown", () => { colourGesture = Symbol("colour-edit"); });
         picker.setValue(parsed.hex);
         picker.colorPickerEl.setAttribute("aria-label", `${setting.nameEl.textContent} · ${colorLabel}`);
         updateTooltip(parsed.hex, parsed.alpha);
@@ -1950,9 +1954,10 @@ class ThemeControls {
           const inheritedTransparent = current.alpha === 0 && !isDefined(this.stored[item.id]?.[mode]);
           const alpha = inheritedTransparent ? 1 : current.alpha;
           updateTooltip(hex, alpha);
-          this.updateThemedColor(item, mode, hex, alpha);
+          this.updateThemedColor(item, mode, hex, alpha, colourGesture ? { group: colourGesture } : undefined);
           if (inheritedTransparent) refreshOpacity?.();
         });
+        picker.colorPickerEl.addEventListener("change", () => { colourGesture = undefined; });
       }));
       if (item.opacity) {
         appendNewControls(() => {
@@ -1961,10 +1966,10 @@ class ThemeControls {
           refreshOpacity = addNumericStepper(setting.controlEl, {
             label: `${setting.nameEl.textContent} · ${opacityLabel}`, language: this.plugin.language,
             value: read(), read, min: 0, max: 1, step: 0.01, slider: true,
-            save: alpha => {
+            save: (alpha, action) => {
               const current = parseColor(this.displayValueFor(item, mode));
               updateTooltip(current.hex, alpha);
-              this.updateThemedColor(item, mode, current.hex, alpha);
+              this.updateThemedColor(item, mode, current.hex, alpha, action);
             }
           });
         });
@@ -2000,33 +2005,39 @@ class ThemeControls {
   }
 
 
-  updateThemedColor(item, mode, hex, alpha) {
+  updateThemedColor(item, mode, hex, alpha, action) {
     const current = this.stored[item.id] && typeof this.stored[item.id] === "object"
       ? this.stored[item.id]
       : {};
     this.plugin.updateThemeSetting(item.id, {
       ...current,
       [mode]: colorWithAlpha(hex, item.opacity ? alpha : 1)
-    });
+    }, action);
   }
 
 
   filterRows(containerEl, query) {
-    const normalized = String(query || "").trim().toLowerCase();
-    const rows = Array.from(containerEl.querySelectorAll(".setting-item:not(.setting-item-heading)"))
-      .filter(row => !row.closest(".bysan-settings-nav"));
-    const matches = [];
-
-    for (const row of rows) {
-      const searchable = String(
-        row.dataset.bysanSearch || row.textContent || ""
-      ).toLowerCase();
-      const matched = !normalized || searchable.includes(normalized);
-      row.classList.toggle("bysan-setting-filtered", Boolean(normalized) && !matched);
-      if (normalized && matched && !row.closest("[data-bysan-list-conditional][hidden]")) matches.push(row);
-    }
-
-    return matches;
+    const normalize = text => String(text || "").normalize("NFKC").trim().toLocaleLowerCase();
+    const normalized = normalize(query);
+    if (!normalized) return [];
+    const words = normalized.replace(/隔行|交替/g, " 斑马纹 ").replace(/字體/g, "字体")
+      .split(/\s+/).filter(Boolean);
+    return Array.from(containerEl.querySelectorAll(".setting-item:not(.setting-item-heading)"))
+      .filter(row => !row.closest(".bysan-settings-nav"))
+      .map(row => {
+        const name = normalize(row.querySelector(".setting-item-name")?.textContent);
+        const searchable = normalize([
+          name, row.dataset.bysanSearch || row.textContent,
+          row.dataset.bysanSettingId, row.dataset.bysanSettingKeys,
+          row.classList.contains("bysan-color-row") ? "颜色 配色 color colour" : "",
+          row.closest("[data-bysan-section-label]")?.dataset.bysanSectionLabel,
+          row.closest(".bysan-feature-group")?.dataset.bysanSearch
+        ].filter(Boolean).join(" "));
+        const score = name === normalized || row.dataset.bysanSettingId === normalized ? 100 :
+          name.includes(normalized) ? 50 : words.every(word => searchable.includes(word)) ?
+            10 + words.filter(word => name.includes(word)).length : 0;
+        return { row, score };
+      }).filter(entry => entry.score).sort((a, b) => b.score - a.score).map(entry => entry.row);
   }
 }
 

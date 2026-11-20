@@ -1,5 +1,5 @@
 /**
- * Selection Review Toolbar v0.2.5
+ * Selection Review Toolbar v0.2.6
  * Built-in and user-defined review colors are centralized here.
  */
 
@@ -474,8 +474,24 @@ body.bysan-style-controller-active[style*="--bysan-right-pane-bg:"] .mod-right-s
   color: var(--text-normal);
   background: var(--bysan-review-card-bg, color-mix(in srgb, var(--background-primary) 90%, var(--interactive-accent) 10%));
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
-  cursor: pointer;
   outline: none;
+}
+
+.art-sidebar-actions,
+.art-review-close-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  align-items: center;
+}
+
+.art-sidebar-actions { margin-block-start: 6px; }
+.art-review-sidebar-draft { margin-block: 4px; }
+.art-review-close-options { flex-basis: 100%; }
+.art-review-close-options[hidden] { display: none; }
+.art-toolbar-button[aria-pressed="true"] {
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
 }
 
 .art-review-sidebar-card:hover,
@@ -680,6 +696,7 @@ body.bysan-style-controller-active[style*="--bysan-right-pane-bg:"] .mod-right-s
 
 .art-review-footer {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 8px;

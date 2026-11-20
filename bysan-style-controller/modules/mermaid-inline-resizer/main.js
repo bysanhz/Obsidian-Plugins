@@ -1,7 +1,7 @@
 /**
  * Mermaid Inline Resizer
  *
- * Version: 0.12.1
+ * Version: 0.12.3
  *
  * 稳定四按钮版。
  *
@@ -19,7 +19,7 @@
  *
  *      1% -> 3% -> 5% -> 10% -> 1%
  *
- * 5. 点击当前宽度按钮恢复 100%。
+ * 5. 当前宽度仅显示；单独的恢复按钮清除自定义宽度。
  * 6. 宽度持久化到 Mermaid 源码：
  *
  *      %% width: 72%
@@ -72,12 +72,23 @@ const STEP_OPTIONS = [
 
 const DEFAULT_STEP = 3;
 
+function replaceWidthRange(editor, text, from, to = from) {
+  // Keep these discrete actions separate from typing and from one another.
+  // The widget already preserves viewport position; don't scroll to the caret.
+  const cm = editor.cm;
+  if (cm?.dispatch) {
+    cm.dispatch({ changes: { from: editor.posToOffset(from), to: editor.posToOffset(to), insert: text },
+      userEvent: "bysan.media-width" });
+  } else editor.replaceRange(text, from, to, "bysan.media-width");
+}
 
 class MermaidZoomModal extends Modal {
 
-  constructor(app, sourceMermaid) {
+  constructor(app, sourceMermaid, plugin, trigger) {
     super(app);
     this.sourceMermaid = sourceMermaid;
+    this.plugin = plugin;
+    this.trigger = trigger;
     this.scale = 1;
     this.panX = 0;
     this.panY = 0;
@@ -90,25 +101,29 @@ class MermaidZoomModal extends Modal {
     this.contentEl.empty();
 
     const toolbar = this.contentEl.createDiv({ cls: "mir-zoom-toolbar" });
+    const tr = (zh, en) => this.plugin.tr(zh, en);
+    toolbar.createSpan({ cls: "mir-zoom-label", text: tr("仅查看", "View only") });
     const makeButton = (text, title, className = "") => {
       const button = toolbar.createEl("button", {
         cls: className,
         text,
         attr: { type: "button", title }
       });
-      button.tabIndex = -1;
+      button.setAttribute("aria-label", title);
       return button;
     };
-    const minus = makeButton("−", "缩小");
-    this.scaleButton = makeButton("100%", "恢复 100%", "mir-zoom-reset");
-    const plus = makeButton("+", "放大");
-    const close = makeButton("×", "关闭", "mir-zoom-close");
+    const minus = makeButton("−", tr("缩小显示", "Zoom out"));
+    this.scaleButton = toolbar.createEl("output", { text: "100%", cls: "mir-zoom-scale" });
+    const plus = makeButton("+", tr("放大显示", "Zoom in"));
+    const reset = makeButton("↺", tr("恢复查看比例", "Reset view zoom"), "mir-zoom-reset");
+    const close = makeButton("×", tr("关闭", "Close"), "mir-zoom-close");
+    close.addEventListener("click", () => this.close());
 
     this.viewportEl = this.contentEl.createDiv({ cls: "mir-zoom-viewport" });
     this.canvasEl = this.viewportEl.createDiv({ cls: "mir-zoom-canvas" });
     const svg = this.sourceMermaid.querySelector("svg");
     if (!svg) {
-      this.canvasEl.setText("当前 Mermaid 尚未渲染完成。");
+      this.canvasEl.setText(tr("当前 Mermaid 尚未渲染完成。", "Mermaid has not rendered yet."));
       return;
     }
     const clone = svg.cloneNode(true);
@@ -120,8 +135,20 @@ class MermaidZoomModal extends Modal {
 
     minus.addEventListener("click", () => this.zoomBy(0.8));
     plus.addEventListener("click", () => this.zoomBy(1.25));
-    this.scaleButton.addEventListener("click", () => this.resetTransform());
-    close.addEventListener("click", () => this.close());
+    reset.addEventListener("click", () => this.resetTransform());
+    this.modalEl.addEventListener("keydown", this.handleZoomKey = event => {
+      if (event.target.closest("input, textarea")) return;
+      if (["+", "="].includes(event.key)) this.zoomBy(1.25);
+      else if (event.key === "-") this.zoomBy(0.8);
+      else if (event.key === "0") this.resetTransform();
+      else if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(event.key)) {
+        this.panX += ({ ArrowLeft: 32, ArrowRight: -32 })[event.key] || 0;
+        this.panY += ({ ArrowUp: 32, ArrowDown: -32 })[event.key] || 0;
+        this.updateTransform();
+      } else return;
+      event.preventDefault();
+    });
+    minus.focus();
 
     this.viewportEl.addEventListener("wheel", (event) => {
       event.preventDefault();
@@ -180,6 +207,8 @@ class MermaidZoomModal extends Modal {
 
 
   onClose() {
+    if (this.handleZoomKey) this.modalEl.removeEventListener("keydown", this.handleZoomKey);
+    if (this.trigger?.isConnected) this.trigger.focus({ preventScroll: true });
     this.contentEl.empty();
   }
 }
@@ -239,26 +268,23 @@ class SourceTableControlsWidget extends WidgetType {
     const makeButton = (className, text, title) => {
       const button = document.createElement("button");
       button.type = "button";
-      button.tabIndex = -1;
       button.className = `mir-button ${className}`;
       button.textContent = text;
       button.title = title;
       return button;
     };
 
-    const minus = makeButton("mir-minus", "−", "按当前步长缩小表格");
+    const label = (el, zh, en) => this.plugin.label(el, zh, en);
+    const minus = label(makeButton("mir-minus", "−", ""), "缩小文档表格宽度", "Reduce table width in note");
     const step = makeButton(
       "mir-step-value",
       `${this.plugin.currentStep}%`,
       this.plugin.getStepButtonTitle()
     );
-    const current = makeButton(
-      "mir-width-value",
-      `${Math.round(this.width)}%`,
-      "当前表格宽度；点击恢复 100%"
-    );
-    const plus = makeButton("mir-plus", "+", "按当前步长放大表格");
-    control.append(minus, step, current, plus);
+    const current = this.plugin.widthOutput(this.width);
+    const plus = label(makeButton("mir-plus", "+", ""), "增大文档表格宽度", "Increase table width in note");
+    const reset = label(makeButton("mir-reset-width", "↺", ""), "清除自定义宽度", "Clear custom width");
+    control.append(minus, step, current, plus, reset);
     row.appendChild(control);
 
     ["pointerdown", "mousedown", "click"].forEach((eventName) => {
@@ -286,9 +312,10 @@ class SourceTableControlsWidget extends WidgetType {
         markdownView,
         control
       );
-      const value = this.plugin.clampWidth(change(entry.width));
+      const value = change ? this.plugin.clampWidth(change(entry.width)) : DEFAULT_WIDTH;
+      if (change && value === entry.width) return;
       current.textContent = `${Math.round(value)}%`;
-      this.plugin.persistMediaWidth(markdownView, entry, "table", value);
+      this.plugin.persistMediaWidth(markdownView, entry, "table", change ? value : null);
       this.plugin.preserveEditorScroll(markdownView, scrollPosition);
     };
 
@@ -298,9 +325,7 @@ class SourceTableControlsWidget extends WidgetType {
     plus.addEventListener("click", () => {
       update((width) => width + this.plugin.currentStep);
     });
-    current.addEventListener("click", () => {
-      update(() => DEFAULT_WIDTH);
-    });
+    reset.addEventListener("click", () => update(null));
     step.addEventListener("click", async () => {
       const markdownView = this.plugin.findMarkdownViewForCM(cmView);
       const scrollPosition = markdownView
@@ -739,6 +764,32 @@ module.exports = class MermaidInlineResizer extends Plugin {
    * Settings
    * ======================================================== */
 
+  tr(zh, en) {
+    return (this.getHostLanguage?.() || (navigator.language.startsWith("zh") ? "zh" : "en")) === "zh" ? zh : en;
+  }
+
+  label(element, zh, en) {
+    element.dataset.mirLabelZh = zh;
+    element.dataset.mirLabelEn = en;
+    element.title = this.tr(zh, en);
+    element.setAttribute("aria-label", element.title);
+    return element;
+  }
+
+  widthOutput(width) {
+    const output = document.createElement("output");
+    output.className = "mir-width-value";
+    output.textContent = `${Math.round(width)}%`;
+    return this.label(output, "文档宽度", "Width in note");
+  }
+
+  refreshLanguage() {
+    for (const element of document.querySelectorAll("[data-mir-label-zh]")) {
+      this.label(element, element.dataset.mirLabelZh, element.dataset.mirLabelEn);
+    }
+    this.updateAllStepButtons();
+  }
+
   normalizeStep(step) {
 
     const numericStep =
@@ -813,8 +864,8 @@ module.exports = class MermaidInlineResizer extends Plugin {
             `${this.currentStep}%`;
 
 
-          button.title =
-            this.getStepButtonTitle();
+          button.title = this.getStepButtonTitle();
+          button.setAttribute("aria-label", button.title);
 
         }
       );
@@ -827,8 +878,7 @@ module.exports = class MermaidInlineResizer extends Plugin {
       .forEach(
         (button) => {
 
-          button.title =
-            `按当前步长缩小 ${this.currentStep}%`;
+          button.title = this.tr(`缩小文档宽度 ${this.currentStep}%`, `Reduce width in note by ${this.currentStep}%`);
 
         }
       );
@@ -841,8 +891,7 @@ module.exports = class MermaidInlineResizer extends Plugin {
       .forEach(
         (button) => {
 
-          button.title =
-            `按当前步长放大 ${this.currentStep}%`;
+          button.title = this.tr(`增大文档宽度 ${this.currentStep}%`, `Increase width in note by ${this.currentStep}%`);
 
         }
       );
@@ -851,10 +900,8 @@ module.exports = class MermaidInlineResizer extends Plugin {
 
   getStepButtonTitle() {
 
-    return (
-      `当前步长 ${this.currentStep}%；` +
-      "点击切换 1% → 3% → 5% → 10%"
-    );
+    return this.tr(`宽度步长 ${this.currentStep}%：切换 1% → 3% → 5% → 10%`,
+      `Width step ${this.currentStep}%: cycle 1% → 3% → 5% → 10%`);
   }
 
 
@@ -2296,6 +2343,11 @@ module.exports = class MermaidInlineResizer extends Plugin {
           text
         )
       ) {
+        if (width === null) {
+          replaceWidthRange(editor, "", { line, ch: 0 }, { line: line + 1, ch: 0 });
+          this.updateActiveWidthCacheFromEditor(editor);
+          return;
+        }
 
         if (
           text.trim() ===
@@ -2307,7 +2359,7 @@ module.exports = class MermaidInlineResizer extends Plugin {
         }
 
 
-        editor.replaceRange(
+        replaceWidthRange(editor,
           directive,
 
           {
@@ -2342,7 +2394,8 @@ module.exports = class MermaidInlineResizer extends Plugin {
      * %% width: 72%
      * flowchart ...
      */
-    editor.replaceRange(
+    if (width === null) return;
+    replaceWidthRange(editor,
       directive + "\n",
 
       {
@@ -2582,6 +2635,17 @@ module.exports = class MermaidInlineResizer extends Plugin {
     const editor = view.editor;
     const value = Math.round(this.clampWidth(width));
     const directive = `%% ${kind}-width: ${value}% %%`;
+    if (width === null) {
+      const re = kind === "table" ? TABLE_WIDTH_RE : IMAGE_WIDTH_RE;
+      let start = entry.directiveLine;
+      if (!(start >= 0 && re.test(editor.getLine(start)))) return;
+      let end = start + 1;
+      while (start > 0 && re.test(editor.getLine(start - 1))) start--;
+      while (end < entry.line && re.test(editor.getLine(end))) end++;
+      replaceWidthRange(editor, "", { line: start, ch: 0 }, { line: end, ch: 0 });
+      this.renderedEntryCache.delete(view.file?.path || "");
+      return;
+    }
 
     if (kind === "table") {
       if (entry.directiveLine >= 0) {
@@ -2596,20 +2660,20 @@ module.exports = class MermaidInlineResizer extends Plugin {
            *
            * -> 指令后增加空行，保住 Obsidian 原生表格 Widget。
            */
-          editor.replaceRange(
+          replaceWidthRange(editor,
             directive + "\n\n",
             { line: entry.directiveLine, ch: 0 },
             { line: entry.line, ch: 0 }
           );
         } else {
-          editor.replaceRange(
+          replaceWidthRange(editor,
             directive,
             { line: entry.directiveLine, ch: 0 },
             { line: entry.directiveLine, ch: oldLine.length }
           );
         }
       } else {
-        editor.replaceRange(
+        replaceWidthRange(editor,
           directive + "\n\n",
           { line: entry.line, ch: 0 }
         );
@@ -2636,13 +2700,13 @@ module.exports = class MermaidInlineResizer extends Plugin {
     if (firstDirective < entry.line) {
       const lastDirective = entry.line - 1;
       const oldLastLine = editor.getLine(lastDirective);
-      editor.replaceRange(
+      replaceWidthRange(editor,
         directive,
         { line: firstDirective, ch: 0 },
         { line: lastDirective, ch: oldLastLine.length }
       );
     } else {
-      editor.replaceRange(
+      replaceWidthRange(editor,
         directive + "\n",
         { line: entry.line, ch: 0 }
       );
@@ -2713,26 +2777,22 @@ module.exports = class MermaidInlineResizer extends Plugin {
     const makeButton = (className, text, title) => {
       const button = document.createElement("button");
       button.type = "button";
-      button.tabIndex = -1;
       button.className = `mir-button ${className}`;
       button.textContent = text;
       button.title = title;
       return button;
     };
 
-    const minus = makeButton("mir-minus", "−", "按当前步长缩小");
+    const minus = this.label(makeButton("mir-minus", "−", ""), "缩小文档宽度", "Reduce width in note");
     const step = makeButton(
       "mir-step-value",
       `${this.currentStep}%`,
       this.getStepButtonTitle()
     );
-    const current = makeButton(
-      "mir-width-value",
-      `${Math.round(entry.width)}%`,
-      `当前${kind === "image" ? "图片" : "表格"}宽度；点击恢复 100%`
-    );
-    const plus = makeButton("mir-plus", "+", "按当前步长放大");
-    control.append(minus, step, current, plus);
+    const current = this.widthOutput(entry.width);
+    const plus = this.label(makeButton("mir-plus", "+", ""), "增大文档宽度", "Increase width in note");
+    const reset = this.label(makeButton("mir-reset-width", "↺", ""), "清除自定义宽度", "Clear custom width");
+    control.append(minus, step, current, plus, reset);
     host.appendChild(control);
 
     ["mousedown", "pointerdown", "click"].forEach((eventName) => {
@@ -2752,10 +2812,11 @@ module.exports = class MermaidInlineResizer extends Plugin {
       if (!freshEntry) {
         return;
       }
-      const value = this.clampWidth(change(freshEntry.width));
+      const value = change ? this.clampWidth(change(freshEntry.width)) : DEFAULT_WIDTH;
+      if (change && value === freshEntry.width) return;
       this.applyMediaWidth(target, value, kind);
       current.textContent = `${Math.round(value)}%`;
-      this.persistMediaWidth(view, freshEntry, kind, value);
+      this.persistMediaWidth(view, freshEntry, kind, change ? value : null);
       this.preserveEditorScroll(view, scrollPosition);
     };
 
@@ -2767,9 +2828,9 @@ module.exports = class MermaidInlineResizer extends Plugin {
       event.preventDefault();
       update((width) => width + this.currentStep);
     });
-    current.addEventListener("click", (event) => {
+    reset.addEventListener("click", (event) => {
       event.preventDefault();
-      update(() => DEFAULT_WIDTH);
+      update(null);
     });
     step.addEventListener("click", async (event) => {
       event.preventDefault();
@@ -2824,10 +2885,9 @@ module.exports = class MermaidInlineResizer extends Plugin {
     }
     const button = document.createElement("button");
     button.type = "button";
-    button.tabIndex = -1;
     button.className = "mir-fullscreen-button";
     button.textContent = "⛶";
-    button.title = "全屏查看并缩放 Mermaid";
+    this.label(button, "全屏查看并临时缩放 Mermaid", "Open Mermaid and zoom without editing");
     ["pointerdown", "mousedown"].forEach((eventName) => {
       button.addEventListener(eventName, (event) => {
         event.preventDefault();
@@ -2839,7 +2899,7 @@ module.exports = class MermaidInlineResizer extends Plugin {
       event.stopPropagation();
       window.setTimeout(() => {
         try {
-          new MermaidZoomModal(this.app, mermaidEl).open();
+          new MermaidZoomModal(this.app, mermaidEl, this, button).open();
         } catch (error) {
           console.error("[Mermaid Inline Resizer] 无法打开缩放窗口", error);
           new Notice(`无法打开 Mermaid 缩放窗口：${error?.message || error}`);
@@ -3087,26 +3147,12 @@ module.exports = class MermaidInlineResizer extends Plugin {
      * Current width
      * ------------------------------------------------------ */
 
-    const widthButton =
-      document.createElement(
-        "button"
-      );
-
-
-    widthButton.type =
-      "button";
-
-
-    widthButton.className =
-      "mir-button mir-width-value";
-
-
-    widthButton.textContent =
-      `${Math.round(initialWidth)}%`;
-
-
-    widthButton.title =
-      "当前 Mermaid 宽度；点击恢复 100%";
+    const widthButton = this.widthOutput(initialWidth);
+    const resetWidth = document.createElement("button");
+    resetWidth.className = "mir-button mir-reset-width";
+    resetWidth.type = "button";
+    resetWidth.textContent = "↺";
+    this.label(resetWidth, "清除自定义宽度", "Clear custom width");
 
 
     /* ------------------------------------------------------
@@ -3135,11 +3181,8 @@ module.exports = class MermaidInlineResizer extends Plugin {
       `按当前步长放大 ${this.currentStep}%`;
 
 
-    /* Mouse clicks must not transfer focus away from CodeMirror. On macOS a
-     * focused button can make the editor restore its selection at the top. */
-    [minus, stepButton, widthButton, plus].forEach((button) => {
-      button.tabIndex = -1;
-    });
+    this.label(minus, "缩小文档 Mermaid 宽度", "Reduce Mermaid width in note");
+    this.label(plus, "增大文档 Mermaid 宽度", "Increase Mermaid width in note");
 
 
     /* ------------------------------------------------------
@@ -3164,6 +3207,7 @@ module.exports = class MermaidInlineResizer extends Plugin {
     control.appendChild(
       plus
     );
+    control.appendChild(resetWidth);
 
 
     mermaidEl.appendChild(
@@ -3242,6 +3286,7 @@ module.exports = class MermaidInlineResizer extends Plugin {
           );
 
 
+        if (target === current) return;
         this.persistWidthForBlock(
           view,
           currentBlock,
@@ -3300,11 +3345,11 @@ module.exports = class MermaidInlineResizer extends Plugin {
 
 
         minus.title =
-          `按当前步长缩小 ${this.currentStep}%`;
+          this.tr(`缩小文档宽度 ${this.currentStep}%`, `Reduce width in note by ${this.currentStep}%`);
 
 
         plus.title =
-          `按当前步长放大 ${this.currentStep}%`;
+          this.tr(`增大文档宽度 ${this.currentStep}%`, `Increase width in note by ${this.currentStep}%`);
       }
     );
 
@@ -3313,7 +3358,7 @@ module.exports = class MermaidInlineResizer extends Plugin {
      * Reset to 100%
      * ------------------------------------------------------ */
 
-    widthButton.addEventListener(
+    resetWidth.addEventListener(
       "click",
       (event) => {
 
@@ -3345,7 +3390,7 @@ module.exports = class MermaidInlineResizer extends Plugin {
         this.persistWidthForBlock(
           view,
           currentBlock,
-          DEFAULT_WIDTH
+          null
         );
 
 
@@ -3414,6 +3459,7 @@ module.exports = class MermaidInlineResizer extends Plugin {
           );
 
 
+        if (target === current) return;
         this.persistWidthForBlock(
           view,
           currentBlock,

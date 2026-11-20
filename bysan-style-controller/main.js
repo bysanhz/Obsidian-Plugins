@@ -1,6 +1,6 @@
 /**
  * Bysan Style Controller
- * Version: 0.18.17
+ * Version: 0.19.0
  *
  * Owns visual presentation and provides switchable, integrated Bysan modules.
  */
@@ -229,7 +229,7 @@ const BLANK_LINE_OPTIONS = [
   ['html', 'HTML 块', 'HTML blocks', true]
 ];
 
-function buildParagraphBlankLineChanges(markdown, options = {}) {
+function buildParagraphBlankLineChanges(markdown, options = {}, keepBoundaries = false) {
   const lines = String(markdown || "").split("\n");
 
   const protectedLines = new Set();
@@ -327,7 +327,7 @@ function buildParagraphBlankLineChanges(markdown, options = {}) {
       /^ {0,3}(?:-+|=+)[ \t]*$/.test(lines[after]);
     if (!inIndentedBlock && !inTable) {
       /* Remove only blank-line records; retain one normal line break. */
-      const keep = setextRisk || preserve(classify(before)) || preserve(classify(after));
+      const keep = keepBoundaries || setextRisk || preserve(classify(before)) || preserve(classify(after));
       const text = keep && before >= 0 && after < lines.length ? '\n' : '';
       const to = after < lines.length ? { line: after, ch: 0 } :
         { line: lines.length - 1, ch: lines[lines.length - 1].length };
@@ -342,6 +342,15 @@ function buildParagraphBlankLineChanges(markdown, options = {}) {
     start = end;
   }
   return changes;
+}
+
+function sameSetting(left, right) {
+  if (left === right) return true;
+  if (!left || !right || typeof left !== "object" || typeof right !== "object" ||
+      Array.isArray(left) !== Array.isArray(right)) return false;
+  const keys = Object.keys(left);
+  return keys.length === Object.keys(right).length &&
+    keys.every(key => Object.hasOwn(right, key) && sameSetting(left[key], right[key]));
 }
 
 const CONTENT_GEOMETRY_CONTROLS = [
@@ -733,7 +742,9 @@ module.exports = class BysanStyleController extends Plugin {
       });
     }
 
-    this.addSettingTab(new BysanStyleSettingTab(this.app, this));
+    this.styleEdits = [];
+    this.styleSettingTab = new BysanStyleSettingTab(this.app, this);
+    this.addSettingTab(this.styleSettingTab);
     this.addCommand({
       id: "open-style-settings",
       name: this.language === "zh" ? "打开样式设置" : "Open style settings",
@@ -775,6 +786,7 @@ module.exports = class BysanStyleController extends Plugin {
         this.lastDarkMode = darkMode;
         this.applyPalette();
         this.themeControls.applyVariables();
+        this.styleSettingTab?.refreshSettingFeedback();
       }
     });
     this.themeObserver.observe(document.body, {
@@ -823,22 +835,8 @@ module.exports = class BysanStyleController extends Plugin {
 
 
   removeParagraphBlankLines(editor, view) {
-    const changes = buildParagraphBlankLineChanges(editor.getValue(), this.settings.blankLinePreservation);
-    if (changes.length === 0) {
-      new Notice(this.t("paragraphCleanup.none"));
-      return false;
-    }
-
-    const fileName = view?.file?.name || this.t("pdf.currentNote");
-    const confirmed = window.confirm(this.t("paragraphCleanup.confirm", {
-      name: fileName,
-      count: changes.length
-    }));
-    if (!confirmed) return false;
-
-    /* One CodeMirror transaction makes the entire cleanup a single Ctrl+Z. */
-    editor.transaction({ changes });
-    new Notice(this.t("paragraphCleanup.done", { count: changes.length }));
+    new BatchSourceEditModal(this.app, this, editor, view, "blank", (source, merge) =>
+      buildParagraphBlankLineChanges(source, this.settings.blankLinePreservation, !merge)).open();
     return true;
   }
 
@@ -856,6 +854,7 @@ module.exports = class BysanStyleController extends Plugin {
   async setUiLanguage(value) {
     this.settings.uiLanguage = ["auto", "zh", "en"].includes(value) ? value : "auto";
     await this.saveData(this.settings);
+    for (const module of this.integratedModules?.values() ?? []) module.refreshLanguage?.();
   }
 
 
@@ -924,7 +923,11 @@ module.exports = class BysanStyleController extends Plugin {
       dir: directory
     };
     const instance = new ModuleClass(this.app, manifest);
-    if (module.id === "selection-review-toolbar") instance.getHostLanguage = () => this.language;
+    instance.getHostLanguage = () => this.language;
+    if (module.id === "academic-heading-numbering") {
+      instance.openSourceCleanup = (editor, view, build) =>
+        new BatchSourceEditModal(this.app, this, editor, view, "heading", build).open();
+    }
     await instance.load();
 
     const style = document.createElement("style");
@@ -962,74 +965,84 @@ module.exports = class BysanStyleController extends Plugin {
   }
 
 
-  async updateSetting(key, value) {
-    this.settings[key] = value;
-    if (!PRESET_META_KEYS.has(key)) this.settings.stylePresetDirty = true;
-    await this.saveData(this.settings);
-    if (PALETTE_SETTING_KEYS.has(key)) {
-      this.applyPalette();
-    } else {
-      this.applySettings();
+  async updateSetting(key, value, action) {
+    return this.changeStyleValues("base", { [key]: value }, action);
+  }
+
+  async updateThemeSetting(id, value, action) {
+    await this.updateThemeSettings({ [id]: value }, action);
+  }
+
+  async updateThemeSettings(changes, action) {
+    return this.changeStyleValues("theme", changes, action);
+  }
+
+  async changeStyleValues(kind, changes, { group, history = true } = {}) {
+    const target = kind === "theme" ? (this.settings.themeSettings ||= {}) : this.settings;
+    const previous = new Map();
+    const edited = [];
+    for (const [key, next] of Object.entries(changes)) {
+      if (sameSetting(target[key], next) && (next !== undefined || !Object.hasOwn(target, key))) continue;
+      if (kind === "theme" || !PRESET_META_KEYS.has(key)) previous.set(key,
+        target[key] === undefined ? undefined : deepClone(target[key]));
+      edited.push(key);
+      if (next === undefined) delete target[key];
+      else target[key] = next;
     }
-  }
-
-
-  async updateThemeSetting(id, value) {
-    await this.updateThemeSettings({ [id]: value });
-  }
-
-
-  async updateThemeSettings(changes) {
-    this.settings.themeSettings = {
-      ...(this.settings.themeSettings || {}),
-      ...changes
-    };
-    this.settings.stylePresetDirty = true;
-    await this.saveData(this.settings);
-    for (const id of Object.keys(changes)) this.themeControls.applySetting(id);
+    if (!edited.length) return;
+    if (history && previous.size) {
+      const last = this.styleEdits.at(-1);
+      if (group && last?.group === group && last.kind === kind) {
+        for (const [key, old] of previous) if (!last.previous.has(key)) last.previous.set(key, old);
+      } else {
+        this.styleEdits.push({ group, kind, previous });
+        if (this.styleEdits.length > 30) this.styleEdits.shift();
+      }
+    }
+    if (previous.size) this.settings.stylePresetDirty = this.stylePresetChanges().length > 0;
+    // Queue writes so a rapid drag cannot persist an older value after a newer one.
+    const previousWrite = this.styleWrite || Promise.resolve();
+    const write = previousWrite.catch(() => {}).then(() => this.saveData(this.settings));
+    this.styleWrite = write;
+    await write;
+    if (kind === "theme") {
+      for (const key of edited) this.themeControls.applySetting(key);
+    } else if (edited.every(key => PALETTE_SETTING_KEYS.has(key))) this.applyPalette();
+    else this.applySettings();
     this.schedulePointRefresh();
+    this.styleSettingTab?.refreshSettingFeedback();
   }
-
 
   async resetSetting(key) {
     if (!Object.prototype.hasOwnProperty.call(DEFAULT_SETTINGS, key)) return false;
-    this.settings[key] = deepClone(DEFAULT_SETTINGS[key]);
-    this.settings.stylePresetDirty = true;
-    await this.saveData(this.settings);
-    if (PALETTE_SETTING_KEYS.has(key)) this.applyPalette();
-    else this.applySettings();
+    await this.updateSetting(key, deepClone(DEFAULT_SETTINGS[key]));
     return true;
   }
 
 
   async clearThemeColorMode(id, mode) {
-    const nextSettings = { ...(this.settings.themeSettings || {}) };
-    const changed = [];
+    const changed = {};
     for (const key of this.themeControls.colorModeKeys(id)) {
-      const stored = nextSettings[key];
+      const stored = this.settings.themeSettings?.[key];
       if (!stored || typeof stored !== "object" || !Object.hasOwn(stored, mode)) continue;
       const next = { ...stored };
       delete next[mode];
-      if (Object.keys(next).length) nextSettings[key] = next;
-      else delete nextSettings[key];
-      changed.push(key);
+      changed[key] = Object.keys(next).length ? next : undefined;
     }
-    if (!changed.length) return false;
-    this.settings.themeSettings = nextSettings;
-    this.settings.stylePresetDirty = true;
-    await this.saveData(this.settings);
-    for (const key of changed) this.themeControls.applySetting(key);
+    if (!Object.keys(changed).length) return false;
+    await this.updateThemeSettings(changed);
     return true;
   }
 
   async resetThemeSetting(id) {
-    if (!Object.hasOwn(this.settings.themeSettings || {}, id)) return;
-    this.settings.themeSettings = { ...this.settings.themeSettings };
-    delete this.settings.themeSettings[id];
-    this.settings.stylePresetDirty = true;
-    await this.saveData(this.settings);
-    this.themeControls.applySetting(id);
-    this.schedulePointRefresh();
+    await this.updateThemeSetting(id, undefined);
+  }
+
+  async undoStyleEdit() {
+    const entry = this.styleEdits.pop();
+    if (!entry) return false;
+    await this.changeStyleValues(entry.kind, Object.fromEntries(entry.previous), { history: false });
+    return true;
   }
 
   addPointStepper(container, options) {
@@ -1056,6 +1069,18 @@ module.exports = class BysanStyleController extends Plugin {
       .map(([key, value]) => [key, deepClone(value)]));
   }
 
+  stylePresetChanges(presetId = this.settings.activeStylePreset) {
+    const base = this.settings.stylePresets?.[presetId]?.settings || {};
+    const reference = { ...DEFAULT_SETTINGS, ...base };
+    const choices = this.settings.themeSettings || {}, previous = reference.themeSettings || {};
+    const keys = Object.keys(DEFAULT_SETTINGS).filter(key => key !== "themeSettings" && !PRESET_META_KEYS.has(key));
+    const changes = keys.filter(key => !sameSetting(this.settings[key], reference[key]))
+      .map(key => ({ key, from: reference[key], to: this.settings[key] }));
+    for (const key of new Set([...Object.keys(previous), ...Object.keys(choices)])) {
+      if (!sameSetting(previous[key], choices[key])) changes.push({ key, from: previous[key], to: choices[key] });
+    }
+    return changes;
+  }
 
   async saveStylePreset(name, presetId = null) {
     const normalizedName = String(name || "").trim().slice(0, 60);
@@ -1064,8 +1089,13 @@ module.exports = class BysanStyleController extends Plugin {
       return null;
     }
 
-    const id = presetId || `preset-${Date.now().toString(36)}`;
+    const id = presetId || `preset-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
     const existing = this.settings.stylePresets?.[id];
+    if (existing?.name !== normalizedName && Object.entries(this.settings.stylePresets || {})
+      .some(([key, entry]) => key !== id && entry.name?.trim().toLocaleLowerCase() === normalizedName.toLocaleLowerCase())) {
+      new Notice(this.t("notice.duplicateName"));
+      return null;
+    }
     this.settings.stylePresets = {
       ...(this.settings.stylePresets || {}),
       [id]: {
@@ -1078,13 +1108,15 @@ module.exports = class BysanStyleController extends Plugin {
     this.settings.activeStylePreset = id;
     this.settings.stylePresetDirty = false;
     await this.saveData(this.settings);
+    this.styleSettingTab?.refreshSettingFeedback();
     new Notice(this.t(existing ? "notice.overwritten" : "notice.saved", { name: normalizedName }));
     return id;
   }
 
 
   async loadStylePreset(presetId, options = {}) {
-    if (this.settings.stylePresetDirty && !options.allowDiscard) {
+    await this.styleWrite?.catch(() => {});
+    if (this.stylePresetChanges().length && !options.allowDiscard) {
       new Notice(this.t("notice.unsaved"));
       return false;
     }
@@ -1115,7 +1147,9 @@ module.exports = class BysanStyleController extends Plugin {
       stylePresetDirty: false
     });
     await this.saveData(this.settings);
+    this.styleEdits.length = 0;
     this.applySettings();
+    this.styleSettingTab?.refreshSettingFeedback();
     new Notice(this.t("notice.loaded", { name: label }));
     return true;
   }
@@ -1130,7 +1164,7 @@ module.exports = class BysanStyleController extends Plugin {
 
 
   async requestStylePresetSwitch(presetId) {
-    if (!this.settings.stylePresetDirty) {
+    if (!this.stylePresetChanges().length) {
       return this.loadStylePreset(presetId, { allowDiscard: true });
     }
 
@@ -1158,8 +1192,7 @@ module.exports = class BysanStyleController extends Plugin {
       new Notice(this.t("notice.defaultNoOverwrite"));
       return false;
     }
-    await this.saveStylePreset(preset.name, id);
-    return true;
+    return Boolean(await this.saveStylePreset(preset.name, id));
   }
 
 
@@ -1204,10 +1237,28 @@ module.exports = class BysanStyleController extends Plugin {
     const presets = { ...(this.settings.stylePresets || {}) };
     delete presets[presetId];
     this.settings.stylePresets = presets;
-    this.settings.activeStylePreset = "__current__";
-    this.settings.stylePresetDirty = true;
+    const wasActive = this.settings.activeStylePreset === presetId;
+    if (wasActive) this.settings.activeStylePreset = "__current__";
+    this.removedPreset = { id: presetId, preset, wasActive };
+    this.settings.stylePresetDirty = this.stylePresetChanges().length > 0;
     await this.saveData(this.settings);
     new Notice(this.t("notice.deleted", { name: preset.name }));
+    return true;
+  }
+
+  async undoPresetDeletion() {
+    const removed = this.removedPreset;
+    if (!removed || this.settings.stylePresets?.[removed.id]) return false;
+    if (Object.values(this.settings.stylePresets || {}).some(({ name }) =>
+      name?.toLocaleLowerCase() === removed.preset.name?.toLocaleLowerCase())) {
+      new Notice(this.t("notice.duplicateName"));
+      return false;
+    }
+    this.settings.stylePresets = { ...this.settings.stylePresets, [removed.id]: removed.preset };
+    this.removedPreset = null;
+    if (removed.wasActive && this.settings.activeStylePreset === "__current__") this.settings.activeStylePreset = removed.id;
+    this.settings.stylePresetDirty = this.stylePresetChanges().length > 0;
+    await this.saveData(this.settings);
     return true;
   }
 
@@ -1513,6 +1564,123 @@ module.exports = class BysanStyleController extends Plugin {
 };
 
 
+class BatchSourceEditModal extends Modal {
+  constructor(app, plugin, editor, view, kind, build) {
+    super(app);
+    this.plugin = plugin;
+    this.editor = editor;
+    this.view = view;
+    this.file = view?.file;
+    this.original = editor.getValue();
+    this.lines = this.original.split("\n");
+    this.kind = kind;
+    this.build = build;
+    this.selections = editor.listSelections().map(({ anchor, head }) =>
+      [editor.posToOffset(anchor), editor.posToOffset(head)].sort((a, b) => a - b))
+      .filter(([a, b]) => a !== b);
+    this.selectedOnly = this.selections.length > 0;
+    this.merge = false;
+  }
+
+  tr(zh, en) { return this.plugin.language === "zh" ? zh : en; }
+
+  onOpen() {
+    const { contentEl } = this;
+    this.modalEl.addClass("bysan-source-edit-modal");
+    contentEl.createEl("h2", { text: this.kind === "blank"
+      ? this.tr("预览空行清理", "Preview blank-line cleanup")
+      : this.tr("预览删除源文标题编号", "Preview removal of source heading numbers") });
+    contentEl.createEl("p", { text: this.file?.path || this.plugin.t("pdf.currentNote") });
+    new Setting(contentEl).setName(this.tr("处理范围", "Scope")).addDropdown(dropdown => {
+      dropdown.addOption("all", this.tr("整篇笔记", "Whole note"));
+      if (this.selections.length) dropdown.addOption("selection", this.tr("打开时的选区", "Original selection"));
+      dropdown.setValue(this.selectedOnly ? "selection" : "all").onChange(value => {
+        this.selectedOnly = value === "selection"; this.renderDiff();
+      });
+    });
+    if (this.kind === "blank") {
+      new Setting(contentEl).setName(this.tr("清理方式", "Cleanup mode"))
+        .setDesc(this.tr("合并模式按插件里的保留规则计算；模块内部和会误变标题的空行仍受保护。",
+          "Merge mode uses your preservation rules. Internal block and heading-safety separators stay protected."))
+        .addDropdown(dropdown => dropdown
+          .addOption("safe", this.tr("压缩多余空行，保留段落边界", "Collapse extra blanks; preserve paragraph boundaries"))
+          .addOption("merge", this.tr("按保留规则清理，可合并段落", "Use preservation rules; paragraphs may merge"))
+          .setValue("safe").onChange(value => { this.merge = value === "merge"; this.renderDiff(); }));
+    }
+    this.summary = contentEl.createDiv({ attr: { role: "status" } });
+    this.list = contentEl.createDiv({ cls: "bysan-source-diff" });
+    this.more = contentEl.createEl("button", { text: this.tr("显示更多改动", "Show more changes"), attr: { type: "button" } });
+    this.more.addEventListener("click", () => this.appendDiff());
+    const actions = contentEl.createDiv({ cls: "bysan-style-switch-actions" });
+    const cancel = actions.createEl("button", { text: this.tr("取消", "Cancel"), attr: { type: "button" } });
+    cancel.addEventListener("click", () => this.close());
+    this.apply = actions.createEl("button", { cls: "mod-cta", attr: { type: "button" } });
+    this.apply.addEventListener("click", () => this.commit());
+    this.renderDiff();
+    cancel.focus();
+  }
+
+  renderDiff() {
+    this.list.empty();
+    this.shown = 0;
+    this.rows = this.build(this.original, this.merge).filter(change => {
+      if (!this.selectedOnly) return true;
+      const from = this.editor.posToOffset(change.from), to = this.editor.posToOffset(change.to);
+      return this.selections.some(([start, end]) => start <= from && end >= to);
+    }).map(change => ({ change, checked: !change.ambiguous }));
+    this.appendDiff();
+    this.updateCount();
+  }
+
+  appendDiff() {
+    const stop = Math.min(this.shown + 75, this.rows.length);
+    for (; this.shown < stop; this.shown++) {
+      const row = this.rows[this.shown], { change } = row;
+      const label = this.list.createEl("label", { cls: "bysan-source-diff-item" });
+      const input = label.createEl("input", { attr: { type: "checkbox" } });
+      input.checked = row.checked;
+      input.addEventListener("change", () => { row.checked = input.checked; this.updateCount(); });
+      const body = label.createDiv();
+      body.createEl("strong", { text: this.tr(`第 ${change.from.line + 1} 行`, `Line ${change.from.line + 1}`) +
+        (change.ambiguous ? this.tr(" · 可能是年份或标题内容，默认不选", " · May be a year or part of the title; not selected") : "") });
+      const context = this.kind === "blank" ? 1 : 0;
+      const start = Math.max(0, change.from.line - context);
+      const stop = Math.min(change.to.line + context, this.lines.length - 1);
+      const before = this.lines.slice(start, stop + 1).join("\n");
+      const offset = (pos) => this.lines.slice(start, pos.line).reduce((n, line) => n + line.length + 1, 0) + pos.ch;
+      const after = before.slice(0, offset(change.from)) + change.text + before.slice(offset(change.to));
+      const cols = body.createDiv({ cls: "bysan-source-diff-columns" });
+      for (const [text, name] of [[before, this.tr("原文", "Before")], [after, this.tr("修改后", "After")]]) {
+        const col = cols.createDiv();
+        col.createSpan({ text: name });
+        col.createEl("pre", { text: text.split("\n").map(line => line.trim() ? line : "⏎").join("\n") });
+      }
+    }
+    this.more.hidden = this.shown === this.rows.length;
+  }
+
+  updateCount() {
+    const count = this.rows.filter(row => row.checked).length;
+    this.summary.setText(this.tr(`候选 ${this.rows.length} 处，选中 ${count} 处。应用后可以整体撤销。`,
+      `${count} of ${this.rows.length} changes selected. Apply as one undo step.`));
+    this.apply.setText(this.tr(`应用 ${count} 处改动`, `Apply ${count} change(s)`));
+    this.apply.disabled = !count;
+  }
+
+  commit() {
+    if (this.view?.file !== this.file || this.editor.getValue() !== this.original || !this.view?.containerEl?.isConnected) {
+      this.summary.setText(this.tr("笔记已变化，未执行；请重新打开预览。", "The note changed. Reopen the preview before applying changes."));
+      this.apply.disabled = true;
+      return;
+    }
+    const changes = this.rows.filter(row => row.checked).map(({ change: { from, to, text } }) => ({ from, to, text }));
+    if (!changes.length) return;
+    this.editor.transaction({ changes }, "bysan.batch-cleanup");
+    this.close();
+    new Notice(this.tr(`已应用 ${changes.length} 处改动；可整体撤销。`, `Applied ${changes.length} change(s); undo takes one step.`));
+  }
+}
+
 class StyleSwitchConfirmModal extends Modal {
 
   constructor(app, plugin, targetPresetId, resolve) {
@@ -1543,6 +1711,7 @@ class StyleSwitchConfirmModal extends Modal {
     const details = contentEl.createDiv({ cls: "bysan-style-switch-details" });
     details.createEl("div", { text: this.plugin.t("modal.current", { name: currentLabel }) });
     details.createEl("div", { text: this.plugin.t("modal.target", { name: targetLabel }) });
+    if (activePreset) this.plugin.styleSettingTab.renderPresetDiff(contentEl, activeId);
 
     if (activePreset) {
       contentEl.createEl("p", {
@@ -1618,6 +1787,7 @@ class BysanStyleSettingTab extends PluginSettingTab {
 
   display() {
     const { containerEl } = this;
+    const previousScroll = containerEl.scrollTop;
     const { style } = containerEl;
     const previousDisplay = style.getPropertyValue("display");
     const previousPriority = style.getPropertyPriority("display");
@@ -1630,10 +1800,10 @@ class BysanStyleSettingTab extends PluginSettingTab {
       if (previousDisplay) style.setProperty("display", previousDisplay, previousPriority);
       else style.removeProperty("display");
     }
-    if (this.comparisonReturnScroll != null) {
-      containerEl.scrollTop = this.comparisonReturnScroll;
-      this.comparisonReturnScroll = null;
-    }
+    containerEl.scrollTop = this.comparisonReturnScroll ?? previousScroll;
+    this.comparisonReturnScroll = null;
+    this.restoreSettingFocus();
+    this.refreshCurrentSection();
   }
 
   renderSettings(containerEl) {
@@ -1644,14 +1814,7 @@ class BysanStyleSettingTab extends PluginSettingTab {
     containerEl.empty();
     containerEl.addClass("bysan-style-settings");
 
-    const heading = new Setting(containerEl).setName("Bysan Style Controller")
-      .setHeading()
-      .addButton(button => button
-        .setButtonText(zh ? "对照当前笔记" : "Compare with current note")
-        .setTooltip(zh ? "查看原笔记，不切换模式。独立设置窗口会保持打开。"
-          : "Show the original note without switching modes. A separate settings window stays open.")
-        .onClick(() => this.compareWithCurrentNote()));
-    heading.settingEl.addClass("bysan-settings-title");
+    new Setting(containerEl).setName("Bysan Style Controller").setHeading().settingEl.addClass("bysan-settings-title");
 
     this.plugin.themeControls.beginRegionRender();
     this.renderSectionNavigation(containerEl);
@@ -1717,6 +1880,8 @@ class BysanStyleSettingTab extends PluginSettingTab {
       body => this.renderThemeGroups(body, ["plugins", "documents"]));
     this.balanceControlGrids(containerEl);
     this.setActiveMajorArea(containerEl, this.activeMajorArea || "content", false);
+    this.setupSettingFeedback(containerEl);
+    this.refreshSettingFeedback();
   }
 
   compareWithCurrentNote() {
@@ -1728,6 +1893,7 @@ class BysanStyleSettingTab extends PluginSettingTab {
     }
     const noteWindow = note.containerEl.ownerDocument.defaultView;
     const settingsWindow = this.containerEl.ownerDocument.defaultView;
+    this.pendingComparisonFocus = this.lastSettingFocus;
     // A pop-out can stay open for live comparison. An inline settings modal
     // covers the real note, so close it without touching the workspace leaf.
     if (noteWindow && noteWindow !== settingsWindow && noteWindow.electronWindow?.focus) {
@@ -1737,6 +1903,119 @@ class BysanStyleSettingTab extends PluginSettingTab {
       this.app.setting.close();
       noteWindow?.focus();
     }
+  }
+
+  setupSettingFeedback(containerEl) {
+    const win = containerEl.ownerDocument.defaultView;
+    this.lastSettingFocus = null;
+    this.feedbackRows = [];
+    const bind = (selector, en, zh, test) => {
+      for (const row of containerEl.querySelectorAll(selector)) {
+        const hint = row.querySelector(".setting-item-info")?.createDiv({ text: this.plugin.language === "zh" ? zh : en,
+          cls: "bysan-effect-note" });
+        if (hint) this.feedbackRows.push({ hint, test });
+      }
+    };
+    const themed = id => {
+      const item = this.plugin.themeControls.controlItems.find(x => x.id === id);
+      return item && this.plugin.themeControls.valueFor(item);
+    };
+    bind('[data-bysan-setting-keys~="tableStripeLight"]', "Saved, but zebra stripes are off.",
+      "配色已配置；打开「启用表格斑马纹」后生效。", () => !this.plugin.settings.tableZebra);
+    bind('[data-bysan-setting-id="paragraph-spacing"]', "Turn on Reading paragraph spacing to apply this value.",
+      "开启「阅读模式段间距」后生效。", () => !themed("toggle-paragraph-spacing"));
+    bind('[data-bysan-setting-id="bysan-inline-code-border"]', "Inherits the code block border unless overridden.",
+      "未自定义时跟随代码块边框。", () => {
+        const mode = document.body.classList.contains("theme-dark") ? "dark" : "light";
+        return !this.plugin.settings.themeSettings?.["bysan-inline-code-border"]?.[mode];
+      });
+    for (let level = 1; level <= 6; level++) bind(`[data-bysan-setting-id="h${level}-bg-color"]`,
+      `Enable Show H${level} background to apply this colour.`, `开启「显示 H${level} 背景」后生效。`,
+      () => !themed(`header-${level}-background`));
+    this.sampleComponent.registerDomEvent(containerEl, "focusin", event => {
+      const row = event.target.closest(".bysan-major-area .setting-item:not(.setting-item-heading)");
+      if (row) this.lastSettingFocus = this.settingFocusFor(row, event.target);
+    });
+    this.sampleComponent.registerDomEvent(win, "focus", () => {
+      if (this.pendingComparisonFocus) this.restoreSettingFocus();
+    });
+    this.sampleComponent.registerEvent(this.app.workspace.on("active-leaf-change", () => this.refreshSettingFeedback()));
+    this.sampleComponent.registerEvent(this.app.workspace.on("file-open", () => this.refreshSettingFeedback()));
+    this.sampleComponent.registerEvent(this.app.workspace.on("layout-change", () => this.refreshNoteComparison()));
+    this.sampleComponent.registerDomEvent(containerEl, "scroll", () => this.refreshCurrentSection());
+    const nav = containerEl.querySelector(".bysan-settings-nav");
+    const observer = new win.ResizeObserver(() => {
+      containerEl.style.setProperty("--bysan-settings-nav-size", `${nav.offsetHeight + 10}px`);
+      this.refreshCurrentSection();
+    });
+    observer.observe(nav);
+    this.sampleComponent.register(() => observer.disconnect());
+  }
+
+  refreshCurrentSection() {
+    const root = this.containerEl;
+    const selector = root.querySelector?.(".bysan-settings-jump");
+    const active = root.querySelector?.(".bysan-major-area.is-active");
+    if (!selector || !active || !root.getClientRects().length) return;
+    const base = root.getBoundingClientRect().top + (root.querySelector(".bysan-settings-nav")?.offsetHeight || 0) + 28;
+    let result = active.firstElementChild;
+    for (const section of active.children) {
+      if (section.getBoundingClientRect().top > base) break;
+      result = section;
+    }
+    if (result?.id) selector.value = result.id;
+  }
+
+  refreshNoteComparison() {
+    const button = this.compareButton;
+    if (!button?.isConnected) return;
+    const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+    const name = view?.file?.basename;
+    const zh = this.plugin.language === "zh";
+    const mode = view?.getMode() === "preview" ? (zh ? "阅读" : "Reading") :
+      (view?.getState?.().source ?? view?.currentMode?.sourceMode) ? (zh ? "源码" : "Source") : (zh ? "实时预览" : "Live Preview");
+    const details = this.compareTarget;
+    const label = name ? `${name} · ${mode}` : zh ? "未打开笔记" : "No note";
+    if (details.textContent !== label) details.setText(label);
+    button.title = name ? `${view.file.path} · ${mode}` : label;
+    button.disabled = !name;
+  }
+
+  refreshSettingFeedback() {
+    if (!this.feedbackStatus?.isConnected) return;
+    const zh = this.plugin.language === "zh";
+    const plugin = this.plugin;
+    const mode = document.body.classList.contains("theme-dark") ? "dark" : "light";
+    this.containerEl.dataset.bysanMode = mode;
+    this.modeStatus.setText(zh ? `样例：${mode === "dark" ? "深色" : "浅色"}；另一模式切换后生效` :
+      `Sample: ${mode}; the other palette applies in its mode`);
+    const count = plugin.stylePresetChanges().length, id = plugin.settings.activeStylePreset;
+    const text = count ? (zh ? `已应用 · ${count} 项未写入预设` : `Applied · ${count} not saved to preset`)
+      : id === "__current__" ? (zh ? "已应用 · 未选择预设" : "Applied · no preset selected") :
+        (zh ? "已应用 · 与预设一致" : "Applied · matches preset");
+    if (this.feedbackStatus.textContent !== text) this.feedbackStatus.setText(text);
+    this.undoButton.disabled = !plugin.styleEdits.length;
+    if (this.presetStatus?.isConnected) this.presetStatus.setText(`${plugin.stylePresetLabel(id)} · ${text}`);
+    for (const { hint, test } of this.feedbackRows ?? []) hint.hidden = !test();
+    this.refreshNoteComparison();
+  }
+
+  settingFocusFor(row, target = null) {
+    const rows = [...row.parentElement.closest("[data-bysan-major-area]").querySelectorAll(".setting-item")];
+    return { area: row.closest("[data-bysan-major-area]").dataset.bysanMajorArea,
+      id: row.dataset.bysanSettingId, keys: row.dataset.bysanSettingKeys, rowIndex: rows.indexOf(row),
+      inputIndex: [...row.querySelectorAll("input,select,button,[tabindex]")].indexOf(target) };
+  }
+
+  restoreSettingFocus() {
+    const detail = this.pendingComparisonFocus;
+    this.pendingComparisonFocus = null;
+    if (!detail || detail.area !== this.activeMajorArea) return;
+    const rows = [...this.containerEl.querySelectorAll(".bysan-major-area.is-active .setting-item")];
+    const row = (detail.id || detail.keys) && rows.find(candidate => !candidate.closest("[hidden]") &&
+      (detail.id ? candidate.dataset.bysanSettingId === detail.id : candidate.dataset.bysanSettingKeys === detail.keys));
+    (row || rows[detail.rowIndex])?.querySelectorAll("input,select,button,[tabindex]")[Math.max(0, detail.inputIndex)]
+      ?.focus({ preventScroll: true });
   }
 
   balanceControlGrids(containerEl) {
@@ -1910,6 +2189,8 @@ class BysanStyleSettingTab extends PluginSettingTab {
     const selected = available.some((area) => area.dataset.bysanMajorArea === id)
       ? id
       : "content";
+    this.areaScroll ||= {};
+    if (this.activeMajorArea && this.activeMajorArea !== selected) this.areaScroll[this.activeMajorArea] = containerEl.scrollTop;
     this.activeMajorArea = selected;
     for (const area of available) {
       const active = area.dataset.bysanMajorArea === selected;
@@ -1920,6 +2201,7 @@ class BysanStyleSettingTab extends PluginSettingTab {
       const active = button.dataset.area === selected;
       button.classList.toggle("is-active", active);
       button.setAttribute("aria-selected", String(active));
+      button.tabIndex = active ? 0 : -1;
     }
     const jump = containerEl.querySelector(".bysan-settings-jump");
     const zh = this.plugin.language === "zh";
@@ -1931,8 +2213,9 @@ class BysanStyleSettingTab extends PluginSettingTab {
       }
     }
     if (scroll) {
-      containerEl.scrollTop = 0;
+      containerEl.scrollTop = this.areaScroll[selected] || 0;
     }
+    this.refreshCurrentSection();
   }
 
 
@@ -1954,128 +2237,159 @@ class BysanStyleSettingTab extends PluginSettingTab {
 
 
   renderSectionNavigation(containerEl) {
-    const areas = [
-      ["content", this.plugin.language === "zh" ? "笔记样式" : "Notes"],
-      ["styles", this.plugin.language === "zh" ? "界面样式" : "Interface"],
-      ["tools", this.plugin.language === "zh" ? "工具与预设" : "Tools and presets"]
-    ];
+    const zh = this.plugin.language === "zh";
+    const areas = [["content", zh ? "笔记样式" : "Notes"], ["styles", zh ? "界面样式" : "Interface"], ["tools", zh ? "工具与预设" : "Tools and presets"]];
     const navigation = containerEl.createEl("nav", {
-      cls: "bysan-settings-nav",
-      attr: { "aria-label": this.plugin.t("nav.title") }
+      cls: "bysan-settings-nav", attr: { "aria-label": this.plugin.t("nav.title") }
     });
     const header = navigation.createDiv({ cls: "bysan-settings-nav-header" });
     const search = header.createEl("input", {
-      cls: "bysan-settings-nav-search",
-      attr: {
-        type: "search",
-        placeholder: this.plugin.t("theme.searchPlaceholder"),
-        "aria-label": this.plugin.t("theme.search")
-      }
+      cls: "bysan-settings-nav-search", attr: { type: "search", placeholder: this.plugin.t("theme.searchPlaceholder"),
+        role: "combobox", "aria-autocomplete": "list", "aria-expanded": "false",
+        "aria-controls": "bysan-setting-result-list", "aria-label": this.plugin.t("theme.search") }
     });
+    search.value = this.settingsQuery || "";
     const jump = header.createEl("select", {
-      cls: "bysan-settings-jump",
-      attr: { "aria-label": this.plugin.language === "zh" ? "跳到分组" : "Jump to section" }
+      cls: "bysan-settings-jump", attr: { "aria-label": zh ? "当前分组／跳转" : "Current section / jump" }
     });
-    jump.addEventListener("change", () => {
-      if (jump.value) this.jumpToSection(containerEl, jump.value);
-      jump.value = "";
-    });
-    const searchResults = navigation.createDiv({
-      cls: "bysan-settings-search-results is-hidden"
-    });
-    let currentMatches = [];
-    const clearSearch = () => {
-      search.value = "";
-      currentMatches = this.plugin.themeControls.filterRows(containerEl, "");
-      searchResults.empty();
-      searchResults.addClass("is-hidden");
+    jump.addEventListener("change", () => { if (jump.value) this.jumpToSection(containerEl, jump.value); });
+    const searchResults = navigation.createDiv({ cls: "bysan-settings-search-results is-hidden" });
+    let matches = [], results = [], active = -1;
+    const highlight = index => {
+      active = index;
+      for (const [i, button] of results.entries()) button.setAttribute("aria-selected", String(i === active));
+      if (results[active]) {
+        search.setAttribute("aria-activedescendant", results[active].id);
+        results[active].scrollIntoView({ block: "nearest" });
+      } else search.removeAttribute("aria-activedescendant");
     };
-    const jumpToResult = (row) => {
+    const hideResults = () => {
+      searchResults.classList.add("is-hidden");
+      search.setAttribute("aria-expanded", "false");
+      search.removeAttribute("aria-activedescendant");
+    };
+    const jumpToResult = row => {
       if (!row?.isConnected) return;
-      clearSearch();
+      hideResults();
+      returnSearch.hidden = !search.value.trim();
       const area = row.closest("[data-bysan-major-area]");
       if (area) this.setActiveMajorArea(containerEl, area.dataset.bysanMajorArea, false);
       const headingTarget = row.closest("[data-bysan-heading-target]");
       if (headingTarget) this.selectHeadingTarget(headingTarget.dataset.bysanHeadingTarget);
-      window.requestAnimationFrame(() => {
-        row.scrollIntoView({ behavior: "auto", block: "center" });
-        row.classList.add("bysan-search-target");
-        window.setTimeout(() => row.classList.remove("bysan-search-target"), 1400);
-      });
+      const condition = row.closest("[data-bysan-list-conditional]");
+      if (condition?.dataset.bysanPreviewMode && condition.hidden) {
+        containerEl.querySelector(`.bysan-list-preview-bar button[data-mode="${condition.dataset.bysanPreviewMode}"]`)?.click();
+      }
+      if (condition?.hidden) {
+        const gate = condition.closest(".bysan-appearance-controls").querySelector(
+          `[data-bysan-setting-id="${condition.dataset.bysanPrerequisiteId}"]`);
+        const reason = condition.dataset.bysanPrerequisite;
+        if (reason) new Notice(reason);
+        this.focusRow(gate && !gate.closest("[hidden]") ? gate : condition.closest(".bysan-appearance-controls"));
+      } else this.focusRow(row);
     };
     const renderSearchResults = () => {
+      this.settingsQuery = search.value;
       searchResults.empty();
-      const query = search.value.trim();
-      if (!query) {
-        clearSearch();
-        return;
-      }
-      currentMatches = this.plugin.themeControls.filterRows(containerEl, query);
-
-      searchResults.removeClass("is-hidden");
-      const chinese = this.plugin.language === "zh";
-      searchResults.createDiv({
-        cls: "bysan-settings-search-summary",
-        text: currentMatches.length
-          ? (chinese ? `找到 ${currentMatches.length} 项` : `${currentMatches.length} results`)
-          : (chinese ? "没有匹配的设置" : "No matching settings")
-      });
-      const list = searchResults.createDiv({ cls: "bysan-settings-search-list" });
-      currentMatches.slice(0, 16).forEach((row) => {
-        const name = row.querySelector(".setting-item-name")?.textContent?.trim()
-          || row.textContent?.trim()
-          || (chinese ? "未命名设置" : "Unnamed setting");
-        const description = row.querySelector(".setting-item-description")
-          ?.textContent?.trim();
-        const button = list.createEl("button", {
-          cls: "bysan-settings-search-result",
-          attr: { type: "button" }
-        });
+      matches = this.plugin.themeControls.filterRows(containerEl, search.value);
+      results = [];
+      returnSearch.hidden = true;
+      if (!search.value.trim()) { hideResults(); return; }
+      searchResults.classList.remove("is-hidden");
+      search.setAttribute("aria-expanded", "true");
+      const toggleResultNotice = matches.length ? (zh ? `找到 ${matches.length} 项` : `${matches.length} results`) :
+        (zh ? "没有匹配的设置" : "No matching settings");
+      searchResults.createDiv({ cls: "bysan-settings-search-summary", text: toggleResultNotice, attr: { role: "status" } });
+      const list = searchResults.createDiv({ cls: "bysan-settings-search-list", attr: { id: "bysan-setting-result-list", role: "listbox" } });
+      results = matches.slice(0, 16).map((row, i) => {
+        const name = row.querySelector(".setting-item-name")?.textContent?.trim() || row.textContent.trim();
+        const button = list.createEl("button", { cls: "bysan-settings-search-result",
+          attr: { type: "button", role: "option", id: `bysan-setting-result-${i}`, "aria-selected": "false" } });
         button.createSpan({ cls: "bysan-settings-search-result-name", text: name });
-        const path = [];
-        for (let parent = row.parentElement; parent; parent = parent.parentElement) {
-          if (parent.dataset.bysanSectionLabel) path.unshift(parent.dataset.bysanSectionLabel);
-          if (parent.hasAttribute("data-bysan-major-area")) {
-            path.unshift(parent.getAttribute("aria-label"));
-            break;
-          }
-        }
-        if (path.length) button.createSpan({ cls: "bysan-settings-search-result-desc", text: path.join(" › ") });
-        if (description) {
-          button.createSpan({
-            cls: "bysan-settings-search-result-desc",
-            text: description
-          });
-        }
+        const condition = row.closest("[data-bysan-list-conditional][hidden]");
+        const path = [
+          row.closest("[data-bysan-major-area]")?.getAttribute("aria-label"),
+          row.closest("[data-bysan-section-label]")?.dataset.bysanSectionLabel,
+          condition?.dataset.bysanPrerequisite
+        ].filter(Boolean).join(" › ");
+        if (path) button.createSpan({ cls: "bysan-settings-search-result-desc", text: path });
         button.addEventListener("click", () => jumpToResult(row));
+        return button;
       });
-      if (currentMatches.length > 16) {
-        searchResults.createDiv({
-          cls: "bysan-settings-search-more",
-          text: chinese
-            ? `另有 ${currentMatches.length - 16} 项，请继续输入以缩小范围`
-            : `${currentMatches.length - 16} more; keep typing to narrow the results`
-        });
-      }
+      if (matches.length > results.length) searchResults.createDiv({
+        cls: "bysan-settings-search-more", text: zh ? "继续输入以缩小范围" : "Keep typing to narrow the results"
+      });
+      highlight(-1);
     };
-    search.addEventListener("input", () => {
-      renderSearchResults();
+
+    const tabs = navigation.createDiv({ cls: "bysan-major-tabs", attr: { role: "tablist" } });
+    const tabButtons = areas.map(([id, label]) => {
+      const button = tabs.createEl("button", { cls: "bysan-major-tab", text: label,
+        attr: { type: "button", role: "tab", "data-area": id } });
+      button.addEventListener("click", () => this.setActiveMajorArea(containerEl, id));
+      return button;
     });
-    search.addEventListener("keydown", (event) => {
-      if (event.key === "Enter" && currentMatches.length) {
-        event.preventDefault();
-        jumpToResult(currentMatches[0]);
+    tabs.addEventListener("keydown", event => {
+      if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+      const current = tabButtons.indexOf(event.target);
+      if (current < 0) return;
+      const next = event.key === "Home" ? 0 : event.key === "End" ? tabButtons.length - 1 :
+        (current + (event.key === "ArrowRight" ? 1 : -1) + tabButtons.length) % tabButtons.length;
+      event.preventDefault(); tabButtons[next].click(); tabButtons[next].focus();
+    });
+
+    const tools = navigation.createDiv({ cls: "bysan-settings-quick-bar" });
+    this.compareButton = tools.createEl("button", { cls: "bysan-settings-compare", attr: { type: "button" } });
+    this.compareButton.createSpan({ text: zh ? "对照笔记" : "Compare note" });
+    this.compareTarget = this.compareButton.createSpan({ cls: "bysan-settings-compare-target" });
+    this.compareButton.addEventListener("click", () => this.compareWithCurrentNote());
+    this.undoButton = tools.createEl("button", { text: zh ? "撤销样式调整" : "Undo style change", attr: { type: "button" } });
+    this.undoButton.addEventListener("click", async () => {
+      const scroll = containerEl.scrollTop;
+      this.pendingComparisonFocus = this.lastSettingFocus;
+      if (await this.plugin.undoStyleEdit()) {
+        this.comparisonReturnScroll = scroll;
+        this.display();
       }
     });
-    const tabs = navigation.createDiv({ cls: "bysan-major-tabs", attr: { role: "tablist" } });
-    for (const [id, label] of areas) {
-      const button = tabs.createEl("button", {
-        cls: "bysan-major-tab",
-        text: label,
-        attr: { type: "button", role: "tab", "data-area": id }
-      });
-      button.addEventListener("click", () => this.setActiveMajorArea(containerEl, id));
-    }
+    const returnSearch = tools.createEl("button", { text: zh ? "返回搜索结果" : "Back to results", attr: { type: "button" } });
+    returnSearch.hidden = !search.value.trim();
+    returnSearch.addEventListener("click", () => { renderSearchResults(); search.focus({ preventScroll: true }); });
+    const status = navigation.createDiv({ cls: "bysan-settings-feedback" });
+    this.modeStatus = status.createSpan();
+    this.feedbackStatus = status.createSpan({ attr: { role: "status" } });
+
+    search.addEventListener("input", event => { if (!event.isComposing) renderSearchResults(); });
+    search.addEventListener("compositionend", renderSearchResults);
+    search.addEventListener("keydown", event => {
+      if (event.isComposing || event.keyCode === 229) return;
+      if (event.key === "Escape" && !searchResults.classList.contains("is-hidden")) {
+        event.preventDefault(); hideResults(); returnSearch.hidden = !search.value.trim(); return;
+      }
+      if (["ArrowDown", "ArrowUp"].includes(event.key) && search.value.trim()) {
+        event.preventDefault();
+        if (searchResults.classList.contains("is-hidden")) renderSearchResults();
+        if (!results.length) return;
+        highlight(active < 0 ? (event.key === "ArrowDown" ? 0 : results.length - 1) :
+          (active + (event.key === "ArrowDown" ? 1 : -1) + results.length) % results.length);
+      } else if (event.key === "Enter" && matches.length && !searchResults.classList.contains("is-hidden")) {
+        event.preventDefault(); jumpToResult(matches[Math.max(0, active)]);
+      }
+    });
+  }
+
+  focusRow(row) {
+    if (!row) return;
+    const win = row.ownerDocument.defaultView;
+    win.requestAnimationFrame(() => {
+      if (!row.isConnected) return;
+      row.scrollIntoView({ behavior: "auto", block: "center" });
+      row.classList.add("bysan-search-target");
+      const control = [...row.querySelectorAll(".setting-item-control :is(button,input,select,[tabindex])")]
+        .find(el => el.getClientRects().length && !el.disabled && el.tabIndex >= 0);
+      (control || row).focus({ preventScroll: true });
+      win.setTimeout(() => row.classList.remove("bysan-search-target"), 1800);
+    });
   }
 
 
@@ -2138,7 +2452,6 @@ class BysanStyleSettingTab extends PluginSettingTab {
       .setName(this.plugin.t("section.preset"))
       .setDesc(this.plugin.t("preset.desc"))
       .setHeading();
-    heading.settingEl.id = "bysan-section-preset";
 
     const presets = this.plugin.settings.stylePresets || {};
     const activeId = this.plugin.settings.activeStylePreset || "__current__";
@@ -2150,7 +2463,7 @@ class BysanStyleSettingTab extends PluginSettingTab {
       ? this.plugin.t("preset.modified")
       : this.plugin.t("preset.saved");
 
-    new Setting(containerEl)
+    this.presetStatus = new Setting(containerEl)
       .setName(this.plugin.t("preset.current"))
       .setDesc(this.plugin.t("preset.currentDesc", { name: activeLabel, state: stateLabel }))
       .addDropdown((dropdown) => {
@@ -2167,7 +2480,7 @@ class BysanStyleSettingTab extends PluginSettingTab {
           await this.plugin.requestStylePresetSwitch(value);
           this.display();
         });
-      });
+      }).descEl;
 
     new Setting(containerEl)
       .setName(this.plugin.t("preset.saveAs"))
@@ -2220,9 +2533,7 @@ class BysanStyleSettingTab extends PluginSettingTab {
         .setDesc(this.plugin.t("preset.manageDesc"))
         .addButton((button) => button
           .setButtonText(this.plugin.t("preset.overwrite"))
-          .onClick(async () => {
-            if (await this.plugin.overwriteActiveStylePreset()) this.display();
-          }))
+          .onClick(() => this.confirmPresetOverwrite(activeId, activePreset.name)))
         .addButton((button) => button
           .setButtonText(this.plugin.t("preset.delete"))
           .setWarning()
@@ -2230,6 +2541,49 @@ class BysanStyleSettingTab extends PluginSettingTab {
             if (await this.plugin.deleteStylePreset(activeId)) this.display();
           }));
     }
+    if (this.plugin.removedPreset) {
+      const zh = this.plugin.language === "zh";
+      new Setting(containerEl).setName(zh ? "最近删除的预设" : "Last deleted preset")
+        .setDesc(this.plugin.removedPreset.preset.name)
+        .addButton(button => button.setButtonText(zh ? "撤销删除" : "Undo deletion")
+          .onClick(async () => { if (await this.plugin.undoPresetDeletion()) this.display(); }));
+    }
+  }
+
+  renderPresetDiff(container, id) {
+    const zh = this.plugin.language === "zh";
+    const changes = this.plugin.stylePresetChanges(id);
+    container.createEl("p", { text: zh ? `${changes.length} 项样式值不同。` : `${changes.length} style values differ.` });
+    const list = container.createEl("ul", { cls: "bysan-preset-diff" });
+    const valueText = value => value === undefined ? zh ? "继承默认" : "Inherit default" :
+      typeof value === "object" ? JSON.stringify(value) : String(value);
+    for (const { key, from, to } of changes.slice(0, 16)) {
+      const row = [...this.containerEl.querySelectorAll("[data-bysan-setting-id],[data-bysan-setting-keys]")]
+        .find(row => row.dataset.bysanSettingId === key || row.dataset.bysanSettingKeys?.split(" ").includes(key));
+      const name = row?.querySelector(".setting-item-name")?.textContent || key;
+      list.createEl("li", { text: `${name}：${valueText(from)} → ${valueText(to)}` });
+    }
+    if (changes.length > 16) list.createEl("li", { text: zh ? `另有 ${changes.length - 16} 项` : `${changes.length - 16} more` });
+  }
+
+  confirmPresetOverwrite(id, name) {
+    const zh = this.plugin.language === "zh";
+    const modal = new Modal(this.app);
+    modal.setTitle(zh ? `覆盖「${name}」？` : `Overwrite “${name}”?`);
+    this.renderPresetDiff(modal.contentEl, id);
+    const actions = modal.contentEl.createDiv({ cls: "bysan-style-switch-actions" });
+    const cancel = actions.createEl("button", { text: zh ? "取消" : "Cancel", attr: { type: "button" } });
+    cancel.addEventListener("click", () => modal.close());
+    const confirm = actions.createEl("button", { cls: "mod-cta", text: zh ? "覆盖此预设" : "Overwrite this preset", attr: { type: "button" } });
+    confirm.addEventListener("click", async () => {
+      if (this.plugin.settings.activeStylePreset !== id) { modal.close(); return; }
+      if (await this.plugin.overwriteActiveStylePreset()) {
+        modal.close();
+        this.display();
+      }
+    });
+    modal.open();
+    cancel.focus();
   }
 
 
@@ -2636,6 +2990,7 @@ class BysanStyleSettingTab extends PluginSettingTab {
       this.plugin.t("components.zebraDesc"), "tableZebra");
     this.addToggle(grid, this.plugin.t("components.center"), this.plugin.t("components.centerDesc"), "tableCentered");
     this.addDualColor(grid, this.plugin.t("palette.tableHead"), "tableHeadLight", "tableHeadDark");
+    this.addSampleJump(controls, "tableHeadLight", zh ? "定位表头配色" : "Go to header colour");
     this.addDualColor(grid, zh ? "表格偶数行背景（斑马纹）" : "Even row background (zebra stripes)",
       "tableStripeLight", "tableStripeDark");
     this.addDualColor(grid, this.plugin.t("palette.tableHover"), "tableHoverLight", "tableHoverDark");
@@ -2663,8 +3018,15 @@ class BysanStyleSettingTab extends PluginSettingTab {
     quoteFont.settingEl.dataset.bysanSettingKeys = "quoteSerif";
     this.addDualColor(grid, this.plugin.t("palette.quoteBg"), "quoteBgLight", "quoteBgDark", "quoteBgOpacityLight", "quoteBgOpacityDark");
     this.addDualColor(grid, this.plugin.t("palette.quoteBorder"), "quoteBorderLight", "quoteBorderDark");
+    this.addSampleJump(controls, "quoteBorderLight", zh ? "定位引用边框" : "Go to quote border colour");
     this.renderGeometryControls(grid, "quote");
     this.renderThemeGroups(controls, ["quotes"], false);
+  }
+
+  addSampleJump(controls, key, label) {
+    const sample = controls.previousElementSibling;
+    const button = sample?.createEl("button", { cls: "bysan-sample-jump", attr: { type: "button" }, text: label });
+    button?.addEventListener("click", () => this.focusRow(controls.querySelector(`[data-bysan-setting-keys~="${key}"]`)));
   }
 
 
@@ -2743,6 +3105,15 @@ class BysanStyleSettingTab extends PluginSettingTab {
       const autoRows = grid(group, true);
       const commonRows = grid(group, true);
       const customRows = grid(group, true);
+      for (const [element, zh, en] of [
+        [standardRows, "需选择 Bysan 默认无序列表样式", "Requires Bysan default list style"],
+        [autoRows, "需选择自动彩色无序列表", "Requires auto-colour list style"],
+        [commonRows, "适用于 Bysan 默认或自动彩色", "Applies to Bysan default or auto colours"],
+        [customRows, "需选择自定义无序列表", "Requires custom list style"]
+      ]) {
+        element.dataset.bysanPrerequisite = tr(zh, en);
+        element.dataset.bysanPrerequisiteId = "unordered-list-style-options";
+      }
       const sync = () => {
         const choice = current();
         standardRows.hidden = choice !== standard;
@@ -2804,6 +3175,18 @@ class BysanStyleSettingTab extends PluginSettingTab {
         const readingStyle = grid(group, true);
         const gradients = grid(group, true);
         const image = grid(group, true);
+        for (const [element, mode, gate, zh, en] of [
+          [editingRows, "edit", "", "仅编辑视图", "Editing view only"],
+          [plainLines, "edit", "bt-colorful-indentation-lines-editing", "仅编辑；需关闭彩色层级线", "Editing only; turn off coloured guides"],
+          [readingRows, "read", "", "仅阅读视图", "Reading view only"],
+          [readingStyle, "read", "bt-colorful-indentation-lines", "仅阅读；需启用彩色层级线", "Reading only; enable coloured guides"],
+          [gradients, "read", "bt-colorful-indentation-line-options", "仅阅读；启用彩色层级线并选择渐变", "Reading only; enable coloured guides and choose Gradient"],
+          [image, "read", "bt-colorful-indentation-line-options", "仅阅读；启用彩色层级线并选择背景图片", "Reading only; enable coloured guides and choose Image"]
+        ]) {
+          element.dataset.bysanPreviewMode = mode;
+          element.dataset.bysanPrerequisiteId = gate;
+          element.dataset.bysanPrerequisite = tr(zh, en);
+        }
         syncGuideMode = () => {
           const edit = mode === "edit";
           const colourful = value("bt-colorful-indentation-lines");
@@ -2835,7 +3218,7 @@ class BysanStyleSettingTab extends PluginSettingTab {
         add(image, ["bt-indentation-line-image"]);
       });
     const buttons = [["edit", tr("编辑", "Editing")], ["read", tr("阅读", "Reading")]].map(([target, title]) => {
-      const button = bar.createEl("button", { text: title, attr: { type: "button" } });
+      const button = bar.createEl("button", { text: title, attr: { type: "button", "data-mode": target } });
       button.addEventListener("click", () => { mode = target; syncMode(); });
       return [target, button];
     });
@@ -2921,7 +3304,7 @@ class BysanStyleSettingTab extends PluginSettingTab {
     const setting = new Setting(containerEl).setName(name).setDesc(description);
     const addMode = (mode, colorKey, opacityKey) => {
       let pickerComponent;
-      let refreshOpacity;
+      let refreshOpacity, colourGesture;
       const modeLabel = this.plugin.t(mode === "light" ? "theme.light" : "theme.dark");
       const colorLabel = this.plugin.t("theme.colorTitle", { mode: modeLabel });
       const displayColor = () => opacityKey
@@ -2933,12 +3316,14 @@ class BysanStyleSettingTab extends PluginSettingTab {
       this.addModeControl(setting, mode, "color", () => {
         setting.addColorPicker((picker) => {
           pickerComponent = picker;
+          picker.colorPickerEl.addEventListener("pointerdown", () => { colourGesture = Symbol("colour-edit"); });
           picker.colorPickerEl.setAttribute("aria-label", `${name} · ${colorLabel}`);
           picker.setValue(this.plugin.settings[colorKey])
             .onChange((value) => {
-              void this.plugin.updateSetting(colorKey, value);
+              void this.plugin.updateSetting(colorKey, value, colourGesture ? { group: colourGesture } : undefined);
               updateTooltip();
             });
+          picker.colorPickerEl.addEventListener("change", () => { colourGesture = undefined; });
           updateTooltip();
         });
         if (opacityKey) {
@@ -2947,15 +3332,16 @@ class BysanStyleSettingTab extends PluginSettingTab {
             label: `${name} · ${this.plugin.t("theme.opacityTitle", { mode: modeLabel })}`,
             language: this.plugin.language,
             value: read(), read, min: 0, max: 1, step: 0.01, slider: true,
-            save: value => {
-              void this.plugin.updateSetting(opacityKey, value);
+            save: (value, action) => {
+              void this.plugin.updateSetting(opacityKey, value, action);
               updateTooltip();
             }
           });
         }
       }, async () => {
-        await this.plugin.resetSetting(colorKey);
-        if (opacityKey) await this.plugin.resetSetting(opacityKey);
+        const reset = { [colorKey]: DEFAULT_SETTINGS[colorKey] };
+        if (opacityKey) reset[opacityKey] = DEFAULT_SETTINGS[opacityKey];
+        await this.plugin.changeStyleValues("base", reset);
         pickerComponent.setValue(this.plugin.settings[colorKey]);
         refreshOpacity?.();
         updateTooltip();
@@ -3022,7 +3408,7 @@ class BysanStyleSettingTab extends PluginSettingTab {
     };
     this.plugin.addPointStepper(setting.controlEl, {
       label: name, read,
-      save: value => this.plugin.updateSetting(key, storageUnit === "px" ? value / 0.75 : `${value}pt`),
+      save: (value, action) => this.plugin.updateSetting(key, storageUnit === "px" ? value / 0.75 : `${value}pt`, action),
       reset: async () => {
         await this.plugin.resetSetting(key);
         return read();
@@ -3055,7 +3441,7 @@ class BysanStyleSettingTab extends PluginSettingTab {
       value: valueForDisplay(),
       unit,
       min: minimum, max: maximum, step,
-      save: value => this.plugin.updateSetting(key, value),
+      save: (value, action) => this.plugin.updateSetting(key, value, action),
       reset: async () => {
         await this.plugin.resetSetting(key);
         return valueForDisplay();

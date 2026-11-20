@@ -168,6 +168,18 @@
   pointer-events: auto;
 }
 
+.mir-width-value,
+.mir-zoom-scale,
+.mir-zoom-label {
+  font-size: var(--font-ui-smaller);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+  padding-inline: 3px;
+  white-space: nowrap;
+}
+
+.mir-fullscreen-button:focus-visible { opacity: 1; pointer-events: auto; }
+
 .mir-resizable-image,
 .mir-resizable-table {
   box-sizing: border-box !important;

@@ -12,7 +12,7 @@ const TEXT = {
     "section.code": "代码块",
     "section.components": "表格与引用",
     "section.reset": "恢复默认",
-    "preset.desc": "一个预设同时保存浅色、深色及所有界面区域的样式设置。",
+    "preset.desc": "一个预设同时保存浅色、深色和界面样式；不含 PDF 输出、清理规则和功能开关。",
     "preset.current": "当前风格",
     "preset.currentUnsaved": "当前设置（尚未保存）",
     "preset.currentUnsavedLong": "当前设置（尚未保存为风格）",
@@ -158,11 +158,28 @@ const TEXT = {
     ,"pdf.footerPlaceholder": "例如：Bysan · {page}"
     ,"pdf.pageNumbers": "显示页码"
     ,"pdf.pageRange": "实际输出页面范围"
-    ,"pdf.pageRangeHint": "输入 all，或如 1-3,5；预览保留全部页面，导出仅输出所选页面。"
+    ,"pdf.pageRangeHint": "例如 1-3,5；支持中文逗号。只导出选中的页，保留原页码。"
+    ,"pdf.allPages": "全部页面"
+    ,"pdf.currentPage": "当前预览页"
+    ,"pdf.customRange": "自定义范围"
+    ,"pdf.exportCount": "导出 {count} 页"
+    ,"pdf.outputSummary": "本次导出 {count} 页，共 {total} 页。"
+    ,"pdf.rangeError.syntax": "无法解析页码「{token}」，请输入如 1-3,5。"
+    ,"pdf.rangeError.boundary": "「{token}」不是有效范围；页码须为 1–{count}，起始页不能大于结束页。"
+    ,"pdf.blockedPages": "第 {pages} 页有内容放不下。请减小 PDF 内容比例、增大纸张或缩小页边距。为避免截断，暂不能导出。"
+    ,"pdf.layoutFailed": "预览未完整生成。请确认图片和图表可加载，再刷新预览。"
+    ,"pdf.sourceChanged": "原笔记或版式已变化，请刷新预览后再导出。"
+    ,"pdf.printMismatch": "最终排版与预览不一致或有内容放不下，未写入文件。"
+    ,"pdf.missingImage": "图片未能载入：{name}"
+    ,"pdf.missingImageCount": "所选页有 {count} 张图片未能载入，预览和导出都会显示占位提示。"
+    ,"pdf.exportImageFailed": "导出窗口未能载入图片「{name}」，没有写入文件。"
+    ,"pdf.fittedBlockCount": "{count} 个超出纸面的图或公式已适配到页内。"
+    ,"pdf.fitWidth": "适合页宽"
+    ,"pdf.fitPage": "整页"
     ,"pdf.grayscale": "黑白输出"
     ,"pdf.grayscaleHint": "预览与最终 PDF 同时转换为灰阶。"
-    ,"pdf.previewZoom": "预览缩放"
-    ,"pdf.actualScale": "实际缩放"
+    ,"pdf.previewZoom": "仅预览缩放"
+    ,"pdf.actualScale": "PDF 内容比例"
     ,"pdf.actualScaleHint": "改变内容尺寸与分页，并原样写入最终 PDF。"
     ,"pdf.refresh": "刷新预览"
     ,"pdf.export": "导出 PDF"
@@ -189,7 +206,7 @@ const TEXT = {
     "section.code": "Code blocks",
     "section.components": "Tables & quotes",
     "section.reset": "Reset",
-    "preset.desc": "A preset stores the light, dark and all interface-region settings together.",
+    "preset.desc": "Presets store light, dark and interface styles. PDF output, cleanup rules and feature toggles are separate.",
     "preset.current": "Current style",
     "preset.currentUnsaved": "Current settings (not saved)",
     "preset.currentUnsavedLong": "Current settings (not saved as a style)",
@@ -335,11 +352,28 @@ const TEXT = {
     ,"pdf.footerPlaceholder": "For example: Bysan · {page}"
     ,"pdf.pageNumbers": "Show page numbers"
     ,"pdf.pageRange": "Output page range"
-    ,"pdf.pageRangeHint": "Enter all, or for example 1-3,5. Preview keeps every page; export includes only the selected pages."
+    ,"pdf.pageRangeHint": "For example 1-3,5. Only selected pages are exported, retaining their original numbers."
+    ,"pdf.allPages": "All pages"
+    ,"pdf.currentPage": "Current preview page"
+    ,"pdf.customRange": "Custom range"
+    ,"pdf.exportCount": "Export {count} page(s)"
+    ,"pdf.outputSummary": "Exporting {count} of {total} pages."
+    ,"pdf.rangeError.syntax": "Cannot read “{token}” as a range. Enter a value such as 1-3,5."
+    ,"pdf.rangeError.boundary": "“{token}” is not valid. Use pages 1–{count}, with the start no greater than the end."
+    ,"pdf.blockedPages": "Content does not fit on page(s) {pages}. Reduce PDF content scale or margins, or use larger paper. Export is blocked to avoid clipping."
+    ,"pdf.layoutFailed": "Preview is incomplete. Check that images and diagrams load, then refresh."
+    ,"pdf.sourceChanged": "The note or layout changed. Refresh the preview before exporting."
+    ,"pdf.printMismatch": "The print layout differs or clips content. No file was written."
+    ,"pdf.missingImage": "Image unavailable: {name}"
+    ,"pdf.missingImageCount": "{count} unavailable image(s) on selected pages are marked in both the preview and export."
+    ,"pdf.exportImageFailed": "The export window could not load “{name}”. No file was written."
+    ,"pdf.fittedBlockCount": "{count} oversized figure(s) or equation(s) were fitted to the page."
+    ,"pdf.fitWidth": "Fit width"
+    ,"pdf.fitPage": "Fit page"
     ,"pdf.grayscale": "Black and white output"
     ,"pdf.grayscaleHint": "Converts both the preview and final PDF to grayscale."
-    ,"pdf.previewZoom": "Preview zoom"
-    ,"pdf.actualScale": "Actual scale"
+    ,"pdf.previewZoom": "Preview zoom only"
+    ,"pdf.actualScale": "PDF content scale"
     ,"pdf.actualScaleHint": "Changes content size and pagination and is preserved in the exported PDF."
     ,"pdf.refresh": "Refresh preview"
     ,"pdf.export": "Export PDF"

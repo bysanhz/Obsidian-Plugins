@@ -609,7 +609,8 @@ function buildManualHeadingNumberChanges(markdown) {
         line: lineNumber,
         ch: match[0].length
       },
-      text: ""
+      text: "",
+      ambiguous: /^(?:19|20)\d{2}(?:[.．:：、\s]|$)/.test(match[0].slice(match[1].length))
     });
   }
 
@@ -828,7 +829,7 @@ extends Plugin {
   async onload() {
     console.log(
       "[Academic Heading Numbering] " +
-      "v0.4.1 loaded"
+      "v0.4.2 loaded"
     );
 
 
@@ -1197,6 +1198,10 @@ extends Plugin {
 
 
   removeExistingHeadingNumbers(editor, view) {
+    if (this.openSourceCleanup) {
+      this.openSourceCleanup(editor, view, buildManualHeadingNumberChanges);
+      return;
+    }
     const changes = buildManualHeadingNumberChanges(editor.getValue());
 
     if (changes.length === 0) {

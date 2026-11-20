@@ -972,9 +972,23 @@ body.bysan-style-controller-active
   z-index: -1;
 }
 
-.bysan-note-paper-example {
+.bysan-style-settings .bysan-reading-sample-frame {
+  height: auto;
+}
+
+.bysan-style-settings .bysan-reading-sample.markdown-preview-view {
+  height: auto;
+  min-height: 0;
+  padding: 0.35rem 0.55rem;
+  overflow: auto;
+}
+
+.bysan-style-settings .bysan-reading-sample .markdown-preview-sizer {
+  min-height: 0;
+}
+
+.bysan-style-settings .bysan-reading-sample.bysan-note-background-sample {
   min-height: 6rem;
-  padding: 0.65rem;
 }
 
 body.muted-activeline-bg .bysan-note-colors-example .cm-active {
@@ -1336,12 +1350,12 @@ input.bysan-value-range[type="range"]::-webkit-slider-thumb {
   display: block;
   min-width: 0;
   height: auto;
-  padding: 0 !important;
+  padding: 0.35rem 0.55rem;
   overflow: auto;
 }
 
 .bysan-list-preview-surface > .cm-scroller {
-  padding: 0 !important;
+  padding: 0.35rem 0.55rem !important;
 }
 
 .bysan-style-settings .bysan-list-preview-surface.mod-cm6 .cm-content {
@@ -2080,6 +2094,10 @@ input.bysan-value-range[type="range"]::-webkit-slider-thumb {
 
 .bysan-style-settings > .bysan-settings-title {
   margin-block-start: 0.6rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.65rem;
 }
 
 .bysan-style-settings .bysan-settings-section {

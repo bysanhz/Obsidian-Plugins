@@ -1,6 +1,6 @@
 /**
  * Bysan Style Controller
- * Version: 0.18.16
+ * Version: 0.18.17
  *
  * Owns visual presentation and provides switchable, integrated Bysan modules.
  */
@@ -734,6 +734,14 @@ module.exports = class BysanStyleController extends Plugin {
     }
 
     this.addSettingTab(new BysanStyleSettingTab(this.app, this));
+    this.addCommand({
+      id: "open-style-settings",
+      name: this.language === "zh" ? "打开样式设置" : "Open style settings",
+      callback: () => {
+        this.app.setting.open();
+        this.app.setting.openTabById(this.manifest.id);
+      }
+    });
     this.addCommand({
       id: "preview-and-export-pdf",
       name: this.t("pdf.command"),
@@ -1622,6 +1630,10 @@ class BysanStyleSettingTab extends PluginSettingTab {
       if (previousDisplay) style.setProperty("display", previousDisplay, previousPriority);
       else style.removeProperty("display");
     }
+    if (this.comparisonReturnScroll != null) {
+      containerEl.scrollTop = this.comparisonReturnScroll;
+      this.comparisonReturnScroll = null;
+    }
   }
 
   renderSettings(containerEl) {
@@ -1632,10 +1644,14 @@ class BysanStyleSettingTab extends PluginSettingTab {
     containerEl.empty();
     containerEl.addClass("bysan-style-settings");
 
-    new Setting(containerEl)
-      .setName("Bysan Style Controller")
+    const heading = new Setting(containerEl).setName("Bysan Style Controller")
       .setHeading()
-      .settingEl.addClass("bysan-settings-title");
+      .addButton(button => button
+        .setButtonText(zh ? "对照当前笔记" : "Compare with current note")
+        .setTooltip(zh ? "查看原笔记，不切换模式。独立设置窗口会保持打开。"
+          : "Show the original note without switching modes. A separate settings window stays open.")
+        .onClick(() => this.compareWithCurrentNote()));
+    heading.settingEl.addClass("bysan-settings-title");
 
     this.plugin.themeControls.beginRegionRender();
     this.renderSectionNavigation(containerEl);
@@ -1701,6 +1717,26 @@ class BysanStyleSettingTab extends PluginSettingTab {
       body => this.renderThemeGroups(body, ["plugins", "documents"]));
     this.balanceControlGrids(containerEl);
     this.setActiveMajorArea(containerEl, this.activeMajorArea || "content", false);
+  }
+
+  compareWithCurrentNote() {
+    const note = this.app.workspace.getActiveViewOfType(MarkdownView);
+    if (!note?.file) {
+      new Notice(this.plugin.language === "zh" ? "请先打开要对照的 Markdown 笔记。"
+        : "Open a Markdown note to compare its appearance.");
+      return;
+    }
+    const noteWindow = note.containerEl.ownerDocument.defaultView;
+    const settingsWindow = this.containerEl.ownerDocument.defaultView;
+    // A pop-out can stay open for live comparison. An inline settings modal
+    // covers the real note, so close it without touching the workspace leaf.
+    if (noteWindow && noteWindow !== settingsWindow && noteWindow.electronWindow?.focus) {
+      noteWindow.electronWindow.focus();
+    } else {
+      this.comparisonReturnScroll = this.containerEl.scrollTop;
+      this.app.setting.close();
+      noteWindow?.focus();
+    }
   }
 
   balanceControlGrids(containerEl) {
@@ -1783,7 +1819,7 @@ class BysanStyleSettingTab extends PluginSettingTab {
     const zh = this.plugin.language === "zh";
     const tr = (cn, en) => zh ? cn : en;
     const specs = {
-      tabs: [tr("标题栏与标签页预览", "Title bar and tabs preview"), sample => {
+      tabs: [tr("标题栏与标签页示意", "Title bar and tabs sample"), sample => {
         const bar = sample.createDiv({ cls: "bysan-sample-tabstrip bysan-example-titlebar workspace-tab-header-container" })
           .createDiv({ cls: "workspace-tab-header-container-inner" });
         for (const [label, active] of [[tr("当前笔记", "Active note"), true], [tr("其他笔记", "Other note"), false]]) {
@@ -1792,7 +1828,7 @@ class BysanStyleSettingTab extends PluginSettingTab {
             .createDiv({ cls: "workspace-tab-header-inner-title", text: label });
         }
       }],
-      navigation: [tr("文件树与大纲预览", "File tree and outline preview"), sample => {
+      navigation: [tr("文件树与大纲示意", "File tree and outline sample"), sample => {
         const row = sample.createDiv({ cls: "bysan-sample-nav" });
         const tree = row.createDiv({ cls: "bysan-example-left" }).createDiv({ cls: "nav-files-container" });
         const folder = tree.createDiv({ cls: "tree-item nav-folder" });
@@ -1815,7 +1851,7 @@ class BysanStyleSettingTab extends PluginSettingTab {
         menu.createDiv({ cls: "menu-item selected", text: tr("当前菜单项", "Selected item") });
         row.createDiv({ cls: "bysan-sample-popover", text: tr("链接悬浮预览", "Link popover") });
       }],
-      embeds: [tr("图片与嵌入预览", "Image and embed preview"), sample => {
+      embeds: [tr("图片与嵌入示意", "Image and embed sample"), sample => {
         const row = sample.createDiv({ cls: "bysan-sample-embeds" });
         const image = row.createSpan({ cls: "internal-embed image-embed is-loaded" });
         image.createEl("img", { attr: {
@@ -1826,7 +1862,7 @@ class BysanStyleSettingTab extends PluginSettingTab {
         embed.createDiv({ cls: "markdown-embed-title", text: tr("嵌入笔记", "Embedded note") });
         embed.createDiv({ cls: "markdown-embed-content", text: tr("另一篇笔记的内容", "Content from another note") });
       }],
-      canvas: [tr("白板底色与网格预览", "Canvas background and grid preview"), sample => {
+      canvas: [tr("白板底色与网格示意", "Canvas background and grid sample"), sample => {
         const canvas = sample.createDiv({ cls: "bysan-sample-canvas" });
         canvas.createSpan({ text: tr("卡片", "Card") });
         canvas.createSpan({ cls: "bysan-sample-canvas-link", text: "→" });
@@ -2078,7 +2114,7 @@ class BysanStyleSettingTab extends PluginSettingTab {
               review.createDiv({ cls: "art-review-sidebar-empty", text: zh ? "当前文档还没有评论。" : "No comments in this note." });
               review.createDiv({ cls: "art-review-sidebar-card" })
                 .createDiv({ cls: "art-review-sidebar-preview", text: zh ? "一条示例评论" : "An example comment" });
-            }, false);
+            }, false, false);
             this.renderNoteThemeControls(controls, REVIEW_PANEL_CONTROLS);
           });
       }
@@ -2297,7 +2333,7 @@ class BysanStyleSettingTab extends PluginSettingTab {
         links.createEl("a", { cls: "external-link", text: zh ? "外链" : "External link" });
         links.append(" · ");
         links.createEl("a", { cls: "internal-link is-unresolved", text: zh ? "未创建的链接" : "Uncreated link" });
-      });
+      }, zh ? "编辑选区示意 · 阅读样例" : "Editor selection illustration · Reading sample");
       this.renderNoteThemeControls(controls, EDITOR_MARK_CONTROLS);
       this.renderNoteThemeControls(controls, NOTE_MARK_CONTROLS);
       this.renderThemeGroups(body, ["marks"], false);
@@ -2307,17 +2343,9 @@ class BysanStyleSettingTab extends PluginSettingTab {
     this.createSettingsSection(containerEl, "headings", zh ? "页面标题与文内标题" : "Page title and headings",
       body => this.renderHeadingSettings(body));
     this.createSettingsSection(containerEl, "body-text", zh ? "正文、字体与公式" : "Text, fonts and math", (body) => {
-      const controls = this.createAppearanceLayout(body, sample => {
-        const paragraph = sample.createEl("p", { text: zh
-          ? "这一段展示正文字体、颜色和行高。下方第二行可用于比较行距。"
-          : "This paragraph shows the body font, colour and line height." });
-        paragraph.createEl("br");
-        paragraph.createSpan({ text: zh ? "这是同一段的第二行。" : "This is the second line of the paragraph." });
-        paragraph.append(" · ");
-        paragraph.createEl("strong", { text: zh ? "粗体" : "Bold" });
-        paragraph.append(" / ");
-        paragraph.createEl("em", { text: zh ? "斜体" : "Italic" });
-      });
+      const controls = this.createAppearanceLayout(body, sample => this.renderMarkdownSample(sample, zh
+        ? "这一段展示正文字体、颜色、行高和首行缩进。\n\n第二段用于比较段落间距。**粗体** / *斜体*"
+        : "This paragraph shows the body font, colour, line height and first-line indent.\n\nThis paragraph shows paragraph spacing. **Bold** / *Italic*"));
       this.addFontSizeSetting(controls, zh ? "正文字号" : "Body font size",
         zh ? "恢复后跟随 Obsidian 的字体大小。" : "Reset to follow Obsidian’s font size.",
         "noteFontSize", ".markdown-rendered", "px",
@@ -2422,18 +2450,22 @@ class BysanStyleSettingTab extends PluginSettingTab {
         cls: "bysan-heading-target", attr: { "data-bysan-heading-target": id }
       });
       const controls = this.createAppearanceLayout(panel, sample => {
-        if (id === "title") sample.createDiv({ cls: "inline-title", text: zh ? "笔记名称" : "Note name" });
+        if (id === "title") sample.createDiv({ cls: "mod-header mod-ui" })
+          .createDiv({ cls: "inline-title", text: zh ? "笔记名称" : "Note name" });
         else if (id === "numbering") {
           for (const [tag, number, label] of [["h1", "一、", zh ? "章标题" : "Chapter heading"],
             ["h2", "1.1", zh ? "小节标题" : "Section heading"]]) {
-            const heading = sample.createEl(tag, { cls: "bysan-heading-number-sample" });
+            const heading = sample.createDiv({ cls: `el-${tag}` }).createEl(tag, { cls: "bysan-heading-number-sample" });
             heading.createSpan({ cls: "ahn-reading-number", text: number });
             heading.append(label);
           }
         }
-        else sample.createEl(id === "shared" ? "h2" : `h${id}`, {
-          text: id === "shared" ? (zh ? "文内标题" : "Section heading") : title
-        });
+        else {
+          const tag = id === "shared" ? "h2" : `h${id}`;
+          sample.createDiv({ cls: `el-${tag}` }).createEl(tag, {
+            text: id === "shared" ? (zh ? "文内标题" : "Section heading") : title
+          });
+        }
       });
       if (id === "title") this.renderNoteThemeControls(controls, PAGE_TITLE_CONTROLS);
       else if (id === "numbering") this.renderNoteThemeControls(controls, HEADING_NUMBER_CONTROLS);
@@ -2462,8 +2494,8 @@ class BysanStyleSettingTab extends PluginSettingTab {
   renderNoteBackgroundColors(containerEl) {
     const zh = this.plugin.language === "zh";
     const controls = this.createAppearanceLayout(containerEl, sample => {
-      const backdrop = sample.createDiv({ cls: "bysan-note-backdrop-example" });
-      backdrop.createDiv({ cls: "bysan-note-paper-example", text: zh ? "笔记正文" : "Note content" });
+      sample.createDiv({ cls: "el-p" }).createEl("p", { text: zh ? "笔记正文" : "Note content" });
+      sample.closest(".bysan-reading-sample").classList.add("bysan-note-background-sample");
     });
     this.renderNoteThemeControls(controls, NOTE_BACKGROUND_CONTROLS);
     this.renderThemeGroups(controls, ["note-background"], false);
@@ -2477,7 +2509,7 @@ class BysanStyleSettingTab extends PluginSettingTab {
       frame.createDiv({ cls: "bysan-example-secondary", text: zh ? "次背景" : "Secondary surface" });
       frame.createDiv({ cls: "bysan-example-status", text: zh ? "状态栏" : "Status bar" });
       frame.createDiv({ cls: "bysan-example-accent", text: zh ? "强调色" : "Accent" });
-    });
+    }, zh ? "界面配色示意" : "Interface colours sample", false);
     this.renderNoteThemeControls(controls, INTERFACE_COLOR_CONTROLS);
   }
 
@@ -2495,9 +2527,9 @@ class BysanStyleSettingTab extends PluginSettingTab {
   }
 
 
-  createAppearanceLayout(containerEl, render, labelled = true) {
+  createAppearanceLayout(containerEl, render, label, noteSurface = true) {
     const layout = containerEl.createDiv({ cls: "bysan-appearance-layout" });
-    this.renderAppearanceSample(layout, render, labelled);
+    this.renderAppearanceSample(layout, render, label, noteSurface);
     return layout.createDiv({ cls: "bysan-appearance-controls" });
   }
 
@@ -2509,6 +2541,7 @@ class BysanStyleSettingTab extends PluginSettingTab {
       .then(() => {
         if (!sample.isConnected) return;
         for (const block of [...sample.children]) {
+          if (block.matches("div[class^='el-'], .markdown-preview-pusher")) continue;
           const wrapper = sample.ownerDocument.createElement("div");
           wrapper.className = `el-${block.localName}`;
           block.before(wrapper);
@@ -2521,23 +2554,39 @@ class BysanStyleSettingTab extends PluginSettingTab {
           marker.className = "list-bullet";
           li.prepend(marker);
         }
-        if (this.app.vault.getConfig?.("showIndentGuide")) {
-          sample.closest(".markdown-rendered")?.classList.add("show-indentation-guide");
-        }
         this.plugin.schedulePointRefresh();
       })
       .catch(error => console.warn("[Bysan Style Controller] Could not render settings sample", error));
   }
 
 
-  renderAppearanceSample(containerEl, render, labelled = true) {
-    const box = containerEl.createDiv({ cls: "bysan-appearance-sample" });
-    if (labelled) box.createDiv({
-      cls: "bysan-appearance-sample-label",
-      text: this.plugin.language === "zh" ? "阅读样例" : "Reading sample"
+  createSampleBackdrop(containerEl) {
+    return containerEl.createDiv({
+      cls: "bysan-note-backdrop-example",
+      attr: { "data-type": "markdown" }
     });
-    const content = box.createDiv({ cls: "markdown-rendered" });
-    render(content.createDiv({ cls: "markdown-preview-section" }));
+  }
+
+  createReadingSample(backdrop, extraClass = "") {
+    const reading = backdrop.createDiv({ cls: "markdown-reading-view bysan-reading-sample-frame" });
+    const surface = reading.createDiv({
+      cls: `markdown-preview-view markdown-rendered bysan-note-paper-example bysan-reading-sample ${extraClass}`.trim()
+    });
+    if (this.app.vault.getConfig?.("showIndentGuide")) surface.classList.add("show-indentation-guide");
+    const section = surface.createDiv({ cls: "markdown-preview-sizer markdown-preview-section" });
+    // Obsidian trims the first rendered block's top margin after this marker.
+    section.createDiv({ cls: "markdown-preview-pusher" });
+    return { surface, section };
+  }
+
+  renderAppearanceSample(containerEl, render, label, noteSurface) {
+    const box = containerEl.createDiv({ cls: "bysan-appearance-sample" });
+    if (label !== false) box.createDiv({
+      cls: "bysan-appearance-sample-label",
+      text: label ?? (this.plugin.language === "zh" ? "阅读样例" : "Reading sample")
+    });
+    if (noteSurface) render(this.createReadingSample(this.createSampleBackdrop(box)).section);
+    else render(box);
   }
 
 
@@ -2554,10 +2603,8 @@ class BysanStyleSettingTab extends PluginSettingTab {
 
 
   renderInlineCodeSettings(containerEl) {
-    const controls = this.createAppearanceLayout(containerEl, sample => {
-      const paragraph = sample.createEl("p", { text: this.plugin.language === "zh" ? "行内代码示例 " : "Inline code sample " });
-      paragraph.createEl("code", { text: "np.arange(0, 1)" });
-    });
+    const controls = this.createAppearanceLayout(containerEl, sample => this.renderMarkdownSample(sample,
+      (this.plugin.language === "zh" ? "行内代码示例 " : "Inline code sample ") + "`np.arange(0, 1)`"));
     this.renderNoteThemeControls(controls, [["bysan-inline-code-font", "行内代码字体", "Inline code font"]]);
     this.createFeatureGroup(
       controls,
@@ -2657,11 +2704,12 @@ class BysanStyleSettingTab extends PluginSettingTab {
     const controls = layout.createDiv({ cls: "bysan-appearance-controls" });
     const names = zh ? ["一级列表项", "二级", "三级", "四级"] : ["First level", "Level two", "Level three", "Level four"];
     const ordered = tr("有序列表", "Ordered item");
-    const reading = sample.createDiv({ cls: "markdown-preview-view markdown-rendered bysan-list-preview-surface" });
-    this.renderMarkdownSample(reading.createDiv({ cls: "markdown-preview-section" }), [
+    const backdrop = this.createSampleBackdrop(sample);
+    const { surface: reading, section } = this.createReadingSample(backdrop, "bysan-list-preview-surface");
+    this.renderMarkdownSample(section, [
       ...names.map((name, index) => `${"\t".repeat(index)}- ${name}`), "", `1. ${ordered}`
     ].join("\n"));
-    const editing = sample.createDiv({
+    const editing = backdrop.createDiv({
       cls: "markdown-source-view cm-s-obsidian mod-cm6 is-live-preview bysan-list-preview-surface"
     });
     this.renderListEditorSample(editing, names, ordered);
@@ -2794,7 +2842,7 @@ class BysanStyleSettingTab extends PluginSettingTab {
     const syncMode = () => {
       editing.hidden = mode !== "edit";
       reading.hidden = mode !== "read";
-      label.textContent = mode === "edit" ? tr("实时预览样例", "Live Preview sample") : tr("阅读样例", "Reading sample");
+      label.textContent = mode === "edit" ? tr("编辑样式示意", "Live Preview style sample") : tr("阅读样例", "Reading sample");
       for (const [target, button] of buttons) button.setAttribute("aria-pressed", String(target === mode));
       syncGuideMode();
     };

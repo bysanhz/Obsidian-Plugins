@@ -1090,15 +1090,16 @@ input.bysan-value-range[type="range"] {
   min-width: 0;
   max-width: 11.25rem;
   margin: 0;
+  /* Obsidian paints the native track on the input itself. Replace that
+     background, rather than drawing a second, taller track on top of it. */
+  background: linear-gradient(var(--bysan-slider-direction, to right),
+    var(--interactive-accent, #168fc4) var(--bysan-slider-position, 0%),
+    var(--slider-track-background, var(--background-modifier-border)) var(--bysan-slider-position, 0%))
+    center / max(0px, calc(100% - var(--slider-thumb-width, 18px))) 100% no-repeat;
 }
 
 input.bysan-value-range[type="range"]::-webkit-slider-runnable-track {
-  /* A native range stops half a thumb short of each input edge. Paint only
-     that travel span so the fill meets the thumb at 0%, 100%, and in between. */
-  background: linear-gradient(var(--bysan-slider-direction, to right),
-    var(--interactive-accent) var(--bysan-slider-position, 0%),
-    var(--background-modifier-border) var(--bysan-slider-position, 0%))
-    center / max(0px, calc(100% - var(--slider-thumb-width, 18px))) 100% no-repeat;
+  background: transparent;
 }
 
 input.bysan-value-range[type="range"]:dir(rtl) {

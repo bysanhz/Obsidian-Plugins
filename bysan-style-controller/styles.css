@@ -1284,6 +1284,85 @@ input.bysan-value-range[type="range"]::-webkit-slider-thumb {
 
 }
 
+/* A four-level list needs more space than a small colour sample. */
+.bysan-list-settings-body {
+  container: bysan-list-settings / inline-size;
+}
+
+.bysan-style-settings .bysan-list-layout {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.bysan-style-settings .bysan-list-layout > .bysan-list-sample {
+  position: static;
+  overflow: visible;
+}
+
+@container bysan-list-settings (min-width: 800px) {
+  .bysan-style-settings .bysan-list-layout {
+    grid-template-columns: minmax(13.75rem, 0.85fr) minmax(0, 2.15fr);
+  }
+
+  .bysan-style-settings .bysan-list-layout > .bysan-list-sample {
+    position: sticky;
+  }
+}
+
+.bysan-list-preview-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.24rem;
+  margin-block-end: 0.45rem;
+}
+
+.bysan-list-preview-bar > span {
+  flex: 1 1 auto;
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+}
+
+.bysan-list-preview-bar > button {
+  min-height: 1.45rem;
+  font-size: var(--font-ui-smaller);
+}
+
+.bysan-list-preview-bar > button[aria-pressed="true"] {
+  color: var(--text-on-accent);
+  background: var(--bysan-settings-cta);
+}
+
+.bysan-style-settings .bysan-list-preview-surface {
+  display: block;
+  min-width: 0;
+  height: auto;
+  padding: 0 !important;
+  overflow: auto;
+}
+
+.bysan-list-preview-surface > .cm-scroller {
+  padding: 0 !important;
+}
+
+.bysan-style-settings .bysan-list-preview-surface.mod-cm6 .cm-content {
+  width: 100%;
+  min-height: 0;
+  padding: 0;
+  white-space: pre-wrap;
+}
+
+.bysan-list-preview-surface .cm-hmd-list-indent {
+  white-space: pre;
+}
+
+.bysan-style-settings .bysan-list-preview-surface .list-bullet::after {
+  transition: none;
+}
+
+.bysan-list-layout [hidden] {
+  display: none !important;
+}
+
 @container (max-width: 28rem) {
   .bysan-appearance-controls > .bysan-feature-group > .bysan-feature-group-body {
     grid-template-columns: minmax(0, 1fr);

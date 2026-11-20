@@ -1531,6 +1531,11 @@ class ThemeControls {
   }
 
   renderControl(setting, item, title, presentation = null) {
+    const update = value => {
+      const pending = this.plugin.updateThemeSetting(item.id, value);
+      presentation?.onChange?.();
+      return pending;
+    };
     if (isFontFamilySetting(item)) {
       this.addFontPicker(setting, item, title);
       return;
@@ -1549,7 +1554,7 @@ class ThemeControls {
       const invert = value => Boolean(value) !== Boolean(presentation?.invertToggle);
       setting.addToggle((toggle) => toggle
         .setValue(invert(this.valueFor(item)))
-        .onChange((value) => this.plugin.updateThemeSetting(item.id, invert(value))));
+        .onChange(value => update(invert(value))));
       return;
     }
 
@@ -1562,7 +1567,7 @@ class ThemeControls {
           }
         }
         dropdown.setValue(String(this.valueFor(item) ?? ""));
-        dropdown.onChange((value) => this.plugin.updateThemeSetting(item.id, value));
+        dropdown.onChange(update);
       });
       return;
     }
@@ -2009,7 +2014,7 @@ class ThemeControls {
   filterRows(containerEl, query) {
     const normalized = String(query || "").trim().toLowerCase();
     const rows = Array.from(containerEl.querySelectorAll(".setting-item:not(.setting-item-heading)"))
-      .filter((row) => !row.closest(".bysan-settings-nav"));
+      .filter(row => !row.closest(".bysan-settings-nav"));
     const matches = [];
 
     for (const row of rows) {
@@ -2018,7 +2023,7 @@ class ThemeControls {
       ).toLowerCase();
       const matched = !normalized || searchable.includes(normalized);
       row.classList.toggle("bysan-setting-filtered", Boolean(normalized) && !matched);
-      if (normalized && matched) matches.push(row);
+      if (normalized && matched && !row.closest("[data-bysan-list-conditional][hidden]")) matches.push(row);
     }
 
     return matches;

@@ -1,6 +1,6 @@
 /**
  * Bysan Style Controller
- * Version: 0.18.15
+ * Version: 0.18.16
  *
  * Owns visual presentation and provides switchable, integrated Bysan modules.
  */
@@ -967,13 +967,18 @@ module.exports = class BysanStyleController extends Plugin {
 
 
   async updateThemeSetting(id, value) {
+    await this.updateThemeSettings({ [id]: value });
+  }
+
+
+  async updateThemeSettings(changes) {
     this.settings.themeSettings = {
       ...(this.settings.themeSettings || {}),
-      [id]: value
+      ...changes
     };
     this.settings.stylePresetDirty = true;
     await this.saveData(this.settings);
-    this.themeControls.applySetting(id);
+    for (const id of Object.keys(changes)) this.themeControls.applySetting(id);
     this.schedulePointRefresh();
   }
 
@@ -1222,6 +1227,8 @@ module.exports = class BysanStyleController extends Plugin {
         opacity: true, "default-light": "#6495ed", "default-dark": "#6495ed" },
       { id: "bysan-heading-number-gap", title: "Heading number gap", type: "variable-number",
         format: "em", default: 0.55, min: 0, max: 2, step: 0.05 },
+      { id: "list-colorful-marker", title: "Automatic bullet base colour", type: "variable-themed-color",
+        format: "hex", opacity: true, "default-light": "#fd4949", "default-dark": "#ff8686" },
       { id: "bysan-code-block-font", title: "Code block font", type: "variable-text" },
       { id: "bysan-inline-code-font", title: "Inline code font", type: "variable-text" },
       {
@@ -2641,16 +2648,193 @@ class BysanStyleSettingTab extends PluginSettingTab {
 
   renderTextDetailSettings(containerEl) {
     const zh = this.plugin.language === "zh";
-    const controls = this.createAppearanceLayout(containerEl, sample => this.renderMarkdownSample(sample, [
-      zh ? "- 普通列表项\n  - 二级\n    - 三级\n      - 四级" : "- List item\n  - Level two\n    - Level three\n      - Level four",
-      zh ? "1. 有序列表" : "1. Ordered item",
-      zh ? "- [ ] 待办\n- [x] 完成" : "- [ ] To do\n- [x] Done",
-      "---"
-    ].join("\n\n")));
-    const grid = controls.createDiv({ cls: "bysan-theme-grid" });
-    this.addDualColor(grid, this.plugin.t("palette.marker"), "markerLight", "markerDark");
-    for (const feature of ["list", "task", "hr"]) this.renderGeometryControls(grid, feature);
-    this.renderThemeGroups(controls, ["lists"], false);
+    const tr = (cn, en) => zh ? cn : en;
+    containerEl.addClass("bysan-list-settings-body");
+    const layout = containerEl.createDiv({ cls: "bysan-appearance-layout bysan-list-layout" });
+    const sample = layout.createDiv({ cls: "bysan-appearance-sample bysan-list-sample" });
+    const bar = sample.createDiv({ cls: "bysan-list-preview-bar" });
+    const label = bar.createSpan({ text: tr("列表样例", "List sample") });
+    const controls = layout.createDiv({ cls: "bysan-appearance-controls" });
+    const names = zh ? ["一级列表项", "二级", "三级", "四级"] : ["First level", "Level two", "Level three", "Level four"];
+    const ordered = tr("有序列表", "Ordered item");
+    const reading = sample.createDiv({ cls: "markdown-preview-view markdown-rendered bysan-list-preview-surface" });
+    this.renderMarkdownSample(reading.createDiv({ cls: "markdown-preview-section" }), [
+      ...names.map((name, index) => `${"\t".repeat(index)}- ${name}`), "", `1. ${ordered}`
+    ].join("\n"));
+    const editing = sample.createDiv({
+      cls: "markdown-source-view cm-s-obsidian mod-cm6 is-live-preview bysan-list-preview-surface"
+    });
+    this.renderListEditorSample(editing, names, ordered);
+    const activeNote = this.app.workspace.getActiveViewOfType(MarkdownView);
+    let mode = activeNote?.getMode() === "source" ? "edit" : "read";
+
+    const used = new Set(["colorful-unordered-list", "unordered-list-style-options"]);
+    const theme = this.plugin.themeControls;
+    const item = id => theme.controlItems.find(control => control.id === id);
+    const value = id => theme.valueFor(item(id));
+    const grid = (parent, conditional = false) => parent.createDiv({
+      cls: "bysan-theme-grid",
+      attr: conditional ? { "data-bysan-list-conditional": "" } : {}
+    });
+    const add = (parent, ids) => {
+      for (const spec of ids) {
+        const [id, cn, en, descCn, descEn, onChange] = typeof spec === "string" ? [spec] : spec;
+        const control = item(id);
+        if (!control) continue;
+        used.add(id);
+        theme.renderItem(parent, control, {
+          name: tr(cn, en), scope: tr(descCn, descEn), onChange
+        });
+      }
+    };
+    this.createFeatureGroup(controls, tr("列表符号", "List markers"), "", group => {
+      const primary = grid(group);
+      const standard = "bt-default-unordered-list", custom = "custom-unordered-list";
+      const current = () => value("colorful-unordered-list") ? "auto" : value("unordered-list-style-options");
+      const standardRows = grid(group, true);
+      const autoRows = grid(group, true);
+      const commonRows = grid(group, true);
+      const customRows = grid(group, true);
+      const sync = () => {
+        const choice = current();
+        standardRows.hidden = choice !== standard;
+        autoRows.hidden = choice !== "auto";
+        commonRows.hidden = choice !== standard && choice !== "auto";
+        customRows.hidden = choice !== custom;
+      };
+      const modeSetting = new Setting(primary).setName(tr("无序列表样式", "Unordered list style"))
+        .setDesc(tr("选「自动彩色」调整基础色，或选「自定义」逐层配色。",
+          "Choose Auto colours for a base colour, or Custom to colour each level."))
+        .addDropdown(dropdown => dropdown.addOptions({
+          [standard]: tr("Bysan 默认", "Bysan default"),
+          auto: tr("自动彩色", "Auto colours"),
+          [custom]: tr("自定义", "Custom"),
+          "default-list-marker": tr("Obsidian 默认", "Obsidian default")
+        }).setValue(current()).onChange(async choice => {
+          const pending = this.plugin.updateThemeSettings({
+            "colorful-unordered-list": choice === "auto",
+            "unordered-list-style-options": choice === "auto" ? standard : choice
+          });
+          sync();
+          await pending;
+        }));
+      modeSetting.settingEl.dataset.bysanSettingId = "unordered-list-style-options";
+      modeSetting.settingEl.dataset.bysanSearch = tr(
+        "无序列表样式 默认 自动彩色 启用彩色无序列表符号 自定义 colorful-unordered-list unordered-list-style-options",
+        "unordered list style default automatic colours colorful-unordered-list custom unordered-list-style-options");
+      add(standardRows, ["list-ul-marker-color"]);
+      add(autoRows, [["list-colorful-marker", "自动彩色基础色", "Automatic bullet base colour",
+        "一级使用此颜色，后续层级自动调整色相。", "Level one uses this colour; deeper levels shift its hue."]]);
+      add(commonRows, ["list-ul-marker-size"]);
+      for (let level = 1; level <= 4; level++) {
+        add(customRows, [
+          [`list-ul-marker-color-${level}`, `第 ${level} 层符号颜色`, `Level ${level} bullet colour`],
+          `list-ul-marker-${level}`, `list-ul-marker-size-${level}`
+        ]);
+      }
+      const shared = grid(group);
+      this.addDualColor(shared, tr("列表数字与通用标记", "List numbers and generic markers"), "markerLight", "markerDark",
+        null, null, tr("控制当前样式下显示的通用列表数字。", "Controls the general list number colour in the current style."));
+      this.renderGeometryControls(shared, "list");
+      add(shared, ["list-ol-number-color", "list-ol-marker-1", "list-ol-marker-2", "list-ol-marker-3",
+        "list-ol-marker-4", "list-style-change-options", "list-indent", "line-height-list", "list-spacing-bt"]);
+      sync();
+    });
+
+    let syncGuideMode;
+    this.createFeatureGroup(controls, tr("缩进层级线", "Indentation guides"),
+      tr("预览的「编辑 / 阅读」也会切换下方对应设置。", "The preview toggle also switches the matching controls below."), group => {
+        const shared = grid(group);
+        add(shared, [
+          ["bt-connected-indent-line-color", "层级线基础色", "Indent-guide base colour",
+            "默认彩色层级线和悬停连接线共用；更深层自动变色。", "Shared by standard coloured guides and hover connectors; deeper levels shift its hue."],
+          "bt-connected-indent-hover", "bt-colorful-connected-indent-hover", "bt-indentation-width-hover"
+        ]);
+        const editingRows = grid(group, true);
+        const plainLines = grid(group, true);
+        const readingRows = grid(group, true);
+        const readingStyle = grid(group, true);
+        const gradients = grid(group, true);
+        const image = grid(group, true);
+        syncGuideMode = () => {
+          const edit = mode === "edit";
+          const colourful = value("bt-colorful-indentation-lines");
+          const style = value("bt-colorful-indentation-line-options");
+          editingRows.hidden = !edit;
+          plainLines.hidden = !edit || value("bt-colorful-indentation-lines-editing");
+          readingRows.hidden = edit;
+          readingStyle.hidden = edit || !colourful;
+          gradients.hidden = edit || !colourful || style !== "bt-indentation-line-gradient";
+          image.hidden = edit || !colourful || style !== "bt-indentation-line-image";
+        };
+        add(editingRows, [
+          ["bt-colorful-indentation-lines-editing", "启用彩色层级线（编辑）", "Coloured guides (editing)", "", "", syncGuideMode],
+          "indentation-guide-width", "bt-list-indentation-margin-left-editing"
+        ]);
+        add(plainLines, ["indentation-guide-color",
+          ["indentation-guide-color-active", "编辑时活动层级线颜色", "Active indent-guide colour (editing)",
+            "可把鼠标移到编辑样例的子列表上查看。", "Hover a nested line in the editing sample to see it."]]);
+        add(readingRows, [
+          ["bt-colorful-indentation-lines", "启用彩色层级线（阅读）", "Coloured guides (reading)", "", "", syncGuideMode],
+          "bt-list-indentation-margin-left-reading"
+        ]);
+        add(readingStyle, [
+          ["bt-colorful-indentation-line-options", "阅读视图层级线样式", "Reading-view indent guide style",
+            "选择默认、渐变或背景图片。", "Choose Default, Gradient or Image.", syncGuideMode],
+          "bt-colorful-indentation-width"
+        ]);
+        add(gradients, ["bt-indentation-gradient-color-1", "bt-indentation-gradient-color-2"]);
+        add(image, ["bt-indentation-line-image"]);
+      });
+    const buttons = [["edit", tr("编辑", "Editing")], ["read", tr("阅读", "Reading")]].map(([target, title]) => {
+      const button = bar.createEl("button", { text: title, attr: { type: "button" } });
+      button.addEventListener("click", () => { mode = target; syncMode(); });
+      return [target, button];
+    });
+    const syncMode = () => {
+      editing.hidden = mode !== "edit";
+      reading.hidden = mode !== "read";
+      label.textContent = mode === "edit" ? tr("实时预览样例", "Live Preview sample") : tr("阅读样例", "Reading sample");
+      for (const [target, button] of buttons) button.setAttribute("aria-pressed", String(target === mode));
+      syncGuideMode();
+    };
+    syncMode();
+
+    this.createFeatureGroup(containerEl, tr("任务与分隔线", "Tasks and dividers"), "", group => {
+      const taskControls = this.createAppearanceLayout(group, fixture => this.renderMarkdownSample(fixture,
+        tr("- [ ] 待办\n- [x] 完成\n\n---", "- [ ] To do\n- [x] Done\n\n---")));
+      const geometry = grid(taskControls);
+      for (const feature of ["task", "hr"]) this.renderGeometryControls(geometry, feature);
+      this.renderThemeGroups(taskControls, ["lists"], false, id => !used.has(id));
+    });
+  }
+
+  renderListEditorSample(editing, names, ordered) {
+    const scroller = editing.createDiv({ cls: "cm-scroller" });
+    const content = scroller.createDiv({ cls: "cm-content cm-lineWrapping" });
+    const showGuides = this.app.vault.getConfig?.("showIndentGuide") !== false;
+    for (const [index, name] of [...names, ordered].entries()) {
+      const isOrdered = index === names.length;
+      const level = isOrdered ? 1 : index + 1;
+      const line = content.createDiv({ cls: `cm-line HyperMD-list-line HyperMD-list-line-${level}` });
+      if (level > 1) {
+        const indent = line.createSpan({ cls: `cm-hmd-list-indent cm-hmd-list-indent-${index}` });
+        for (let depth = 0; depth < index; depth++) {
+          indent.createSpan({ cls: showGuides ? "cm-indent" : "cm-indent-spacing", text: "\t" });
+        }
+        if (showGuides) {
+          const active = value => {
+            for (const guide of indent.children) guide.classList.toggle("cm-active-indent", value);
+          };
+          line.addEventListener("mouseenter", () => active(true));
+          line.addEventListener("mouseleave", () => active(false));
+        }
+      }
+      const marker = line.createSpan({ cls: `cm-formatting cm-formatting-list cm-formatting-list-${isOrdered ? "ol" : "ul"} cm-list-${level}` });
+      marker.createSpan({ cls: isOrdered ? "list-number" : "list-bullet", text: isOrdered ? "1. " : "-" });
+      if (!isOrdered) marker.append(" ");
+      line.createSpan({ cls: `cm-list-${level}`, text: name });
+    }
   }
 
 

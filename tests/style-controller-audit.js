@@ -394,7 +394,7 @@ for (const objectId of ["body-text", "headings", "code", "blocks", "text-details
   assert(mainSource.includes(`createSettingsSection(containerEl, "${objectId}"`), `missing editor object group: ${objectId}`);
 }
 assert(!mainSource.includes('createSubarea('), "legacy nested settings navigation is still rendered");
-const mountedGroups = [...mainSource.matchAll(/this\.renderThemeGroups\((?:body|controls), \[([^\]]*)\]/g)]
+const mountedGroups = [...mainSource.matchAll(/this\.renderThemeGroups\((?:body|controls|taskControls), \[([^\]]*)\]/g)]
   .flatMap(match => [...match[1].matchAll(/"([^"]+)"/g)].map(entry => entry[1]));
 const expectedGroups = [
   "general", "workspace-background", "tabs", "navigation", "window", "canvas", "graph",

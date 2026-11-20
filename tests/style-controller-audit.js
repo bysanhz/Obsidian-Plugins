@@ -67,14 +67,24 @@ const sandbox = {
 };
 vm.runInNewContext(
   themeSource.replace(
-    "module.exports = { ThemeControls, addValueStepper, addPointSizeStepper, readFontPoints, addStyleDropdown, FONT_WEIGHTS, ADVANCED_THEME_TOPICS };",
-    "module.exports = { ThemeControls, parseColor, colorWithAlpha, ADVANCED_MODE_PAIRS, COMPATIBILITY_ONLY_IDS, optionLabel, isFontFamilySetting, cssStyleChoices, readFontPoints, parseFontconfigFamilies, fontChoices, selectedFontName, fontStack };"
+    /^module\.exports = .+;$/m,
+    "$&\nObject.assign(module.exports, {parseColor, colorWithAlpha, ADVANCED_MODE_PAIRS, COMPATIBILITY_ONLY_IDS, optionLabel, isFontFamilySetting, cssStyleChoices, parseFontconfigFamilies, fontChoices, selectedFontName, fontStack});"
   ),
   sandbox
 );
 const { ThemeControls, parseColor, colorWithAlpha } = sandbox.module.exports;
 const { optionLabel, COMPATIBILITY_ONLY_IDS } = sandbox.module.exports;
 const { isFontFamilySetting, cssStyleChoices, readFontPoints } = sandbox.module.exports;
+const { numericThemeSpec, splitCssDimension } = sandbox.module.exports;
+for (const [id, unit] of [["bt-bubble-layout-padding", "px"], ["bt-bubble-radius", "px"],
+  ["checkbox-size", "rem"], ["image-max-width", "%"], ["bottom-padding-value", "em"],
+  ["fancy-hr-rotate", "deg"], ["h1-line-height", ""], ["stack-tabs-background-blur-depth", "px"]]) {
+  assert.equal(numericThemeSpec(controls.find(item => item.id === id))?.unit, unit, `wrong numeric control or unit: ${id}`);
+}
+assert.equal(numericThemeSpec(controls.find(item => item.id === "inline-title-weight")), null, "font weights must remain styles, not dimensions");
+assert.equal(numericThemeSpec(controls.find(item => item.id === "inline-title-bg-url")), null, "URL must remain text");
+assert.equal(splitCssDimension("-1.5rem")?.value, "-1.5");
+assert.equal(splitCssDimension("calc(1rem + 8px)"), null, "CSS expressions must not be truncated to a number");
 const { parseFontconfigFamilies, fontChoices, selectedFontName, fontStack } = sandbox.module.exports;
 const fontFaces = parseFontconfigFamilies("LXGW WenKai,霞鹜文楷\t\nLXGW WenKai,霞鹜文楷,LXGW WenKai Bold\t0\n" +
   "LXGW WenKai Mono,霞鹜文楷等宽\t100\nInter\t0\nNoto Sans CJK SC\t\n");

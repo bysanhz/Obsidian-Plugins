@@ -665,26 +665,30 @@ body.bysan-style-controller-active
 
 .bysan-pdf-preview-margin-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 7px;
+  gap: 5px;
 }
 
 .bysan-pdf-preview-margin-cell {
   display: flex;
+  flex-wrap: wrap;
   min-width: 0;
   align-items: center;
   gap: 5px;
 }
 
 .bysan-pdf-preview-margin-cell label {
-  flex: 0 0 auto;
+  flex: 1 0 auto;
   color: var(--text-muted);
   font-size: var(--font-ui-smaller);
 }
 
-.bysan-pdf-preview-margin-cell input {
-  min-width: 0;
-  width: 100%;
+.bysan-pdf-preview-sidebar .bysan-value-stepper {
+  max-width: 11rem;
+}
+
+.bysan-pdf-preview-margin-cell .bysan-value-stepper {
+  flex: 0 1 9.25rem;
+  margin-inline-start: auto;
 }
 
 .bysan-pdf-preview-field-hint,
@@ -696,23 +700,6 @@ body.bysan-style-controller-active
 
 .bysan-pdf-preview-field-hint {
   margin-top: 5px;
-}
-
-.bysan-pdf-preview-zoom-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.bysan-pdf-preview-zoom-row input {
-  min-width: 0;
-  flex: 1 1 auto;
-}
-
-.bysan-pdf-preview-zoom-row span {
-  min-width: 44px;
-  text-align: right;
-  font-variant-numeric: tabular-nums;
 }
 
 .bysan-pdf-preview-actions {
@@ -1078,7 +1065,7 @@ table:not(.dataview) :is(th, td) {
   max-width: 14rem;
 }
 
-.bysan-style-settings .bysan-value-stepper input {
+.bysan-value-stepper > input {
   flex: 1 1 0;
   width: 0;
   min-width: 0;
@@ -1093,7 +1080,7 @@ table:not(.dataview) :is(th, td) {
   appearance: none;
 }
 
-.bysan-style-settings .bysan-value-stepper button {
+.bysan-value-stepper > button {
   flex: 0 0 1.5rem;
   min-width: 0;
   padding: 0;
@@ -1813,30 +1800,7 @@ table:not(.dataview) :is(th, td) {
 .bysan-control-type-select .setting-item-control select,
 .bysan-control-type-class-select .setting-item-control select,
 .bysan-control-type-variable-select .setting-item-control select,
-.bysan-control-type-variable-text .setting-item-control input,
-.bysan-control-type-variable-number .setting-item-control input {
-  width: 100%;
-  max-width: none;
-}
-
-.bysan-control-type-slider .setting-item-control,
-.bysan-control-type-variable-number-slider .setting-item-control {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.bysan-control-type-slider .setting-item-control .slider,
-.bysan-control-type-variable-number-slider .setting-item-control .slider {
-  width: 100%;
-  min-width: 0;
-  max-width: none;
-  margin: 0;
-}
-
-.bysan-control-type-slider .setting-item-control input[type="range"],
-.bysan-control-type-variable-number-slider .setting-item-control input[type="range"] {
+.bysan-control-type-variable-text .setting-item-control > input {
   width: 100%;
   max-width: none;
 }
@@ -1887,10 +1851,6 @@ table:not(.dataview) :is(th, td) {
   width: 100%;
 }
 
-.bysan-mode-control-slider {
-  grid-template-columns: max-content 2.8rem minmax(0, 1fr) max-content;
-}
-
 .bysan-mode-label {
   display: inline-flex;
   align-items: center;
@@ -1910,20 +1870,6 @@ table:not(.dataview) :is(th, td) {
 .bysan-mode-label-dark {
   background: #344252;
   color: #eff5fb;
-}
-
-.bysan-mode-control .slider {
-  width: 100% !important;
-  min-width: 0 !important;
-  max-width: 100% !important;
-  margin-inline: 0 !important;
-  box-sizing: border-box;
-}
-
-.bysan-mode-control-slider .slider-value {
-  width: auto;
-  min-width: 0;
-  text-align: right;
 }
 
 .bysan-mode-control select {
@@ -1988,7 +1934,6 @@ table:not(.dataview) :is(th, td) {
     gap: 0.5rem;
   }
 
-  .bysan-mode-control .slider,
   .bysan-mode-control select {
     width: 100%;
     max-width: none;
@@ -2295,15 +2240,15 @@ table:not(.dataview) :is(th, td) {
 
 .bysan-style-settings .bysan-settings-section-body .bysan-color-row > .setting-item-control {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 9.4rem), 1fr));
-  flex: 1 1 19.1rem;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 10.1rem), 1fr));
+  flex: 1 1 20.5rem;
   width: auto;
   max-width: 25rem;
   align-items: stretch;
   gap: 0.2rem 0.3rem;
 }
 
-.bysan-style-settings .bysan-settings-section-body .bysan-color-row > .setting-item-control:not(:has(.slider)) {
+.bysan-style-settings .bysan-settings-section-body .bysan-color-row > .setting-item-control:not(:has(.bysan-value-stepper)) {
   flex: 0 1 auto;
   grid-template-columns: repeat(2, max-content);
 }
@@ -2320,8 +2265,8 @@ table:not(.dataview) :is(th, td) {
   background: var(--bysan-settings-surface-secondary);
 }
 
-.bysan-style-settings .bysan-color-mode:has(> .slider) {
-  grid-template-columns: 2rem 1.2rem 1.65rem minmax(0, 1fr) 1.25rem;
+.bysan-style-settings .bysan-color-mode:has(> .bysan-value-stepper) {
+  grid-template-columns: 2rem 1.2rem minmax(0, 1fr) 1.25rem;
 }
 
 .bysan-style-settings .bysan-color-mode > .bysan-mode-label {
@@ -2349,33 +2294,33 @@ table:not(.dataview) :is(th, td) {
   font-size: 0.82rem;
 }
 
-.bysan-style-settings .bysan-settings-section-body .bysan-color-mode:has(> .slider) > .bysan-color-reset {
-  grid-area: 1 / 5;
-}
-
-.bysan-style-settings .bysan-color-mode > .slider-value {
-  grid-area: 1 / 3;
-  min-width: 0;
-  text-align: center;
-  font-size: 0.69rem;
-  font-variant-numeric: tabular-nums;
-}
-
-.bysan-style-settings .bysan-color-mode > .slider {
+.bysan-style-settings .bysan-settings-section-body .bysan-color-mode:has(> .bysan-value-stepper) > .bysan-color-reset {
   grid-area: 1 / 4;
-  width: 100% !important;
-  min-width: 0 !important;
-  max-width: none !important;
-  margin: 0 !important;
 }
 
-.bysan-style-settings .bysan-color-mode .slider input[type="range"] {
-  width: 100% !important;
-  min-width: 0 !important;
+.bysan-style-settings .bysan-settings-section-body .bysan-color-mode > .bysan-value-stepper {
+  grid-area: 1 / 3;
+  max-width: none;
 }
 
-.bysan-style-settings .bysan-stepper-unit {
-  flex: 0 0 1.3rem;
+.bysan-style-settings .bysan-settings-section-body .bysan-color-mode .bysan-value-stepper > :is(input, button) {
+  min-height: 1.35rem;
+  height: 1.35rem;
+  font-size: 0.75rem;
+}
+
+.bysan-style-settings .bysan-settings-section-body .bysan-color-mode .bysan-value-stepper > input {
+  padding-inline: 0.12rem;
+}
+
+.bysan-style-settings .bysan-settings-section-body .bysan-color-mode .bysan-value-stepper > button {
+  flex-basis: 1rem;
+}
+
+.bysan-value-stepper .bysan-stepper-unit {
+  flex: 0 0 auto;
+  min-width: 1.1rem;
+  padding-inline: 0.12rem;
   text-align: center;
 }
 
@@ -2424,7 +2369,7 @@ table:not(.dataview) :is(th, td) {
 
 @container (34rem <= width < 54rem) {
   :is(.bysan-theme-grid, .bysan-feature-group-body) > .bysan-grid-fill-medium,
-  .bysan-theme-grid > :is(.bysan-color-row:has(.slider), .bysan-theme-pair) {
+  .bysan-theme-grid > :is(.bysan-color-row:has(.bysan-value-stepper), .bysan-theme-pair) {
     grid-column: 1 / -1;
   }
 }
@@ -2681,18 +2626,12 @@ body:not(.toggle-canvas-grid) .bysan-sample-canvas {
   font-size: 0.69rem;
 }
 
-.bysan-theme-mode-card > :is(input, select, .slider) {
+.bysan-theme-mode-card > :is(input, select, .bysan-value-stepper) {
   flex: 1 1 0;
   min-width: 0 !important;
   max-width: 100%;
   width: 100%;
   margin: 0 !important;
-}
-
-.bysan-theme-mode-card .slider-value {
-  min-width: 0;
-  color: var(--text-muted);
-  font-variant-numeric: tabular-nums;
 }
 
 @container (max-width: 19rem) {

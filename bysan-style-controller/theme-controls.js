@@ -747,7 +747,7 @@ function rgbToHsl(red, green, blue) {
 }
 
 
-function addValueStepper(containerEl, { label, language, value, unit = "", numeric = false, edit, adjust, save, reset, read }) {
+function addValueStepper(containerEl, { label, language, value, unit = "", numeric = false, edit, adjust, save, reset, read, split }) {
   const zh = language === "zh";
   const controls = containerEl.createDiv({ cls: "bysan-value-stepper" });
   let current = String(value);
@@ -760,7 +760,14 @@ function addValueStepper(containerEl, { label, language, value, unit = "", numer
   };
   const set = (next) => {
     if (next != null) current = String(next);
-    input.value = current;
+    const display = split?.(current);
+    input.value = display?.value ?? current;
+    if (unitEl) {
+      unitEl.textContent = display?.unit ?? unit;
+      unitEl.hidden = !unitEl.textContent;
+      input.setAttribute("aria-label", unitEl.hidden ? label : `${label} (${unitEl.textContent})`);
+    }
+    if (split) input.title = current;
   };
   const apply = (next) => {
     const changed = next != null && String(next) !== current;
@@ -776,6 +783,7 @@ function addValueStepper(containerEl, { label, language, value, unit = "", numer
     attr: { type: numeric ? "number" : "text", "aria-label": unit ? `${label} (${unit})` : label }
   });
   if (numeric) input.step = "any";
+  const unitEl = (unit || split) ? controls.createSpan({ cls: "bysan-stepper-unit", text: unit }) : null;
   set(value);
   if (read) input.addEventListener("focus", () => set(read()));
   input.addEventListener("change", () => apply(edit(input.value)));
@@ -789,9 +797,36 @@ function addValueStepper(containerEl, { label, language, value, unit = "", numer
     }
   });
   action("+", zh ? `增大${label}` : `Increase ${label}`, () => step(1));
-  if (numeric) controls.createSpan({ cls: "bysan-stepper-unit", text: unit });
-  action("↺", zh ? `恢复${label}默认值` : `Reset ${label}`, async () => set(await reset()));
+  if (unitEl) controls.appendChild(unitEl);
+  if (reset) action("↺", zh ? `恢复${label}默认值` : `Reset ${label}`, async () => set(await reset()));
   return () => { if (read && !input.matches(":focus")) set(read()); };
+}
+
+function addNumericStepper(containerEl, { min = -Infinity, max = Infinity, step = 1, ...options }) {
+  const bound = value => Number(clamp(value, min, max).toFixed(6));
+  return addValueStepper(containerEl, {
+    ...options, numeric: true,
+    edit: value => value.trim() && Number.isFinite(Number(value)) ? bound(Number(value)) : null,
+    adjust: (value, direction) => bound(Number(value) + step * direction)
+  });
+}
+
+function splitCssDimension(value) {
+  const match = /^([+-]?(?:\d+(?:\.\d+)?|\.\d+))(px|r?em|%|pt|ch|ex|lh|rlh|[sld]?v(?:w|h|min|max)|cm|mm|in|pc|deg)$/i.exec(String(value ?? "").trim());
+  return match ? { value: match[1], unit: match[2] } : null;
+}
+
+function numericThemeSpec(item) {
+  if (["variable-number", "variable-number-slider"].includes(item.type)) {
+    const unit = item.format || "";
+    return {
+      unit, step: item.step ?? (unit === "deg" ? 5 : unit ? 1 : 0.05),
+      min: item.min ?? (/line-height/.test(item.id) ? 0.1 : unit === "deg" ? -Infinity : 0),
+      max: item.max ?? Infinity
+    };
+  }
+  const dimension = item.type === "variable-text" && splitCssDimension(item.default);
+  return dimension ? { unit: dimension.unit } : null;
 }
 
 function readFontPoints(element, fallbackPx = 16) {
@@ -1507,15 +1542,6 @@ class ThemeControls {
       return;
     }
 
-    if (item.type === "variable-number-slider") {
-      setting.addSlider((slider) => slider
-        .setLimits(Number(item.min), Number(item.max), Number(item.step || 1))
-        .setDynamicTooltip()
-        .setValue(Number(this.displayValueFor(item)))
-        .onChange((value) => this.plugin.updateThemeSetting(item.id, value)));
-      return;
-    }
-
     const fontSize = /^(?:font-size-|h[1-6]-size$|inline-title-size$|list-ul-marker-size(?:-[1-4])?$)/.test(item.id);
     if (fontSize) {
       setting.settingEl.addClass("bysan-stepper-setting");
@@ -1530,46 +1556,59 @@ class ThemeControls {
       });
       return;
     }
-    if (presentation && item.type === "variable-number") {
+    const spec = numericThemeSpec(item);
+    if (spec) {
       setting.settingEl.addClass("bysan-stepper-setting");
-      const min = item.min ?? 0.1;
-      const max = item.max ?? Infinity;
-      const step = item.step ?? 0.05;
-      addValueStepper(setting.controlEl, {
+      const read = () => this.displayValueFor(item) ?? "";
+      const options = {
         label: title,
         language: this.plugin.language,
-        value: this.displayValueFor(item) ?? "",
-        unit: item.format || "",
-        numeric: true,
-        edit: value => {
-          const trimmed = value.trim();
-          const parsed = Number(trimmed);
-          if (!trimmed || !Number.isFinite(parsed)) return null;
-          return item.min != null || item.max != null ? clamp(parsed, min, max) : parsed > 0 ? parsed : null;
-        },
-        adjust: (value, direction) => clamp(Number((Number(value) + step * direction).toFixed(2)), min, max),
+        value: read(),
         save: value => this.plugin.updateThemeSetting(item.id, value),
         reset: async () => {
           await this.plugin.resetThemeSetting(item.id);
-          return this.displayValueFor(item) ?? "";
+          return read();
         }
-      });
+      };
+      if (item.type !== "variable-text") {
+        addNumericStepper(setting.controlEl, { ...spec, ...options });
+      } else {
+        const unitFor = value => splitCssDimension(value)?.unit || spec.unit;
+        const property = /padding/.test(item.id) ? "padding-bottom"
+          : /radius/.test(item.id) ? "border-radius"
+          : /margin/.test(item.id) ? "margin-left"
+          : /(?:underline|border|colorful-indentation)-width$/.test(item.id) ? "border-width"
+          : item.id === "image-max-width" ? "max-width" : "width";
+        const win = setting.controlEl.ownerDocument.defaultView;
+        addValueStepper(setting.controlEl, {
+          ...options,
+          split: value => splitCssDimension(value) || { value, unit: "" },
+          edit: value => {
+            const trimmed = value.trim();
+            if (!trimmed) return null;
+            const cssValue = Number.isFinite(Number(trimmed))
+              ? `${Number(trimmed)}${unitFor(read())}` : trimmed;
+            return win.CSS.supports(property, cssValue) ? cssValue : null;
+          },
+          adjust: (value, direction) => {
+            const current = splitCssDimension(value) || (/^[+-]?0(?:\.0+)?$/.test(value.trim())
+              ? { value: "0", unit: spec.unit } : null);
+            if (!current) return null;
+            const delta = /^(?:em|rem|vh|vw|ch|ex|lh)$/i.test(current.unit) ? 0.1 : 1;
+            const next = Number((Number(current.value) + direction * delta).toFixed(6));
+            return `${property === "margin-left" ? next : Math.max(0, next)}${current.unit}`;
+          }
+        });
+      }
       return;
     }
 
     let input;
     setting.addText((text) => {
       input = text;
-      if (item.type === "variable-number") text.inputEl.type = "number";
       text.setPlaceholder(this.plugin.t("theme.cssValue"))
         .setValue(String(this.displayValueFor(item) ?? ""))
-        .onChange((value) => {
-          if (item.type !== "variable-number") {
-            this.plugin.updateThemeSetting(item.id, value);
-          } else if (value.trim() && Number.isFinite(Number(value))) {
-            this.plugin.updateThemeSetting(item.id, Number(value));
-          }
-        });
+        .onChange(value => this.plugin.updateThemeSetting(item.id, value));
     });
     if (presentation) {
       const label = this.plugin.language === "zh" ? "恢复默认值" : "Restore default";
@@ -1858,7 +1897,7 @@ class ThemeControls {
         }
       };
       let pickerComponent;
-      let sliderComponent;
+      let refreshOpacity;
       let syncingControls = false;
       const colorLabel = this.plugin.t("theme.colorTitle", { mode: label });
       const updateTooltip = (hex, alpha) => {
@@ -1875,32 +1914,25 @@ class ThemeControls {
           const current = parseColor(this.displayValueFor(item, mode));
           const inheritedTransparent = current.alpha === 0 && !isDefined(this.stored[item.id]?.[mode]);
           const alpha = inheritedTransparent ? 1 : current.alpha;
-          if (inheritedTransparent && sliderComponent) {
-            syncingControls = true;
-            try {
-              sliderComponent.setValue(alpha);
-            } finally {
-              syncingControls = false;
-            }
-          }
           updateTooltip(hex, alpha);
           this.updateThemedColor(item, mode, hex, alpha);
+          if (inheritedTransparent) refreshOpacity?.();
         });
       }));
       if (item.opacity) {
-        appendNewControls(() => setting.addSlider((slider) => {
-          sliderComponent = slider;
-          slider.setLimits(0, 1, 0.01).setDynamicTooltip().setValue(parsed.alpha);
+        appendNewControls(() => {
           const opacityLabel = this.plugin.t("theme.opacityTitle", { mode: label });
-          slider.sliderEl?.setAttribute("title", opacityLabel);
-          slider.sliderEl?.setAttribute("aria-label", opacityLabel);
-          slider.onChange((alpha) => {
-            if (syncingControls) return;
-            const current = parseColor(this.displayValueFor(item, mode));
-            updateTooltip(current.hex, alpha);
-            this.updateThemedColor(item, mode, current.hex, alpha);
+          const read = () => Number(parseColor(this.displayValueFor(item, mode)).alpha.toFixed(2));
+          refreshOpacity = addNumericStepper(setting.controlEl, {
+            label: `${setting.nameEl.textContent} · ${opacityLabel}`, language: this.plugin.language,
+            value: read(), read, min: 0, max: 1, step: 0.01,
+            save: alpha => {
+              const current = parseColor(this.displayValueFor(item, mode));
+              updateTooltip(current.hex, alpha);
+              this.updateThemedColor(item, mode, current.hex, alpha);
+            }
           });
-        }));
+        });
       }
       const resetLabel = this.plugin.t("color.resetTheme", { mode: label });
       const reset = group.createEl("button", {
@@ -1912,7 +1944,7 @@ class ThemeControls {
         syncingControls = true;
         try {
           pickerComponent?.setValue(restored.hex);
-          sliderComponent?.setValue(restored.alpha);
+          refreshOpacity?.();
           updateTooltip(restored.hex, restored.alpha);
         } finally {
           syncingControls = false;
@@ -1964,4 +1996,4 @@ class ThemeControls {
 }
 
 
-module.exports = { ThemeControls, addValueStepper, addPointSizeStepper, readFontPoints, addStyleDropdown, FONT_WEIGHTS, ADVANCED_THEME_TOPICS };
+module.exports = { ThemeControls, addValueStepper, addNumericStepper, numericThemeSpec, splitCssDimension, addPointSizeStepper, readFontPoints, addStyleDropdown, FONT_WEIGHTS, ADVANCED_THEME_TOPICS };

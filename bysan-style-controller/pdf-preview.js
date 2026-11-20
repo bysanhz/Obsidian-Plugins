@@ -1,4 +1,4 @@
-const { MarkdownRenderer, Modal, Notice, Component } = globalThis.__bysanPdfApi;
+const { MarkdownRenderer, Modal, Notice, Component, addNumericStepper } = globalThis.__bysanPdfApi;
 
 const PAPER_SIZES = {
   A3: [297, 420],
@@ -158,14 +158,29 @@ class BysanPdfPreviewModal extends Modal {
 
     const customMargins = makeField(this.plugin.t("pdf.customMargins"));
     const marginGrid = customMargins.createDiv({ cls: "bysan-pdf-preview-margin-grid" });
-    const marginInputs = {};
+    const marginRefreshers = [];
+    const setMargin = (side, value) => {
+      this.margins[side] = value;
+      this.marginMode = "custom";
+      marginSelect.value = "custom";
+      void this.saveMargins();
+      this.applyLayoutSettings();
+    };
     [["top", "pdf.marginTop"], ["right", "pdf.marginRight"], ["bottom", "pdf.marginBottom"], ["left", "pdf.marginLeft"]]
       .forEach(([side, key]) => {
         const cell = marginGrid.createDiv({ cls: "bysan-pdf-preview-margin-cell" });
-        cell.createEl("label", { text: this.plugin.t(key) });
-        marginInputs[side] = cell.createEl("input", {
-          attr: { type: "number", min: "0", max: "60", step: "0.5", value: String(this.margins[side]) }
-        });
+        const label = this.plugin.t(key);
+        cell.createEl("label", { text: label });
+        marginRefreshers.push(addNumericStepper(cell, {
+          label, language: this.plugin.language, unit: "mm", min: 0, max: 60, step: 0.5,
+          value: this.margins[side], read: () => this.margins[side],
+          save: value => setMargin(side, value),
+          reset: () => {
+            const value = MARGINS.normal[/^(top|bottom)$/.test(side) ? 0 : 1];
+            setMargin(side, value);
+            return value;
+          }
+        }));
       });
 
     const headerInput = makeField(this.plugin.t("pdf.header")).createEl("input", {
@@ -193,19 +208,25 @@ class BysanPdfPreviewModal extends Modal {
     grayscaleInput.checked = this.grayscale;
     grayscaleField.createDiv({ cls: "bysan-pdf-preview-field-hint", text: this.plugin.t("pdf.grayscaleHint") });
 
-    const previewField = makeField(this.plugin.t("pdf.previewZoom"));
-    const previewRow = previewField.createDiv({ cls: "bysan-pdf-preview-zoom-row" });
-    const previewInput = previewRow.createEl("input", {
-      attr: { type: "range", min: "40", max: "160", step: "5", value: String(this.previewZoom) }
+    const addScale = (key, value, defaultValue, save) => {
+      const label = this.plugin.t(key);
+      const field = makeField(label);
+      addNumericStepper(field, {
+        label, language: this.plugin.language, value, unit: "%", min: 40, max: 160, step: 5, save,
+        reset: () => { save(defaultValue); return defaultValue; }
+      });
+      return field;
+    };
+    addScale("pdf.previewZoom", this.previewZoom, 75, value => {
+      this.previewZoom = value;
+      this.previewPagesEl.style.zoom = String(value / 100);
+      void this.savePreference("pdfPreviewZoom", value);
     });
-    const previewValue = previewRow.createSpan({ text: `${this.previewZoom}%` });
-
-    const actualField = makeField(this.plugin.t("pdf.actualScale"));
-    const actualRow = actualField.createDiv({ cls: "bysan-pdf-preview-zoom-row" });
-    const actualInput = actualRow.createEl("input", {
-      attr: { type: "range", min: "40", max: "160", step: "5", value: String(this.actualScale) }
+    const actualField = addScale("pdf.actualScale", this.actualScale, 100, value => {
+      this.actualScale = value;
+      void this.savePreference("pdfActualScale", value);
+      this.applyLayoutSettings();
     });
-    const actualValue = actualRow.createSpan({ text: `${this.actualScale}%` });
     actualField.createDiv({
       cls: "bysan-pdf-preview-field-hint",
       text: this.plugin.t("pdf.actualScaleHint")
@@ -237,32 +258,8 @@ class BysanPdfPreviewModal extends Modal {
       this.marginMode = marginSelect.value;
       const [vertical, horizontal] = MARGINS[this.marginMode] || MARGINS.normal;
       this.margins = { top: vertical, right: horizontal, bottom: vertical, left: horizontal };
-      Object.entries(this.margins).forEach(([side, value]) => { marginInputs[side].value = String(value); });
-      void this.savePreference("pdfMarginMode", this.marginMode);
+      marginRefreshers.forEach(refresh => refresh());
       void this.saveMargins();
-      this.applyLayoutSettings();
-    });
-    Object.entries(marginInputs).forEach(([side, input]) => {
-      input.addEventListener("change", () => {
-        this.margins[side] = clamp(input.value, 0, 60);
-        input.value = String(this.margins[side]);
-        this.marginMode = "custom";
-        marginSelect.value = "custom";
-        void this.savePreference("pdfMarginMode", "custom");
-        void this.saveMargins();
-        this.applyLayoutSettings();
-      });
-    });
-    previewInput.addEventListener("input", () => {
-      this.previewZoom = Number(previewInput.value);
-      previewValue.setText(`${this.previewZoom}%`);
-      this.previewPagesEl.style.zoom = String(this.previewZoom / 100);
-      void this.savePreference("pdfPreviewZoom", this.previewZoom);
-    });
-    actualInput.addEventListener("input", () => {
-      this.actualScale = Number(actualInput.value);
-      actualValue.setText(`${this.actualScale}%`);
-      void this.savePreference("pdfActualScale", this.actualScale);
       this.applyLayoutSettings();
     });
     headerInput.addEventListener("change", () => {
@@ -301,9 +298,11 @@ class BysanPdfPreviewModal extends Modal {
   }
 
   async saveMargins() {
-    await Promise.all(Object.entries(this.margins).map(([side, value]) =>
-      this.savePreference(`pdfMargin${side[0].toUpperCase()}${side.slice(1)}`, value)
-    ));
+    this.plugin.settings.pdfMarginMode = this.marginMode;
+    for (const [side, value] of Object.entries(this.margins)) {
+      this.plugin.settings[`pdfMargin${side[0].toUpperCase()}${side.slice(1)}`] = value;
+    }
+    await this.plugin.saveData(this.plugin.settings);
   }
 
   dimensions() {

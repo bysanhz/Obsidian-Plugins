@@ -1,6 +1,6 @@
 /**
  * Bysan Style Controller
- * Version: 0.18.9
+ * Version: 0.18.10
  *
  * Owns visual presentation and provides switchable, integrated Bysan modules.
  */
@@ -26,14 +26,14 @@ const themeControlsPath = app.vault.adapter.getFullPath(
 // Reload only our helper so a plugin reload cannot mix old controls with new main.js.
 const requireThemeHelper = require("module").createRequire(themeControlsPath);
 delete requireThemeHelper.cache[requireThemeHelper.resolve(themeControlsPath)];
-const { ThemeControls, addValueStepper, addPointSizeStepper, readFontPoints, addStyleDropdown, FONT_WEIGHTS } = requireThemeHelper(themeControlsPath);
+const { ThemeControls, addNumericStepper, addPointSizeStepper, readFontPoints, addStyleDropdown, FONT_WEIGHTS } = requireThemeHelper(themeControlsPath);
 const { resolveLanguage, translate } = require(app.vault.adapter.getFullPath(
   ".obsidian/plugins/bysan-style-controller/i18n.js"
 ));
-globalThis.__bysanPdfApi = { MarkdownRenderer, Modal, Notice, Component };
-const { BysanPdfPreviewModal } = require(app.vault.adapter.getFullPath(
-  ".obsidian/plugins/bysan-style-controller/pdf-preview.js"
-));
+globalThis.__bysanPdfApi = { MarkdownRenderer, Modal, Notice, Component, addNumericStepper };
+const pdfPreviewPath = app.vault.adapter.getFullPath(".obsidian/plugins/bysan-style-controller/pdf-preview.js");
+delete requireThemeHelper.cache[requireThemeHelper.resolve(pdfPreviewPath)];
+const { BysanPdfPreviewModal } = requireThemeHelper(pdfPreviewPath);
 delete globalThis.__bysanPdfApi;
 delete globalThis.__bysanObsidianSetting;
 
@@ -1705,7 +1705,7 @@ class BysanStyleSettingTab extends PluginSettingTab {
         const wide = !row.matches(".setting-item") || textLength > 80 ||
           (!themeGrid && row.matches(".bysan-dual-mode-setting, :has(.setting-item-control button + button)"));
         row.classList.toggle("bysan-grid-wide", wide);
-        const mediumWide = themeGrid && row.matches(".bysan-color-row:has(.slider), .bysan-theme-pair");
+        const mediumWide = themeGrid && row.matches(".bysan-color-row:has(.bysan-value-stepper), .bysan-theme-pair");
         return {row, wide, mediumWide};
       });
       // Complete each short run before a wide row without reordering controls
@@ -2689,7 +2689,7 @@ class BysanStyleSettingTab extends PluginSettingTab {
     const setting = new Setting(containerEl).setName(name).setDesc(description);
     const addMode = (mode, colorKey, opacityKey) => {
       let pickerComponent;
-      let opacitySlider;
+      let refreshOpacity;
       const modeLabel = this.plugin.t(mode === "light" ? "theme.light" : "theme.dark");
       const colorLabel = this.plugin.t("theme.colorTitle", { mode: modeLabel });
       const displayColor = () => opacityKey
@@ -2710,23 +2710,22 @@ class BysanStyleSettingTab extends PluginSettingTab {
           updateTooltip();
         });
         if (opacityKey) {
-          setting.addSlider((slider) => {
-            opacitySlider = slider;
-            slider.sliderEl.setAttribute("aria-label", `${name} · ${this.plugin.t("theme.opacityTitle", { mode: modeLabel })}`);
-            slider.setLimits(0, 1, 0.01)
-              .setDynamicTooltip()
-              .setValue(this.plugin.settings[opacityKey])
-              .onChange((value) => {
-                void this.plugin.updateSetting(opacityKey, value);
-                updateTooltip();
-              });
+          const read = () => this.plugin.settings[opacityKey];
+          refreshOpacity = addNumericStepper(setting.controlEl, {
+            label: `${name} · ${this.plugin.t("theme.opacityTitle", { mode: modeLabel })}`,
+            language: this.plugin.language,
+            value: read(), read, min: 0, max: 1, step: 0.01,
+            save: value => {
+              void this.plugin.updateSetting(opacityKey, value);
+              updateTooltip();
+            }
           });
         }
       }, async () => {
         await this.plugin.resetSetting(colorKey);
         if (opacityKey) await this.plugin.resetSetting(opacityKey);
         pickerComponent.setValue(this.plugin.settings[colorKey]);
-        opacitySlider?.setValue(this.plugin.settings[opacityKey]);
+        refreshOpacity?.();
         updateTooltip();
       });
     };
@@ -2739,32 +2738,6 @@ class BysanStyleSettingTab extends PluginSettingTab {
     if (lightOpacityKey || darkOpacityKey) {
       setting.settingEl.addClass("bysan-combined-color-opacity-setting");
     }
-  }
-
-
-  addDualSlider(containerEl, name, description, lightKey, darkKey, minimum, maximum, step) {
-    const setting = new Setting(containerEl).setName(name).setDesc(description);
-    let lightSlider;
-    this.addModeControl(setting, "light", "slider", () => setting.addSlider((slider) => {
-      lightSlider = slider;
-      slider.setLimits(minimum, maximum, step)
-        .setDynamicTooltip()
-        .setValue(this.plugin.settings[lightKey])
-        .onChange((value) => this.plugin.updateSetting(lightKey, value));
-    }), async () => {
-      if (await this.plugin.resetSetting(lightKey)) lightSlider.setValue(this.plugin.settings[lightKey]);
-    });
-    let darkSlider;
-    this.addModeControl(setting, "dark", "slider", () => setting.addSlider((slider) => {
-      darkSlider = slider;
-      slider.setLimits(minimum, maximum, step)
-        .setDynamicTooltip()
-        .setValue(this.plugin.settings[darkKey])
-        .onChange((value) => this.plugin.updateSetting(darkKey, value));
-    }), async () => {
-      if (await this.plugin.resetSetting(darkKey)) darkSlider.setValue(this.plugin.settings[darkKey]);
-    });
-    setting.settingEl.addClass("bysan-dual-mode-setting");
   }
 
 
@@ -2844,15 +2817,12 @@ class BysanStyleSettingTab extends PluginSettingTab {
   addNumberSetting(containerEl, name, description, key, minimum, maximum, step, unit = "", inherited = () => minimum) {
     const setting = new Setting(containerEl).setName(name).setDesc(description);
     const valueForDisplay = () => this.plugin.settings[key] ?? Number(inherited().toFixed(2));
-    const bound = value => Number(clamp(value, minimum, maximum).toFixed(4));
-    addValueStepper(setting.controlEl, {
+    addNumericStepper(setting.controlEl, {
       label: name,
       language: this.plugin.language,
       value: valueForDisplay(),
       unit,
-      numeric: true,
-      edit: value => value.trim() && Number.isFinite(Number(value)) ? bound(Number(value)) : null,
-      adjust: (value, direction) => bound(Number(value) + step * direction),
+      min: minimum, max: maximum, step,
       save: value => this.plugin.updateSetting(key, value),
       reset: async () => {
         await this.plugin.resetSetting(key);

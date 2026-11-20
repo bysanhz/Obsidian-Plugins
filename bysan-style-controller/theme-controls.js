@@ -750,7 +750,7 @@ function rgbToHsl(red, green, blue) {
 function addValueStepper(containerEl, { label, language, value, unit = "", numeric = false, edit, adjust, save, reset, read, split, range }) {
   const zh = language === "zh";
   const controls = containerEl.createDiv({ cls: "bysan-value-stepper" });
-  let slider;
+  let slider, sliderTrack;
   let current = String(value);
   const action = (text, tooltip, onClick) => {
     const button = controls.createEl("button", {
@@ -765,7 +765,7 @@ function addValueStepper(containerEl, { label, language, value, unit = "", numer
     input.value = display?.value ?? current;
     if (slider) {
       slider.value = current;
-      slider.style.setProperty("--bysan-slider-position",
+      sliderTrack.style.setProperty("--bysan-slider-position",
         `${100 * (slider.valueAsNumber - range.min) / (range.max - range.min)}%`);
     }
     if (unitEl) {
@@ -806,7 +806,8 @@ function addValueStepper(containerEl, { label, language, value, unit = "", numer
   if (reset) action("↺", zh ? `恢复${label}默认值` : `Reset ${label}`, async () => set(await reset()));
   if (range) {
     const sliderLabel = zh ? `${label}（滑条）` : `${label} (slider)`;
-    slider = containerEl.createEl("input", {
+    sliderTrack = containerEl.createDiv({ cls: "bysan-range-track" });
+    slider = sliderTrack.createEl("input", {
       cls: "bysan-value-range",
       attr: {
         type: "range", min: String(range.min), max: String(range.max),

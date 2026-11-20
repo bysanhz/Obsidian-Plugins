@@ -114,7 +114,8 @@ assert.equal(splitCssDimension("calc(1rem + 8px)"), null, "CSS expressions must 
     label: "Zoom", language: "en", value: 77, unit: "%",
     min: 40, max: 160, step: 5, slider: true, save: value => saved.push(value)
   });
-  const [stepper, slider] = parent.children;
+  const [stepper, track] = parent.children;
+  const [slider] = track.children;
   const [minus, input, plus] = stepper.children;
   assert.equal(minus.text, "−");
   assert.equal(input.value, "77");

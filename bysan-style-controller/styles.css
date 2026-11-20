@@ -1083,26 +1083,46 @@ table:not(.dataview) :is(th, td) {
   font-weight: 700;
 }
 
-input.bysan-value-range[type="range"] {
+.bysan-range-track {
   display: block;
+  position: relative;
   box-sizing: border-box;
   width: 100%;
   min-width: 0;
   max-width: 11.25rem;
-  margin: 0;
-  /* Obsidian paints the native track on the input itself. Replace that
-     background, rather than drawing a second, taller track on top of it. */
+}
+
+/* A standalone rounded rail spans the thumb's actual travel. It does not
+   shrink the native input or intercept pointer and keyboard events. */
+.bysan-range-track::before {
+  content: "";
+  position: absolute;
+  inset-inline: calc(var(--slider-thumb-width, 18px) / 2);
+  inset-block-start: 50%;
+  transform: translateY(-50%);
+  height: var(--slider-track-height, 4px);
+  border-radius: 999px;
+  pointer-events: none;
   background: linear-gradient(var(--bysan-slider-direction, to right),
     var(--interactive-accent, #168fc4) var(--bysan-slider-position, 0%),
-    var(--slider-track-background, var(--background-modifier-border)) var(--bysan-slider-position, 0%))
-    center / max(0px, calc(100% - var(--slider-thumb-width, 18px))) 100% no-repeat;
+    var(--slider-track-background, var(--background-modifier-border)) var(--bysan-slider-position, 0%));
+}
+
+input.bysan-value-range[type="range"] {
+  display: block;
+  position: relative;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  background: transparent;
 }
 
 input.bysan-value-range[type="range"]::-webkit-slider-runnable-track {
   background: transparent;
 }
 
-input.bysan-value-range[type="range"]:dir(rtl) {
+.bysan-range-track:dir(rtl) {
   --bysan-slider-direction: to left;
 }
 
@@ -1111,12 +1131,12 @@ input.bysan-value-range[type="range"]::-webkit-slider-thumb {
   transform: scale(0.78);
 }
 
-.bysan-style-settings .setting-item-control > input.bysan-value-range[type="range"] {
+.bysan-style-settings .setting-item-control > .bysan-range-track {
   flex: 0 0 100%;
   margin-inline-start: auto;
 }
 
-.bysan-pdf-preview-sidebar input.bysan-value-range[type="range"] {
+.bysan-pdf-preview-sidebar .bysan-range-track {
   margin-block-start: 0.28rem;
 }
 
@@ -2336,7 +2356,7 @@ input.bysan-value-range[type="range"]::-webkit-slider-thumb {
   max-width: none;
 }
 
-.bysan-style-settings .bysan-color-mode > input.bysan-value-range[type="range"] {
+.bysan-style-settings .bysan-color-mode > .bysan-range-track {
   grid-column: 1 / -1;
   max-width: none;
   width: calc(100% - 0.5rem);
@@ -2674,13 +2694,14 @@ body:not(.toggle-canvas-grid) .bysan-sample-canvas {
   margin: 0 !important;
 }
 
-.bysan-theme-mode-card:has(> .bysan-value-range) {
+.bysan-theme-mode-card:has(> .bysan-range-track) {
   display: grid;
   grid-template-columns: 2.55rem minmax(0, 1fr);
 }
 
-.bysan-theme-mode-card > input.bysan-value-range[type="range"] {
+.bysan-theme-mode-card > .bysan-range-track {
   grid-column: 1 / -1;
+  max-width: 100%;
 }
 
 @container (max-width: 19rem) {

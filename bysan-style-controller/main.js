@@ -1,6 +1,6 @@
 /**
  * Bysan Style Controller
- * Version: 0.18.14
+ * Version: 0.18.15
  *
  * Owns visual presentation and provides switchable, integrated Bysan modules.
  */
@@ -2377,7 +2377,7 @@ class BysanStyleSettingTab extends PluginSettingTab {
           zh ? variant.syntax : variant.syntax.replace("文字", "text"), variant.controls, demo => {
             let node = demo;
             for (const tag of variant.tags) node = node.createEl(tag);
-            node.createEl("mark", { text: zh ? "示例文字" : "Example text" });
+            node.createEl("mark", { text: zh ? "示例文字 Aa" : "Example text Aa" });
           });
       }
     });

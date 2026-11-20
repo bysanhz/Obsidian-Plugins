@@ -10582,7 +10582,7 @@ body:not(.remove-colorful-highlight-bg) .markdown-source-view.is-live-preview *:
   background-color: var(--bg-color-highlight-3) !important;
   color: var(--color-highlight-3) !important;
   -webkit-text-fill-color: unset;
-  font-style: normal;
+  font-style: var(--font-style-em, italic);
   font-weight: var(--font-weight-highlight-3);
 }
 body:not(.remove-colorful-highlight-bg) .markdown-source-view.is-live-preview *:not([class*="cm-formatting-highlight"])~*:not([class*="cm-strong"])~.cm-highlight.cm-strong,
@@ -10595,7 +10595,7 @@ body:not(.remove-colorful-highlight-bg) .markdown-source-view.is-live-preview *:
 .markdown-source-view.is-live-preview.colorful-highlight .cm-em.cm-highlight {
   background-color: var(--bg-color-highlight-1) !important;
   color: var(--color-highlight-1) !important;
-  font-style: normal;
+  font-style: var(--font-style-em, italic);
   font-weight: var(--font-weight-highlight-1);
 }
 .cm-s-obsidian .cm-formatting.cm-formatting-highlight.cm-highlight~.cm-formatting.cm-highlight[class*="cm-em"]~span.cm-highlight[class*="cm-em"],
@@ -14468,7 +14468,7 @@ body:not(.remove-colorful-highlight-bg) :is(.markdown-preview-view,.markdown-ren
 :is(.markdown-preview-view,.markdown-rendered).colorful-highlight :not(font):not(strong)>em>mark {
   background-color: var(--bg-color-highlight-1);
   color: var(--color-highlight-1);
-  font-style: normal;
+  font-style: var(--font-style-em, italic);
   font-weight: var(--font-weight-highlight-1);
 }
 body:not(.remove-colorful-highlight-bg) :is(.markdown-preview-view,.markdown-rendered) :not(font):not(strong)>em>mark {
@@ -14494,7 +14494,7 @@ body:not(.remove-colorful-highlight-bg) :is(.markdown-preview-view,.markdown-ren
 :is(.markdown-preview-view,.markdown-rendered).colorful-highlight :not(font)>strong>em>mark {
   background-color: var(--bg-color-highlight-3) !important;
   color: var(--color-highlight-3) !important;
-  font-style: normal;
+  font-style: var(--font-style-em, italic);
   font-weight: var(--font-weight-highlight-3);
   background-image: initial;
   background-clip: initial;

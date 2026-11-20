@@ -1093,8 +1093,16 @@ input.bysan-value-range[type="range"] {
 }
 
 input.bysan-value-range[type="range"]::-webkit-slider-runnable-track {
-  background: linear-gradient(to right, var(--interactive-accent) var(--bysan-slider-position, 0%),
-    var(--background-modifier-border) var(--bysan-slider-position, 0%));
+  /* A native range stops half a thumb short of each input edge. Paint only
+     that travel span so the fill meets the thumb at 0%, 100%, and in between. */
+  background: linear-gradient(var(--bysan-slider-direction, to right),
+    var(--interactive-accent) var(--bysan-slider-position, 0%),
+    var(--background-modifier-border) var(--bysan-slider-position, 0%))
+    center / max(0px, calc(100% - var(--slider-thumb-width, 18px))) 100% no-repeat;
+}
+
+input.bysan-value-range[type="range"]:dir(rtl) {
+  --bysan-slider-direction: to left;
 }
 
 /* Shrink only the painted thumb so the range keeps its track and input box. */

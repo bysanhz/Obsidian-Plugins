@@ -747,9 +747,10 @@ function rgbToHsl(red, green, blue) {
 }
 
 
-function addValueStepper(containerEl, { label, language, value, unit = "", numeric = false, edit, adjust, save, reset, read, split }) {
+function addValueStepper(containerEl, { label, language, value, unit = "", numeric = false, edit, adjust, save, reset, read, split, range }) {
   const zh = language === "zh";
   const controls = containerEl.createDiv({ cls: "bysan-value-stepper" });
+  let slider;
   let current = String(value);
   const action = (text, tooltip, onClick) => {
     const button = controls.createEl("button", {
@@ -762,6 +763,11 @@ function addValueStepper(containerEl, { label, language, value, unit = "", numer
     if (next != null) current = String(next);
     const display = split?.(current);
     input.value = display?.value ?? current;
+    if (slider) {
+      slider.value = current;
+      slider.style.setProperty("--bysan-slider-position",
+        `${100 * (slider.valueAsNumber - range.min) / (range.max - range.min)}%`);
+    }
     if (unitEl) {
       unitEl.textContent = display?.unit ?? unit;
       unitEl.hidden = !unitEl.textContent;
@@ -784,7 +790,6 @@ function addValueStepper(containerEl, { label, language, value, unit = "", numer
   });
   if (numeric) input.step = "any";
   const unitEl = (unit || split) ? controls.createSpan({ cls: "bysan-stepper-unit", text: unit }) : null;
-  set(value);
   if (read) input.addEventListener("focus", () => set(read()));
   input.addEventListener("change", () => apply(edit(input.value)));
   input.addEventListener("keydown", event => {
@@ -799,13 +804,37 @@ function addValueStepper(containerEl, { label, language, value, unit = "", numer
   action("+", zh ? `增大${label}` : `Increase ${label}`, () => step(1));
   if (unitEl) controls.appendChild(unitEl);
   if (reset) action("↺", zh ? `恢复${label}默认值` : `Reset ${label}`, async () => set(await reset()));
+  if (range) {
+    const sliderLabel = zh ? `${label}（滑条）` : `${label} (slider)`;
+    slider = containerEl.createEl("input", {
+      cls: "bysan-value-range",
+      attr: {
+        type: "range", min: String(range.min), max: String(range.max),
+        step: "any", "aria-label": unit ? `${sliderLabel} · ${unit}` : sliderLabel
+      }
+    });
+    // A typed value may fall between the original drag steps. Keep its exact
+    // handle position, but snap drag changes to the original increments.
+    slider.addEventListener("input", () => apply(range.snap(slider.valueAsNumber)));
+    slider.addEventListener("keydown", event => {
+      const change = {
+        ArrowDown: -1, ArrowLeft: -1, ArrowUp: 1, ArrowRight: 1, PageDown: -10, PageUp: 10
+      }[event.key];
+      if (change) {
+        event.preventDefault();
+        step(change);
+      }
+    });
+  }
+  set(value);
   return () => { if (read && !input.matches(":focus")) set(read()); };
 }
 
-function addNumericStepper(containerEl, { min = -Infinity, max = Infinity, step = 1, ...options }) {
+function addNumericStepper(containerEl, { min = -Infinity, max = Infinity, step = 1, slider = false, ...options }) {
   const bound = value => Number(clamp(value, min, max).toFixed(6));
   return addValueStepper(containerEl, {
     ...options, numeric: true,
+    range: slider ? { min, max, snap: value => bound(min + Math.round((value - min) / step) * step) } : null,
     edit: value => value.trim() && Number.isFinite(Number(value)) ? bound(Number(value)) : null,
     adjust: (value, direction) => bound(Number(value) + step * direction)
   });
@@ -1571,7 +1600,7 @@ class ThemeControls {
         }
       };
       if (item.type !== "variable-text") {
-        addNumericStepper(setting.controlEl, { ...spec, ...options });
+        addNumericStepper(setting.controlEl, { ...spec, ...options, slider: item.type === "variable-number-slider" });
       } else {
         const unitFor = value => splitCssDimension(value)?.unit || spec.unit;
         const property = /padding/.test(item.id) ? "padding-bottom"
@@ -1925,7 +1954,7 @@ class ThemeControls {
           const read = () => Number(parseColor(this.displayValueFor(item, mode)).alpha.toFixed(2));
           refreshOpacity = addNumericStepper(setting.controlEl, {
             label: `${setting.nameEl.textContent} · ${opacityLabel}`, language: this.plugin.language,
-            value: read(), read, min: 0, max: 1, step: 0.01,
+            value: read(), read, min: 0, max: 1, step: 0.01, slider: true,
             save: alpha => {
               const current = parseColor(this.displayValueFor(item, mode));
               updateTooltip(current.hex, alpha);

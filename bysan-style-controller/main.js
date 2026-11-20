@@ -1,6 +1,6 @@
 /**
  * Bysan Style Controller
- * Version: 0.18.10
+ * Version: 0.18.11
  *
  * Owns visual presentation and provides switchable, integrated Bysan modules.
  */
@@ -2714,7 +2714,7 @@ class BysanStyleSettingTab extends PluginSettingTab {
           refreshOpacity = addNumericStepper(setting.controlEl, {
             label: `${name} · ${this.plugin.t("theme.opacityTitle", { mode: modeLabel })}`,
             language: this.plugin.language,
-            value: read(), read, min: 0, max: 1, step: 0.01,
+            value: read(), read, min: 0, max: 1, step: 0.01, slider: true,
             save: value => {
               void this.plugin.updateSetting(opacityKey, value);
               updateTooltip();

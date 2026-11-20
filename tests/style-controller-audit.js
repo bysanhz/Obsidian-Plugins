@@ -85,6 +85,51 @@ assert.equal(numericThemeSpec(controls.find(item => item.id === "inline-title-we
 assert.equal(numericThemeSpec(controls.find(item => item.id === "inline-title-bg-url")), null, "URL must remain text");
 assert.equal(splitCssDimension("-1.5rem")?.value, "-1.5");
 assert.equal(splitCssDimension("calc(1rem + 8px)"), null, "CSS expressions must not be truncated to a number");
+{
+  // Exercise the shared drag/step/direct-input path without a real vault.
+  class StepperElement {
+    constructor(tag, options = {}) {
+      this.tag = tag;
+      this.text = options.text;
+      this.attributes = { ...options.attr };
+      this.children = [];
+      this.handlers = {};
+      this.style = { setProperty() {} };
+    }
+    createEl(tag, options) {
+      const el = new StepperElement(tag, options);
+      this.children.push(el);
+      return el;
+    }
+    createDiv(options) { return this.createEl("div", options); }
+    createSpan(options) { return this.createEl("span", options); }
+    setAttribute(key, value) { this.attributes[key] = value; }
+    appendChild(el) { this.children = this.children.filter(child => child !== el).concat(el); }
+    get valueAsNumber() { return Number(this.value); }
+    addEventListener(event, handler) { this.handlers[event] = handler; }
+  }
+  const parent = new StepperElement("div");
+  const saved = [];
+  sandbox.module.exports.addNumericStepper(parent, {
+    label: "Zoom", language: "en", value: 77, unit: "%",
+    min: 40, max: 160, step: 5, slider: true, save: value => saved.push(value)
+  });
+  const [stepper, slider] = parent.children;
+  const [minus, input, plus] = stepper.children;
+  assert.equal(minus.text, "−");
+  assert.equal(input.value, "77");
+  assert.equal(slider.attributes.type, "range");
+  assert.equal(slider.value, "77", "show typed zoom without snapping it to a drag increment");
+  slider.value = "103";
+  slider.handlers.input();
+  assert.equal(input.value, "105");
+  plus.handlers.click();
+  assert.equal(slider.value, "110");
+  input.value = "84";
+  input.handlers.change();
+  assert.equal(slider.value, "84");
+  assert.deepEqual(saved, [105, 110, 84]);
+}
 const { parseFontconfigFamilies, fontChoices, selectedFontName, fontStack } = sandbox.module.exports;
 const fontFaces = parseFontconfigFamilies("LXGW WenKai,霞鹜文楷\t\nLXGW WenKai,霞鹜文楷,LXGW WenKai Bold\t0\n" +
   "LXGW WenKai Mono,霞鹜文楷等宽\t100\nInter\t0\nNoto Sans CJK SC\t\n");

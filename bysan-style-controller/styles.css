@@ -877,10 +877,6 @@ body.bysan-style-controller-active
   font-size: 1em;
 }
 
-.bysan-theme-setting-item .setting-item-control input[type="range"] {
-  max-width: 7rem;
-}
-
 /* Critical plugin actions must remain visible even when a saved theme preset
  * intentionally makes Obsidian's global --interactive-accent transparent. */
 .bysan-style-settings {
@@ -1085,6 +1081,29 @@ table:not(.dataview) :is(th, td) {
   min-width: 0;
   padding: 0;
   font-weight: 700;
+}
+
+input.bysan-value-range[type="range"] {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  max-width: 11.25rem;
+  margin: 0;
+}
+
+input.bysan-value-range[type="range"]::-webkit-slider-runnable-track {
+  background: linear-gradient(to right, var(--interactive-accent) var(--bysan-slider-position, 0%),
+    var(--background-modifier-border) var(--bysan-slider-position, 0%));
+}
+
+.bysan-style-settings .setting-item-control > input.bysan-value-range[type="range"] {
+  flex: 0 0 100%;
+  margin-inline-start: auto;
+}
+
+.bysan-pdf-preview-sidebar input.bysan-value-range[type="range"] {
+  margin-block-start: 0.28rem;
 }
 
 .bysan-stepper-unit {
@@ -2303,6 +2322,13 @@ table:not(.dataview) :is(th, td) {
   max-width: none;
 }
 
+.bysan-style-settings .bysan-color-mode > input.bysan-value-range[type="range"] {
+  grid-column: 1 / -1;
+  max-width: none;
+  width: calc(100% - 0.5rem);
+  justify-self: center;
+}
+
 .bysan-style-settings .bysan-settings-section-body .bysan-color-mode .bysan-value-stepper > :is(input, button) {
   min-height: 1.35rem;
   height: 1.35rem;
@@ -2632,6 +2658,15 @@ body:not(.toggle-canvas-grid) .bysan-sample-canvas {
   max-width: 100%;
   width: 100%;
   margin: 0 !important;
+}
+
+.bysan-theme-mode-card:has(> .bysan-value-range) {
+  display: grid;
+  grid-template-columns: 2.55rem minmax(0, 1fr);
+}
+
+.bysan-theme-mode-card > input.bysan-value-range[type="range"] {
+  grid-column: 1 / -1;
 }
 
 @container (max-width: 19rem) {

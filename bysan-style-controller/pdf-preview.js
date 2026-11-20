@@ -212,7 +212,7 @@ class BysanPdfPreviewModal extends Modal {
       const label = this.plugin.t(key);
       const field = makeField(label);
       addNumericStepper(field, {
-        label, language: this.plugin.language, value, unit: "%", min: 40, max: 160, step: 5, save,
+        label, language: this.plugin.language, value, unit: "%", min: 40, max: 160, step: 5, slider: true, save,
         reset: () => { save(defaultValue); return defaultValue; }
       });
       return field;

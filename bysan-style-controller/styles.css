@@ -1097,6 +1097,11 @@ input.bysan-value-range[type="range"]::-webkit-slider-runnable-track {
     var(--background-modifier-border) var(--bysan-slider-position, 0%));
 }
 
+/* Shrink only the painted thumb so the range keeps its track and input box. */
+input.bysan-value-range[type="range"]::-webkit-slider-thumb {
+  transform: scale(0.78);
+}
+
 .bysan-style-settings .setting-item-control > input.bysan-value-range[type="range"] {
   flex: 0 0 100%;
   margin-inline-start: auto;

@@ -2592,6 +2592,16 @@ input.bysan-value-range[type="range"]::-webkit-slider-thumb {
   font-size: 0.66rem;
 }
 
+.bysan-style-settings .bysan-color-mode:has(.bysan-range-track) {
+  --bysan-color-slider-height: max(0.9rem, calc(var(--slider-thumb-width, 18px) * 0.78));
+}
+
+.bysan-style-settings .bysan-color-mode:has(.bysan-range-track) > .bysan-mode-label {
+  align-self: stretch;
+  margin-block: 0 calc((var(--bysan-color-slider-height) - var(--slider-track-height, 4px)) / 2);
+  outline-offset: -1px;
+}
+
 .bysan-style-settings .bysan-color-mode-controls {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -2645,6 +2655,16 @@ input.bysan-value-range[type="range"]::-webkit-slider-thumb {
   grid-row: 2;
   max-width: none;
   width: 100%;
+  height: var(--bysan-color-slider-height);
+}
+
+.bysan-style-settings .bysan-color-mode-controls > .bysan-range-track::before {
+  inset-inline: 0;
+  --bysan-slider-position: var(--bysan-slider-full-stop, 0%);
+}
+
+.bysan-style-settings .bysan-color-mode-controls > .bysan-range-track > input.bysan-value-range[type="range"] {
+  height: 100%;
 }
 
 .bysan-style-settings .bysan-settings-section-body .bysan-color-mode-controls .bysan-value-stepper > :is(input, button) {

@@ -95,7 +95,11 @@ assert.equal(splitCssDimension("calc(1rem + 8px)"), null, "CSS expressions must 
       this.attributes = { ...options.attr };
       this.children = [];
       this.handlers = {};
-      this.style = { setProperty() {} };
+      const properties = new Map();
+      this.style = {
+        setProperty: (name, value) => properties.set(name, value),
+        getPropertyValue: name => properties.get(name)
+      };
     }
     createEl(tag, options) {
       const el = new StepperElement(tag, options);
@@ -125,12 +129,18 @@ assert.equal(splitCssDimension("calc(1rem + 8px)"), null, "CSS expressions must 
   slider.value = "103";
   slider.handlers.input();
   assert.equal(input.value, "105");
+  assert.match(track.style.getPropertyValue("--bysan-slider-full-stop"), /^calc\(54\.1666/);
   plus.handlers.click();
   assert.equal(slider.value, "110");
   input.value = "84";
   input.handlers.change();
   assert.equal(slider.value, "84");
   assert.deepEqual(saved, [105, 110, 84]);
+  for (const [endpoint, fill] of [[40, "0%"], [160, "100%"]]) {
+    slider.value = String(endpoint);
+    slider.handlers.input();
+    assert.equal(track.style.getPropertyValue("--bysan-slider-full-stop"), fill, "full-width rail must reach both ends");
+  }
 
   const { createColorModeLayout, addModeColorPicker, addModeColorReset, addNumericStepper } = sandbox.module.exports;
   for (const mode of ["light", "dark"]) {

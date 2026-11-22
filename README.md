@@ -6,7 +6,7 @@
 
 | 插件 | 版本 | 用途 |
 | --- | --- | --- |
-| [Bysan Style Controller](./bysan-style-controller/) | 0.19.1 | 明暗样式与可撤销预设、带范围校验的 PDF 分页导出，以及可开关的媒体缩放、标题编号和选区审阅工具栏 |
+| [Bysan Style Controller](./bysan-style-controller/) | 0.19.2 | 明暗样式与可撤销预设、带范围校验的 PDF 分页导出，以及可开关的媒体缩放、标题编号和选区审阅工具栏 |
 | [Academic Heading Numbering](./academic-heading-numbering/) | 0.4.1 | 兼容回退版；功能已内置到 Style Controller |
 | [Mermaid Inline Resizer](./mermaid-inline-resizer/) | 0.12.1 | 兼容回退版；功能已内置到 Style Controller |
 | [Selection Review Toolbar](./selection-review-toolbar/) | 0.2.1 | 兼容回退版；功能已内置到 Style Controller |

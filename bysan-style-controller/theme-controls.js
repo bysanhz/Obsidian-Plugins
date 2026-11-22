@@ -765,8 +765,14 @@ function addValueStepper(containerEl, { label, language, value, unit = "", numer
     input.value = display?.value ?? current;
     if (slider) {
       slider.value = current;
-      sliderTrack.style.setProperty("--bysan-slider-position",
-        `${100 * (slider.valueAsNumber - range.min) / (range.max - range.min)}%`);
+      const progress = (slider.valueAsNumber - range.min) / (range.max - range.min);
+      const percent = `${100 * progress}%`;
+      sliderTrack.style.setProperty("--bysan-slider-position", percent);
+      // A full-width painted rail still follows the inset native thumb, except
+      // at the endpoints where the entire rail is empty or full.
+      const fullStop = progress === 0 || progress === 1 ? percent :
+        `calc(${percent} + ${0.5 - progress} * var(--slider-thumb-width, 18px))`;
+      sliderTrack.style.setProperty("--bysan-slider-full-stop", fullStop);
     }
     if (unitEl) {
       unitEl.textContent = display?.unit ?? unit;

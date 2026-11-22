@@ -1,6 +1,6 @@
 /**
  * Bysan Style Controller
- * Version: 0.19.3
+ * Version: 0.19.4
  *
  * Owns visual presentation and provides switchable, integrated Bysan modules.
  */
@@ -94,9 +94,14 @@ const EDITOR_MARK_CONTROLS = [
   ["text-selection", "鼠标选中文字的背景", "Selected text background", "开启「显示编辑器选区背景」后生效。", "Turn on “Show editor selection background” to show this colour."],
   ["remove-selectionbackground", "显示编辑器选区背景", "Show editor selection background"]
 ];
-const NOTE_MARK_CONTROLS = [
-  ["bysan-mark-bg", "Markdown 高亮背景", "Markdown highlight background", "用于 ==文字==。", "Used for ==text==."],
+const MARKDOWN_HIGHLIGHT_CONTROLS = [
+  ["bysan-mark-bg", "Markdown 高亮背景", "Markdown highlight background",
+    "显示当前底色。恢复后跟随该模式的主题配色，不会清除旧配色。",
+    "Shows the effective background. Reset follows the theme palette for this mode without clearing legacy colours."],
   ["text-highlight", "Markdown 高亮文字颜色", "Markdown highlight text colour"],
+  ["highlight-style", "高亮圆角", "Highlight corners"]
+];
+const NOTE_LINK_CONTROLS = [
   ["internal-link-color", "笔记内链颜色", "Internal link colour"],
   ["external-link-color", "外部链接颜色", "External link colour"],
   ["link-underline-internal", "显示内链下划线", "Underline internal links"],
@@ -126,9 +131,9 @@ const COLOUR_HIGHLIGHT_SWITCH = ["remove-colorful-highlight-bg", "启用彩色�
   "开启后，加了斜体或粗体的高亮使用各自的配色。", "Emphasised highlights use their own palettes when enabled.",
   { invertToggle: true }];
 const COLOUR_HIGHLIGHT_VARIANTS = [
-  { name: ["斜体高亮", "Italic highlight"], syntax: "*==文字==*", tags: ["em"] },
-  { name: ["粗体高亮", "Bold highlight"], syntax: "**==文字==**", tags: ["strong"] },
-  { name: ["粗斜体高亮", "Bold italic highlight"], syntax: "***==文字==***", tags: ["strong", "em"] }
+  { name: ["斜体高亮", "Italic highlight"], syntax: "*==文字==*" },
+  { name: ["粗体高亮", "Bold highlight"], syntax: "**==文字==**" },
+  { name: ["粗斜体高亮", "Bold italic highlight"], syntax: "***==文字==***" }
 ].map((variant, index) => {
   const number = index + 1;
   const [zh, en] = variant.name;
@@ -176,7 +181,7 @@ const HEADING_NUMBER_CONTROLS = [
 ];
 const SURFACE_COLORS = [
   ["bysan-note-page-bg", "background-primary"],
-  ["bysan-mark-bg", "text-highlight-bg"],
+  ["bysan-mark-bg", "bysan-mark-theme-bg"],
   ["bysan-left-pane-bg", "bt-background-split-container"],
   ["bysan-right-pane-bg", "bt-background-split-container"],
   ["bysan-active-tab-bg", "tab-background-active"],
@@ -204,7 +209,8 @@ const PAGE_TITLE_CONTROLS = [
   ["toggle-inline-title-background", "显示页面标题背景", "Show page title background"]
 ];
 const COMMON_THEME_IDS = new Set(
-  [...NOTE_BODY_CONTROLS, ...NOTE_BACKGROUND_CONTROLS, ...EDITOR_MARK_CONTROLS, ...NOTE_MARK_CONTROLS,
+  [...NOTE_BODY_CONTROLS, ...NOTE_BACKGROUND_CONTROLS, ...EDITOR_MARK_CONTROLS, ...MARKDOWN_HIGHLIGHT_CONTROLS,
+    ...NOTE_LINK_CONTROLS,
     ...CALLOUT_CONTROLS, ...INTERFACE_COLOR_CONTROLS, ...NAVIGATION_COLOR_CONTROLS, ...TAB_COLOR_CONTROLS, ...PAGE_TITLE_CONTROLS,
     ...NOTE_HEADING_CONTROLS.flat(), ...HEADING_BACKGROUND_CONTROLS.flat(), ...HEADING_NUMBER_CONTROLS, ...REVIEW_PANEL_CONTROLS, ["font-size-latex"],
     CLOZE_SWITCH, ...CLOZE_VARIANTS.flatMap(variant => variant.controls),
@@ -2677,22 +2683,28 @@ class BysanStyleSettingTab extends PluginSettingTab {
       this.renderNoteBackgroundColors(body);
     });
     this.createSettingsSection(containerEl, "note-colors", zh ? "选区、高亮与链接" : "Selection, highlights and links", body => {
-      const controls = this.createAppearanceLayout(body, sample => {
-        const page = sample.createDiv({ cls: "bysan-note-colors-example" });
-        page.createDiv({ cls: "cm-line cm-active", text: zh ? "当前编辑行" : "Active editor line" });
-        page.createEl("p").createSpan({ cls: "bysan-selection-example", text: zh ? "鼠标选中的文字" : "Selected text" });
-        page.createEl("p").createEl("mark", { text: zh ? "Markdown 高亮" : "Markdown highlight", attr: { "data-highlight": "" } });
-        const links = page.createEl("p");
-        links.createEl("a", { cls: "internal-link", text: zh ? "内链" : "Internal link" });
-        links.append(" · ");
-        links.createEl("a", { cls: "external-link", text: zh ? "外链" : "External link" });
-        links.append(" · ");
-        links.createEl("a", { cls: "internal-link is-unresolved", text: zh ? "未创建的链接" : "Uncreated link" });
-      }, zh ? "编辑选区示意 · 阅读样例" : "Editor selection illustration · Reading sample");
-      this.renderNoteThemeControls(controls, EDITOR_MARK_CONTROLS);
-      this.renderNoteThemeControls(controls, NOTE_MARK_CONTROLS);
-      this.renderThemeGroups(body, ["marks"], false);
-      this.renderColourHighlightSettings(body);
+      this.renderMarkdownHighlightSettings(body);
+      this.createFeatureGroup(body, zh ? "鼠标选区与当前行" : "Selection and active line", "", group => {
+        const controls = this.createAppearanceLayout(group, sample => {
+          const page = sample.createDiv({ cls: "bysan-note-colors-example" });
+          page.createDiv({ cls: "cm-line cm-active", text: zh ? "当前编辑行" : "Active editor line" });
+          page.createEl("p").createSpan({ cls: "bysan-selection-example", text: zh ? "鼠标选中的文字" : "Selected text" });
+        }, zh ? "编辑选区示意" : "Editor selection illustration");
+        this.renderNoteThemeControls(controls, EDITOR_MARK_CONTROLS);
+      });
+      this.createFeatureGroup(body, zh ? "链接" : "Links", "", group => {
+        const controls = this.createAppearanceLayout(group, sample => {
+          const links = sample.createEl("p");
+          links.createEl("a", { cls: "internal-link", text: zh ? "内链" : "Internal link" });
+          links.append(" · ");
+          links.createEl("a", { cls: "external-link", text: zh ? "外链" : "External link" });
+          links.append(" · ");
+          links.createEl("a", { cls: "internal-link is-unresolved", text: zh ? "未创建的链接" : "Uncreated link" });
+        });
+        this.renderNoteThemeControls(controls, NOTE_LINK_CONTROLS);
+        this.renderThemeGroups(controls, ["marks"], false, id => id.includes("link"));
+      });
+      this.renderThemeGroups(body, ["marks"], false, id => !id.includes("link"));
       this.renderClozeSettings(body);
     });
     this.createSettingsSection(containerEl, "headings", zh ? "页面标题与文内标题" : "Page title and headings",
@@ -2757,20 +2769,24 @@ class BysanStyleSettingTab extends PluginSettingTab {
       });
   }
 
-  renderColourHighlightSettings(containerEl) {
+  renderMarkdownHighlightSettings(containerEl) {
     const zh = this.plugin.language === "zh";
-    this.createFeatureGroup(containerEl, zh ? "彩色高亮变体" : "Coloured highlight variants", "", group => {
+    this.createFeatureGroup(containerEl, zh ? "Markdown 高亮" : "Markdown highlights", "", group => {
       group.classList.add("bysan-variant-feature");
+      const text = zh ? "示例文字 Aa" : "Example text Aa";
+      this.renderSyntaxVariant(group, "highlight-normal", zh ? "普通高亮" : "Regular highlight",
+        zh ? "==文字==" : "==text==", MARKDOWN_HIGHLIGHT_CONTROLS, demo =>
+          this.renderMarkdownSample(demo, `==${text}==`));
       this.renderNoteThemeControls(group, [COLOUR_HIGHLIGHT_SWITCH]);
       for (const variant of COLOUR_HIGHLIGHT_VARIANTS) {
         this.renderSyntaxVariant(group, "colour-highlight", variant.name[zh ? 0 : 1],
-          zh ? variant.syntax : variant.syntax.replace("文字", "text"), variant.controls, demo => {
-            let node = demo;
-            for (const tag of variant.tags) node = node.createEl(tag);
-            node.createEl("mark", { text: zh ? "示例文字 Aa" : "Example text Aa" });
+          zh ? variant.syntax : variant.syntax.replace("文字", "text"), variant.controls, (demo, sample) => {
+            this.renderMarkdownSample(demo, variant.syntax.replace("文字", text));
+            sample.createDiv({ cls: "bysan-preview-caption bysan-highlight-follows-default",
+              text: zh ? "变体关闭：跟随普通高亮" : "Variants off: follows regular highlight" });
           });
       }
-    });
+    }).addClass("bysan-markdown-highlight-group");
   }
 
   renderSyntaxVariant(group, id, title, syntax, controls, renderDemo) {

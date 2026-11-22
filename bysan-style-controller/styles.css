@@ -135,10 +135,23 @@ body.bysan-style-controller-active.toggle-inline-title-background .inline-title 
   background-color: var(--inline-title-bg-color);
 }
 
-body.bysan-style-controller-active[style*="--bysan-mark-bg:"] .markdown-rendered mark[data-highlight],
-body.bysan-style-controller-active[style*="--bysan-mark-bg:"] .markdown-source-view
-  .cm-highlight:not(.cm-em, .cm-strong, [class*="code"]) {
-  background-color: var(--bysan-mark-bg);
+/* Match the bundled theme's Markdown highlight, which uses the mode's HSL
+   channels directly (not --text-highlight-bg in alternate colour schemes). */
+body.bysan-style-controller-active.theme-light {
+  --bysan-mark-theme-bg: hsla(var(--text-highlight-bg-h-light), var(--text-highlight-bg-s-light), var(--text-highlight-bg-l-light), var(--text-highlight-bg-a-light));
+}
+
+body.bysan-style-controller-active.theme-dark {
+  --bysan-mark-theme-bg: hsla(var(--text-highlight-bg-h-dark), var(--text-highlight-bg-s-dark), var(--text-highlight-bg-l-dark), var(--text-highlight-bg-a-dark));
+}
+
+body.bysan-style-controller-active .markdown-rendered mark[data-highlight]:not(:where(em > mark, strong > mark)),
+body.bysan-style-controller-active .markdown-source-view .cm-highlight:not(.cm-em, .cm-strong, [class*="code"]),
+body.bysan-style-controller-active.remove-colorful-highlight-bg .markdown-rendered
+  mark[data-highlight]:where(em > mark, strong > mark):not(:where(.colorful-highlight *)),
+body.bysan-style-controller-active.remove-colorful-highlight-bg .markdown-source-view:not(.colorful-highlight)
+  .cm-highlight:is(.cm-em, .cm-strong):not([class*="code"]) {
+  background-color: var(--bysan-mark-bg, var(--bysan-mark-theme-bg, var(--text-highlight-bg)));
 }
 
 body.bysan-style-controller-active[style*="--bysan-left-pane-bg:"] .mod-left-split .workspace-tab-container {
@@ -2823,7 +2836,8 @@ body:not(.remove-cloze-style) .bysan-cloze-demo del:focus-visible {
 }
 
 body.remove-cloze-style .bysan-cloze-reveal-hint,
-body:not(.remove-cloze-style) .bysan-cloze-disabled-hint {
+body:not(.remove-cloze-style) .bysan-cloze-disabled-hint,
+body:not(.remove-colorful-highlight-bg) .bysan-highlight-follows-default {
   display: none;
 }
 

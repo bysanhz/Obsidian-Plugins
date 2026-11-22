@@ -52,10 +52,6 @@ const ADVANCED_MODE_PAIRS = [
   ["bg-panel-page-option", "bg-panel-page-option-dark", "文件栏背景类型", "File sidebar background type"],
   ["background-panel-page-theme-light-custom", "background-panel-page-theme-dark-custom", "文件栏背景图片", "File sidebar background images"],
   ["ob-pdf-style-selection-light", "ob-pdf-style-selection-dark", "PDF 阅读配色", "PDF reader colours"],
-  ["text-highlight-bg-h-light", "text-highlight-bg-h-dark", "主题高亮色相", "Theme highlight hue"],
-  ["text-highlight-bg-s-light", "text-highlight-bg-s-dark", "主题高亮饱和度", "Theme highlight saturation"],
-  ["text-highlight-bg-l-light", "text-highlight-bg-l-dark", "主题高亮亮度", "Theme highlight lightness"],
-  ["text-highlight-bg-a-light", "text-highlight-bg-a-dark", "主题高亮透明度", "Theme highlight opacity"],
   ["thino-background-light-custom", "thino-background-dark-custom", "Thino 背景图片", "Thino background images"],
   ["share-thino-background-light-custom", "share-thino-background-dark-custom", "Thino 分享卡片背景", "Thino share card background"]
 ];
@@ -73,6 +69,7 @@ const HIDDEN_CATALOG_IDS = new Set([
 // These fields remain valid CSS inputs when loading old profiles, but their
 // effects are already owned by the unified surface controls.
 const COMPATIBILITY_ONLY_IDS = new Set([
+  ...["light", "dark"].flatMap(mode => ["h", "s", "l", "a"].map(channel => `text-highlight-bg-${channel}-${mode}`)),
   "bg-color-notebook",
   "stripe-notebook-stripe-color",
   "bt-background-split-container",
@@ -1445,21 +1442,15 @@ class ThemeControls {
     setting.settingEl.dataset.bysanSearch = [title, ...details].join(" ").toLowerCase();
     for (const [mode, item] of [["light", light], ["dark", dark]]) {
       const label = this.plugin.t(mode === "light" ? "theme.light" : "theme.dark");
-      const numericColor = item.id.startsWith("text-highlight-bg-");
-      let group, controls;
-      if (numericColor) {
-        ({ group, controls } = createColorModeLayout(setting.controlEl, mode, label));
-      } else {
-        group = controls = setting.controlEl.createDiv({ cls: "bysan-theme-mode-card" });
-        group.createSpan({ cls: `bysan-mode-label bysan-mode-label-${mode}`, text: label });
-      }
+      const group = setting.controlEl.createDiv({ cls: "bysan-theme-mode-card" });
+      group.createSpan({ cls: `bysan-mode-label bysan-mode-label-${mode}`, text: label });
       group.dataset.bysanSettingId = item.id;
       const previous = new Set(setting.controlEl.children);
       this.renderControl(setting, item, `${title} · ${label}`);
       for (const child of [...setting.controlEl.children]) {
         if (previous.has(child)) continue;
         if (child.matches("input, select")) child.setAttribute("aria-label", `${title} · ${label}`);
-        controls.appendChild(child);
+        group.appendChild(child);
       }
       group.title = this.controlDescription(item, localised(item, "description", this.plugin.language));
     }

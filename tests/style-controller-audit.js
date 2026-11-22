@@ -283,6 +283,14 @@ for (const region of ["workspace", "editor", "media", "extensions"]) {
   assert(regionStats[region] > 0, `empty interface region: ${region}`);
 }
 const byId = new Map(themeControls.controlItems.map(item => [item.id, item]));
+for (const mode of ["light", "dark"]) {
+  for (const channel of ["h", "s", "l", "a"]) {
+    const id = `text-highlight-bg-${channel}-${mode}`;
+    assert(COMPATIBILITY_ONLY_IDS.has(id) && byId.has(id), `legacy highlight channel must remain readable without appearing in settings: ${id}`);
+    assert(sandbox.module.exports.ADVANCED_MODE_PAIRS.every(pair => !pair.slice(0, 2).includes(id)),
+      `legacy highlight channel must not have a paired control: ${id}`);
+  }
+}
 assert.deepEqual([...themeControls.colorModeKeys("bysan-note-page-bg")],
   ["bysan-note-page-bg", "bg-color-notebook", "stripe-notebook-stripe-color"], "unified reset must also clear legacy colours for that mode");
 for (const id of themeControls.colorModeKeys("bysan-note-page-bg").slice(1)) {
@@ -431,10 +439,12 @@ const mountedGroups = [...mainSource.matchAll(/this\.renderThemeGroups\((?:body|
   .flatMap(match => [...match[1].matchAll(/"([^"]+)"/g)].map(entry => entry[1]));
 const expectedGroups = [
   "general", "workspace-background", "tabs", "navigation", "window", "canvas", "graph",
-  "pdf", "plugins", "documents", "note-background", "marks", "headings", "typography",
+  "pdf", "plugins", "documents", "note-background", "marks", "marks", "headings", "typography",
   "lists", "blocks", "embeds", "math", "tables", "quotes"
 ];
-assert.deepStrictEqual(mountedGroups.sort(), expectedGroups.sort(), "every theme group must be mounted exactly once");
+assert.deepStrictEqual(mountedGroups.sort(), expectedGroups.sort(), "each theme group must be mounted once, except marks split between links and tags");
+assert.match(mainSource, /\["marks"\], false, id => id\.includes\("link"\)/);
+assert.match(mainSource, /\["marks"\], false, id => !id\.includes\("link"\)/);
 assert(mainSource.includes('this.renderCompactSample(containerEl, "tags"'), "missing preview colocated with tag controls");
 assert(![mainSource, themeSource].some(source => source.includes("bysan-theme-color-value")),
   "color codes must be in picker tooltips, not inline settings labels");

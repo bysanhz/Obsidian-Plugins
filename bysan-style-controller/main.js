@@ -1,6 +1,6 @@
 /**
  * Bysan Style Controller
- * Version: 0.19.0
+ * Version: 0.19.1
  *
  * Owns visual presentation and provides switchable, integrated Bysan modules.
  */
@@ -26,7 +26,8 @@ const themeControlsPath = app.vault.adapter.getFullPath(
 // Reload only our helper so a plugin reload cannot mix old controls with new main.js.
 const requireThemeHelper = require("module").createRequire(themeControlsPath);
 delete requireThemeHelper.cache[requireThemeHelper.resolve(themeControlsPath)];
-const { ThemeControls, addNumericStepper, addPointSizeStepper, readFontPoints, addStyleDropdown, FONT_WEIGHTS } = requireThemeHelper(themeControlsPath);
+const { ThemeControls, addNumericStepper, addPointSizeStepper, readFontPoints, addStyleDropdown, FONT_WEIGHTS,
+  createColorModeLayout, addModeColorPicker, addModeColorReset } = requireThemeHelper(themeControlsPath);
 const { resolveLanguage, translate } = require(app.vault.adapter.getFullPath(
   ".obsidian/plugins/bysan-style-controller/i18n.js"
 ));
@@ -2596,7 +2597,7 @@ class BysanStyleSettingTab extends PluginSettingTab {
 
     const backgrounds = new Setting(containerEl)
       .setName(this.plugin.t("workspace.backgrounds"));
-    this.addModeControl(backgrounds, "light", "select", () => backgrounds.addDropdown((dropdown) => dropdown
+    this.addModeSelect(backgrounds, "light", () => backgrounds.addDropdown((dropdown) => dropdown
         .addOption("background-settings-workplace-theme-light-in-the-note", this.plugin.t("background.note"))
         .addOption("background-settings-workplace-waves-light", this.plugin.t("background.waves"))
         .addOption("background-settings-workplace-waves2-light", this.plugin.t("background.animatedWaves"))
@@ -2604,7 +2605,7 @@ class BysanStyleSettingTab extends PluginSettingTab {
         .addOption("background-settings-workplace-theme-light-custom-option", this.plugin.t("background.customUrl"))
         .setValue(this.plugin.settings.lightBackground)
         .onChange((value) => this.plugin.updateSetting("lightBackground", value))));
-    this.addModeControl(backgrounds, "dark", "select", () => backgrounds.addDropdown((dropdown) => dropdown
+    this.addModeSelect(backgrounds, "dark", () => backgrounds.addDropdown((dropdown) => dropdown
         .addOption("background-settings-workplace-theme-dark-in-the-sky", this.plugin.t("background.sky"))
         .addOption("background-settings-workplace-theme-dark-night-sky", this.plugin.t("background.nightSky"))
         .addOption("background-settings-workplace-theme-dark-dark-sky", this.plugin.t("background.darkSky"))
@@ -3269,11 +3270,8 @@ class BysanStyleSettingTab extends PluginSettingTab {
   }
 
 
-  addModeControl(setting, mode, kind, addControl, resetControl = null) {
-    const group = setting.controlEl.createDiv({
-      cls: `bysan-mode-control bysan-mode-control-${kind}`
-    });
-    if (kind === "color") group.addClass("bysan-color-mode");
+  addModeSelect(setting, mode, addControl) {
+    const group = setting.controlEl.createDiv({ cls: "bysan-mode-control bysan-mode-control-select" });
     group.createSpan({
       cls: `bysan-mode-label bysan-mode-label-${mode}`,
       text: this.plugin.t(mode === "light" ? "theme.light" : "theme.dark")
@@ -3283,20 +3281,6 @@ class BysanStyleSettingTab extends PluginSettingTab {
     for (const child of [...setting.controlEl.children]) {
       if (!existing.has(child)) group.appendChild(child);
     }
-    if (resetControl) {
-      const label = this.plugin.t(mode === "light" ? "theme.light" : "theme.dark");
-      const resetButton = group.createEl("button", {
-        cls: "clickable-icon bysan-color-reset",
-        text: "↺",
-        attr: {
-          type: "button",
-          title: this.plugin.t("color.reset", { mode: label }),
-          "aria-label": this.plugin.t("color.reset", { mode: label })
-        }
-      });
-      resetButton.addEventListener("click", resetControl);
-    }
-    return group;
   }
 
 
@@ -3313,32 +3297,32 @@ class BysanStyleSettingTab extends PluginSettingTab {
       const updateTooltip = () => {
         pickerComponent.colorPickerEl.title = `${colorLabel} · ${displayColor()}`;
       };
-      this.addModeControl(setting, mode, "color", () => {
-        setting.addColorPicker((picker) => {
-          pickerComponent = picker;
-          picker.colorPickerEl.addEventListener("pointerdown", () => { colourGesture = Symbol("colour-edit"); });
-          picker.colorPickerEl.setAttribute("aria-label", `${name} · ${colorLabel}`);
-          picker.setValue(this.plugin.settings[colorKey])
-            .onChange((value) => {
-              void this.plugin.updateSetting(colorKey, value, colourGesture ? { group: colourGesture } : undefined);
-              updateTooltip();
-            });
-          picker.colorPickerEl.addEventListener("change", () => { colourGesture = undefined; });
-          updateTooltip();
-        });
-        if (opacityKey) {
-          const read = () => this.plugin.settings[opacityKey];
-          refreshOpacity = addNumericStepper(setting.controlEl, {
-            label: `${name} · ${this.plugin.t("theme.opacityTitle", { mode: modeLabel })}`,
-            language: this.plugin.language,
-            value: read(), read, min: 0, max: 1, step: 0.01, slider: true,
-            save: (value, action) => {
-              void this.plugin.updateSetting(opacityKey, value, action);
-              updateTooltip();
-            }
+      const { controls } = createColorModeLayout(setting.controlEl, mode, modeLabel);
+      addModeColorPicker(setting, controls, picker => {
+        pickerComponent = picker;
+        picker.colorPickerEl.addEventListener("pointerdown", () => { colourGesture = Symbol("colour-edit"); });
+        picker.colorPickerEl.setAttribute("aria-label", `${name} · ${colorLabel}`);
+        picker.setValue(this.plugin.settings[colorKey])
+          .onChange((value) => {
+            void this.plugin.updateSetting(colorKey, value, colourGesture ? { group: colourGesture } : undefined);
+            updateTooltip();
           });
-        }
-      }, async () => {
+        picker.colorPickerEl.addEventListener("change", () => { colourGesture = undefined; });
+        updateTooltip();
+      });
+      if (opacityKey) {
+        const read = () => this.plugin.settings[opacityKey];
+        refreshOpacity = addNumericStepper(controls, {
+          label: `${name} · ${this.plugin.t("theme.opacityTitle", { mode: modeLabel })}`,
+          language: this.plugin.language,
+          value: read(), read, min: 0, max: 1, step: 0.01, slider: true,
+          save: (value, action) => {
+            void this.plugin.updateSetting(opacityKey, value, action);
+            updateTooltip();
+          }
+        });
+      }
+      addModeColorReset(controls, this.plugin.t("color.reset", { mode: modeLabel }), async () => {
         const reset = { [colorKey]: DEFAULT_SETTINGS[colorKey] };
         if (opacityKey) reset[opacityKey] = DEFAULT_SETTINGS[opacityKey];
         await this.plugin.changeStyleValues("base", reset);

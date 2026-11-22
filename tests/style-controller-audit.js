@@ -90,6 +90,7 @@ assert.equal(splitCssDimension("calc(1rem + 8px)"), null, "CSS expressions must 
   class StepperElement {
     constructor(tag, options = {}) {
       this.tag = tag;
+      this.cls = options.cls;
       this.text = options.text;
       this.attributes = { ...options.attr };
       this.children = [];
@@ -130,6 +131,28 @@ assert.equal(splitCssDimension("calc(1rem + 8px)"), null, "CSS expressions must 
   input.handlers.change();
   assert.equal(slider.value, "84");
   assert.deepEqual(saved, [105, 110, 84]);
+
+  const { createColorModeLayout, addModeColorPicker, addModeColorReset, addNumericStepper } = sandbox.module.exports;
+  for (const mode of ["light", "dark"]) {
+    const { group, controls } = createColorModeLayout(parent, mode, mode);
+    const colorPickerEl = new StepperElement("input", { attr: { type: "color" } });
+    addModeColorPicker({ addColorPicker: configure => configure({ colorPickerEl }) }, controls,
+      picker => { picker.colorPickerEl.value = "#12ab34"; });
+    addNumericStepper(controls, { label: "Opacity", language: "en", value: 0.5,
+      min: 0, max: 1, step: 0.01, slider: true, save() {} });
+    let restored = false;
+    addModeColorReset(controls, "Restore color and opacity", () => { restored = true; });
+    assert.equal(group.children.length, 2, "mode label must have its own column");
+    assert.equal(group.children[0].cls, `bysan-mode-label bysan-mode-label-${mode}`);
+    assert.equal(group.children[1], controls);
+    const [color, steps, rail, reset] = controls.children;
+    assert.equal(color, colorPickerEl);
+    assert.equal(steps.cls, "bysan-value-stepper");
+    assert.equal(rail.cls, "bysan-range-track", "slider must belong to the right-hand controls, not the mode label");
+    assert.equal(reset.attributes["aria-label"], "Restore color and opacity");
+    reset.handlers.click();
+    assert(restored);
+  }
 }
 const { parseFontconfigFamilies, fontChoices, selectedFontName, fontStack } = sandbox.module.exports;
 const fontFaces = parseFontconfigFamilies("LXGW WenKai,霞鹜文楷\t\nLXGW WenKai,霞鹜文楷,LXGW WenKai Bold\t0\n" +

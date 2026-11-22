@@ -844,6 +844,29 @@ function addNumericStepper(containerEl, { min = -Infinity, max = Infinity, step 
   });
 }
 
+function createColorModeLayout(containerEl, mode, label) {
+  const group = containerEl.createDiv({ cls: "bysan-color-mode" });
+  group.createSpan({ cls: `bysan-mode-label bysan-mode-label-${mode}`, text: label });
+  return { group, controls: group.createDiv({ cls: "bysan-color-mode-controls" }) };
+}
+
+function addModeColorPicker(setting, controls, configure) {
+  let picker;
+  setting.addColorPicker(component => {
+    picker = component;
+    configure(component);
+  });
+  controls.appendChild(picker.colorPickerEl);
+}
+
+function addModeColorReset(controls, label, reset) {
+  const button = controls.createEl("button", {
+    cls: "clickable-icon bysan-color-reset", text: "↺",
+    attr: { type: "button", title: label, "aria-label": label }
+  });
+  button.addEventListener("click", reset);
+}
+
 function splitCssDimension(value) {
   const match = /^([+-]?(?:\d+(?:\.\d+)?|\.\d+))(px|r?em|%|pt|ch|ex|lh|rlh|[sld]?v(?:w|h|min|max)|cm|mm|in|pc|deg)$/i.exec(String(value ?? "").trim());
   return match ? { value: match[1], unit: match[2] } : null;
@@ -1416,17 +1439,21 @@ class ThemeControls {
     setting.settingEl.dataset.bysanSearch = [title, ...details].join(" ").toLowerCase();
     for (const [mode, item] of [["light", light], ["dark", dark]]) {
       const label = this.plugin.t(mode === "light" ? "theme.light" : "theme.dark");
-      const group = setting.controlEl.createDiv({
-        cls: "bysan-theme-mode-card",
-        attr: { "data-bysan-setting-id": item.id }
-      });
-      group.createSpan({ cls: `bysan-mode-label bysan-mode-label-${mode}`, text: label });
+      const numericColor = item.id.startsWith("text-highlight-bg-");
+      let group, controls;
+      if (numericColor) {
+        ({ group, controls } = createColorModeLayout(setting.controlEl, mode, label));
+      } else {
+        group = controls = setting.controlEl.createDiv({ cls: "bysan-theme-mode-card" });
+        group.createSpan({ cls: `bysan-mode-label bysan-mode-label-${mode}`, text: label });
+      }
+      group.dataset.bysanSettingId = item.id;
       const previous = new Set(setting.controlEl.children);
       this.renderControl(setting, item, `${title} · ${label}`);
       for (const child of [...setting.controlEl.children]) {
         if (previous.has(child)) continue;
         if (child.matches("input, select")) child.setAttribute("aria-label", `${title} · ${label}`);
-        group.appendChild(child);
+        controls.appendChild(child);
       }
       group.title = this.controlDescription(item, localised(item, "description", this.plugin.language));
     }
@@ -1920,20 +1947,7 @@ class ThemeControls {
     for (const mode of ["light", "dark"]) {
       const label = mode === "light" ? this.plugin.t("theme.light") : this.plugin.t("theme.dark");
       const parsed = parseColor(this.displayValueFor(item, mode));
-      const group = setting.controlEl.createDiv({
-        cls: `bysan-color-mode bysan-theme-color-mode bysan-theme-color-mode-${mode}`
-      });
-      group.createSpan({
-        cls: `bysan-mode-label bysan-mode-label-${mode}`,
-        text: label
-      });
-      const appendNewControls = (callback) => {
-        const existing = new Set(setting.controlEl.children);
-        callback();
-        for (const child of Array.from(setting.controlEl.children)) {
-          if (!existing.has(child) && child !== group) group.appendChild(child);
-        }
-      };
+      const { controls } = createColorModeLayout(setting.controlEl, mode, label);
       let pickerComponent;
       let refreshOpacity;
       let syncingControls = false, colourGesture;
@@ -1942,7 +1956,7 @@ class ThemeControls {
         const value = (item.opacity ? colorWithAlpha(hex, alpha) : hex).toUpperCase();
         pickerComponent.colorPickerEl.title = `${colorLabel} · ${value}`;
       };
-      appendNewControls(() => setting.addColorPicker((picker) => {
+      addModeColorPicker(setting, controls, picker => {
         pickerComponent = picker;
         picker.colorPickerEl.addEventListener("pointerdown", () => { colourGesture = Symbol("colour-edit"); });
         picker.setValue(parsed.hex);
@@ -1958,27 +1972,20 @@ class ThemeControls {
           if (inheritedTransparent) refreshOpacity?.();
         });
         picker.colorPickerEl.addEventListener("change", () => { colourGesture = undefined; });
-      }));
+      });
       if (item.opacity) {
-        appendNewControls(() => {
-          const opacityLabel = this.plugin.t("theme.opacityTitle", { mode: label });
-          const read = () => Number(parseColor(this.displayValueFor(item, mode)).alpha.toFixed(2));
-          refreshOpacity = addNumericStepper(setting.controlEl, {
-            label: `${setting.nameEl.textContent} · ${opacityLabel}`, language: this.plugin.language,
-            value: read(), read, min: 0, max: 1, step: 0.01, slider: true,
-            save: (alpha, action) => {
-              const current = parseColor(this.displayValueFor(item, mode));
-              updateTooltip(current.hex, alpha);
-              this.updateThemedColor(item, mode, current.hex, alpha, action);
-            }
-          });
+        const opacityLabel = this.plugin.t("theme.opacityTitle", { mode: label });
+        const read = () => Number(parseColor(this.displayValueFor(item, mode)).alpha.toFixed(2));
+        refreshOpacity = addNumericStepper(controls, {
+          label: `${setting.nameEl.textContent} · ${opacityLabel}`, language: this.plugin.language,
+          value: read(), read, min: 0, max: 1, step: 0.01, slider: true,
+          save: (alpha, action) => {
+            const current = parseColor(this.displayValueFor(item, mode));
+            updateTooltip(current.hex, alpha);
+            this.updateThemedColor(item, mode, current.hex, alpha, action);
+          }
         });
       }
-      const resetLabel = this.plugin.t("color.resetTheme", { mode: label });
-      const reset = group.createEl("button", {
-        cls: "clickable-icon bysan-color-reset", text: "↺",
-        attr: { type: "button", "aria-label": resetLabel, title: resetLabel }
-      });
       const syncControls = () => {
         const restored = parseColor(this.displayValueFor(item, mode));
         syncingControls = true;
@@ -1991,7 +1998,7 @@ class ThemeControls {
         }
       };
       refreshers.push(syncControls);
-      reset.addEventListener("click", async () => {
+      addModeColorReset(controls, this.plugin.t("color.resetTheme", { mode: label }), async () => {
         await this.plugin.clearThemeColorMode(item.id, mode);
         this.refreshDisplayDefaults();
         syncControls();
@@ -2042,4 +2049,4 @@ class ThemeControls {
 }
 
 
-module.exports = { ThemeControls, addValueStepper, addNumericStepper, numericThemeSpec, splitCssDimension, addPointSizeStepper, readFontPoints, addStyleDropdown, FONT_WEIGHTS, ADVANCED_THEME_TOPICS };
+module.exports = { ThemeControls, addValueStepper, addNumericStepper, createColorModeLayout, addModeColorPicker, addModeColorReset, numericThemeSpec, splitCssDimension, addPointSizeStepper, readFontPoints, addStyleDropdown, FONT_WEIGHTS, ADVANCED_THEME_TOPICS };

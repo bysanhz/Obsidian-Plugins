@@ -2573,6 +2573,9 @@ input.bysan-value-range[type="range"]::-webkit-slider-thumb {
 }
 
 .bysan-style-settings .bysan-color-mode {
+  --bysan-color-action-height: 1.35rem;
+  --bysan-color-controls-gap: 0.15rem;
+  --bysan-color-label-size: var(--bysan-color-action-height);
   display: grid;
   grid-template-columns: 2.55rem minmax(0, 1fr);
   align-items: start;
@@ -2585,28 +2588,38 @@ input.bysan-value-range[type="range"]::-webkit-slider-thumb {
 }
 
 .bysan-style-settings .bysan-color-mode > .bysan-mode-label {
+  box-sizing: border-box;
+  justify-self: center;
+  align-self: center;
   justify-content: center;
-  min-height: 1.05rem;
-  margin-block-start: 0.15rem;
-  padding-inline: 0.12rem;
-  font-size: 0.66rem;
+  inline-size: var(--bysan-color-label-size);
+  block-size: var(--bysan-color-label-size);
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  border-radius: 50%;
+  outline-offset: -1px;
+  font-size: 0.57rem;
 }
 
 .bysan-style-settings .bysan-color-mode:has(.bysan-range-track) {
   --bysan-color-slider-height: max(0.9rem, calc(var(--slider-thumb-width, 18px) * 0.78));
+  /* Fit the circle in the existing space above the visible rail's lower edge. */
+  --bysan-color-label-size: min(2rem, calc(var(--bysan-color-action-height) + var(--bysan-color-controls-gap) +
+    (var(--bysan-color-slider-height) + var(--slider-track-height, 4px)) / 2));
 }
 
 .bysan-style-settings .bysan-color-mode:has(.bysan-range-track) > .bysan-mode-label {
-  align-self: stretch;
-  margin-block: 0 calc((var(--bysan-color-slider-height) - var(--slider-track-height, 4px)) / 2);
-  outline-offset: -1px;
+  align-self: end;
+  margin-block-end: calc((var(--bysan-color-slider-height) - var(--slider-track-height, 4px)) / 2);
+  font-size: 0.66rem;
 }
 
 .bysan-style-settings .bysan-color-mode-controls {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   align-items: center;
-  gap: 0.15rem;
+  gap: var(--bysan-color-controls-gap);
   min-width: 0;
 }
 
@@ -2630,8 +2643,8 @@ input.bysan-value-range[type="range"]::-webkit-slider-thumb {
   grid-area: 1 / 3;
   width: 1.35rem !important;
   min-width: 1.35rem !important;
-  height: 1.35rem !important;
-  min-height: 1.35rem !important;
+  height: var(--bysan-color-action-height) !important;
+  min-height: var(--bysan-color-action-height) !important;
   font-size: 0.82rem;
 }
 
@@ -2668,8 +2681,8 @@ input.bysan-value-range[type="range"]::-webkit-slider-thumb {
 }
 
 .bysan-style-settings .bysan-settings-section-body .bysan-color-mode-controls .bysan-value-stepper > :is(input, button) {
-  min-height: 1.35rem;
-  height: 1.35rem;
+  min-height: var(--bysan-color-action-height);
+  height: var(--bysan-color-action-height);
   font-size: 0.75rem;
 }
 
